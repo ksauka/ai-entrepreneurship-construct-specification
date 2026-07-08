@@ -1,0 +1,23 @@
+# Raw Scopus export locations for the July 2026 Query 1-4 searches.
+# Paths are relative to the ETV_V2 project root.
+raw_exports:
+  query_1:
+    - "data/queries/SQ1_41.csv"
+    - "data/queries/SQ1_42.csv"
+    - "data/queries/SQ1_43.csv"
+    - "data/queries/SQ1_44.csv"
+    - "data/queries/SQ1-45.csv"
+    - "data/queries/SQ1_46.csv"
+    - "data/queries/SQ1_47.csv"
+  query_2:
+    - "data/queries/SQ2.csv"
+  query_3:
+    - "data/queries/SQ3.csv"
+  query_4:
+    - "data/queries/SQ4.csv"
+
+expected_counts:
+  query_1: 29294
+  query_2: 818
+  query_3: 1097
+  query_4: 1509

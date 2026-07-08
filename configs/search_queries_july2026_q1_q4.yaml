@@ -1,0 +1,614 @@
+title: 'Artificial Intelligence in Entrepreneurship: Construct Specification Failures and Theory Elaboration'
+date_updated: '2026-07-08'
+queries:
+  Search Query 1:
+    label: Search Query 1 — 695 curated journal list
+    date_submitted: '2026-07-08'
+    records_retrieved: 29294
+    source_title_count: 695
+    scopus_query: "TITLE-ABS-KEY (( \"Artificial Intelligence\" OR \"Artificial-Intelligence\" OR AI OR \"Machine Learning\"\
+      \ OR \"Deep learning\" OR \"cognitive computing\" OR \"Neuro-Symbolic AI\" OR \"Hybrid AI\" OR \"Symbolic AI\" OR \"\
+      Natural Language Processing\" OR \"Conversational AI\" OR \"Virtual Assistant\" OR \"Chatbot\" OR \"chatbots\" OR \"\
+      ChatGPT\" OR \"Artificial neural network\" OR \"neural network\" OR \"convolutional neural network\" OR \"recurrent\
+      \ neural networks\" OR \"LSTM\" OR \"Transformer Architecture\" OR \"BERT\" OR \"GPT\" OR \"Graph Neural Networks\"\
+      \ OR \"GNN\" OR \"Graph Embeddings\" OR \"Attention Mechanism\" OR \"Diffusion Models\" OR \"Large Language Models\"\
+      \ OR \"LLM\" OR \"Generative AI\" OR \"GenAI\" OR \"Retrieval-Augmented Generation\" OR \"RAG\" OR \"Knowledge Representation\"\
+      \ OR \"Knowledge Graph\" OR \"Graph Embeddings\" OR \"semantic network\" OR \"knowledge-based system\" OR \"logic programming\"\
+      \ OR \"Explainable AI\" OR \"XAI\" OR \"SHAP\" OR \"LIME\" OR \"Predictive AI\" OR \"Decision Support Systems\" OR \"\
+      data mining\" OR \"text mining\" OR \"pattern recognition\" OR \"image recognition\" OR \"semantic analysis\" OR \"\
+      decision tree\" OR \"Bayesian learning system\" OR \"support vector machine\" OR \"SVM\" OR \"supervised learning\"\
+      \ OR \"unsupervised learning\" OR \"reinforcement learning\" OR \"Meta-Learning\" OR \"Self-Supervised Learning\" OR\
+      \ \"Few-Shot Learning\" OR \"Zero-Shot Learning\" OR \"random forest\" OR \"logistic regression\" OR \"naive bayes\"\
+      \ OR \"k-nearest neighbors\" OR \"gradient boosting\" OR \"XGBoost\" OR \"AdaBoost\" OR \"decision tree classifier\"\
+      \ OR \"Robot\" OR \"Humanoid robot\" OR \"robotic automation\" OR \"process automation\" OR \"recommendation system\"\
+      \ OR \"recommender system\" OR \"autonomic computing\" OR \"computer vision\" OR \"speech recognition\" OR \"Federated\
+      \ Learning\" OR \"cluster analysis\" OR \"heuristic search techniques\" ) \nAND (\"Business Administration\" OR \"Finance\"\
+      \ OR \"Marketing\" OR \"Human Resources Management\" OR \"Operations Management\" OR \"Accounting\" OR \"Entrepreneurship\"\
+      \ OR \"Supply Chain Management\" OR \"International Business\" OR \"Strategic Management\" OR \"Information Technology\
+      \ Management\" OR \"Management\" OR \"Health Management\" OR \"Human Resources\" OR \"Innovation Management\" OR \"\
+      International Management\" OR \"Information Systems\" OR \"Manufacturing\" OR \"Organizational Science\" OR \"Industry\
+      \ 4.0\" OR \"Industry 5.0\" OR \"Business\" OR \"Corporate Governance\" OR \"Business Analytics\" OR \"Digital Transformation\"\
+      \ OR \"Sustainability in Business\" OR \"Corporate Social Responsibility\" OR \"Environmental, Social, and Governance\"\
+      \ OR \"Digital Economy\" OR \"Artificial Intelligence in Business\" OR \"Business Strategy\" OR \"Technology Management\"\
+      \ OR \"Business Law\" OR \"E-Commerce\" OR \"Business Ethics\" OR \"Financial Technology\" OR \"FinTech\" OR \"Human\
+      \ Capital Management\" OR \"Consumer Behavior\" OR \"Market Research\" OR \"Risk Management\" OR \"Organizational Behavior\"\
+      \ OR \"Corporate Innovation\" OR \"Knowledge Management\" OR \"Service Management\" OR \"Business Intelligence\") )\n\
+      AND ( LIMIT-TO ( SUBJAREA , \"BUSI\" ) OR LIMIT-TO ( SUBJAREA , \"ECON\" ) OR LIMIT-TO ( SUBJAREA , \"SOCI\" ) OR LIMIT-TO\
+      \ ( SUBJAREA , \"DECI\" ) OR LIMIT-TO ( SUBJAREA , \"ARTS\" ) ) AND ( LIMIT-TO ( LANGUAGE , \"English\" ) ) AND ( LIMIT-TO\
+      \ ( DOCTYPE , \"ar\" ) OR LIMIT-TO ( DOCTYPE , \"re\" ) OR LIMIT-TO ( DOCTYPE , \"ed\" ) OR LIMIT-TO ( DOCTYPE , \"\
+      cp\" ) )\nAND ( LIMIT-TO ( EXACTSRCTITLE , \"Quarterly Journal of Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American\
+      \ Economic Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Political Economy\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Administrative Science Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Academy of Management Annals\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Economic Studies\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Econometrica\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Literature\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"American Economic Journal: Applied Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Financial\
+      \ Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Academy of Management Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American\
+      \ Economic Journal: Macroeconomics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Academy of Management Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Financial Economics\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Annual Review of Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Perspectives\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Strategic Management Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Economics\
+      \ and Statistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American Economic Journal: Economic Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Marketing Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Marketing Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Manufacturing and Service Operations Management\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Annual Review of Organizational Psychology and Organizational Behavior\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Organization Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the Academy of Marketing Science\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business and Economic Statistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Journal of Accounting and Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the European Economic Association\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Consumer Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Monetary\
+      \ Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Econometrics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of\
+      \ Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Corporate Finance Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Journal of Financial Intermediation\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Management Science\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Accounting Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American Economic Journal: Microeconomics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Public Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of International\
+      \ Business Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Handbook of Econometrics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Journal of Business Venturing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Service Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Information Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Innovation Policy and the\
+      \ Economy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Academy of Management Perspectives\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      International Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Labor Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"AI Open\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Organizational Research Methods\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Organization Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Asset Pricing Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Management Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Accounting Review\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Economic Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Leadership Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Entrepreneurship Theory and Practice\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Strategic Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Strategy Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Accounting Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"California Management Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Interactive Marketing\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Brookings Papers on Economic Activity\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Strategic\
+      \ Information Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Supply Chain Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of the Royal Statistical Society. Series B: Statistical Methodology\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"International Journal of Research in Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annual Review of Statistics and\
+      \ Its Application\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Organizational Behavior\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"MIS Quarterly: Management Information Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Retailing\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Personnel Psychology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"IEEE Internet of Things Journal\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"IMF Economic Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Financial and\
+      \ Quantitative Analysis\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Operations Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"European Business Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Research Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Operations Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Tourism Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Human Relations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Global Strategy Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annals\
+      \ of Tourism Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Organizational Behavior and Human Decision Processes\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of the American Statistical Association\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Journal of International Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"ILR Review\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Journal of Public Administration Research and Theory\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Human Resources\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Quantitative Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Public Administration\
+      \ Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Public Policy and Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Information Systems Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Travel Research\" ) OR LIMIT-TO (\
+      \ EXACTSRCTITLE , \"Journal of World Business\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Growth\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Product Innovation Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Transportation\
+      \ Research Part B: Methodological\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"RAND Journal of Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Communications in Transportation Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Strategic Entrepreneurship Journal\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Development Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of\
+      \ Business Logistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Production and Operations Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Review of Environmental Economics and Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Human Resource Management Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the Association of Environmental and Resource Economists\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Urban Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Management Information\
+      \ Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Energy Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal\
+      \ of Production Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Explorations in Economic History\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Structural Equation Modeling\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Contemporary Accounting Research\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Transportation Research, Part E: Logistics and Transportation Review\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Population Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Consumer Psychology\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"International Journal of Production Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Organizational\
+      \ Psychology Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Sustainable Tourism\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Business and Society\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Hospitality Management\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Vocational Behavior\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Supply Chain Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Transportation\
+      \ Research Part C: Emerging Technologies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Service Management\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Economic Theory\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Business Strategy and the Environment\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Management Reviews\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Long Range Planning\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Research in Interactive Marketing\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Foundations and Trends in Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Small Business Economics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Industrial Information Integration\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Journal of Statistical Software\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Big Data\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Information and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Resources, Conservation and Recycling\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Omega\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Industrial Marketing Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Innovation and Knowledge\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Technological Forecasting and Social Change\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Operations and Production Management\" ) OR LIMIT-TO (\
+      \ EXACTSRCTITLE , \"Journal of Global Economic Analysis\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Advertising\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annual Review of Resource Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Tourism\
+      \ Geographies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business Ethics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review\
+      \ of Economic Dynamics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"World Bank Research Observer\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Risk and Uncertainty\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Retailing and Consumer Services\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Big Data Mining and Analytics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Environmental\
+      \ Economics and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Hospitality Marketing and Management\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business and Psychology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Probability Theory\
+      \ and Related Fields\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Interactive Advertising\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"World Development\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Contemporary Hospitality Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Applied Econometrics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Jahrbucher fur\
+      \ Nationalokonomie und Statistik\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Journal of Information Systems\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Information Management Data Insights\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Business Horizons\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Business Review\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Critical Finance Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"MIS Quarterly Executive\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Theoretical Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Accounting, Organizations and Society\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Technovation\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Big Data and Society\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"European Journal of Operational Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Socio-Economic Review\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Human Resource Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Project\
+      \ Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic History\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review\
+      \ of International Political Economy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Research Methodology in Strategy and Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Human Resource Management Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"IEEE Communications\
+      \ Standards Magazine\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Public Personnel Administration\" ) OR LIMIT-TO (\
+      \ EXACTSRCTITLE , \"Experimental Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Information Sciences\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Corporate Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Small Business\
+      \ Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Oxford Review of Economic Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Gender, Work and Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Finance Research Letters\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Knowledge Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Surveys\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Resources, Conservation and Recycling Advances\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of\
+      \ Conflict Resolution\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"British Journal of Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Corporate Social Responsibility and Environmental Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Travel\
+      \ and Tourism Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Decision Sciences\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Economic Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Policy Analysis and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"IEEE Transactions on Services Computing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Information Processing and Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Fiscal Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Purchasing and Supply\
+      \ Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of International Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Manufacturing Technology Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Psychology and Marketing\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Advertising\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Decision\
+      \ Support Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American Journal of Agricultural Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Knowledge-Based Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Current Issues in Tourism\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Occupational and Organizational Psychology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Family Business Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annual Review of Financial Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Applied\
+      \ Economic Perspectives and Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Management Inquiry\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Transportation Research, Part A: Policy and Practice\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review\
+      \ of International Organizations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Information and Organization\" ) OR LIMIT-TO (\
+      \ EXACTSRCTITLE , \"Service Industries Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Family Business Strategy\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Work, Employment and Society\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Cleaner\
+      \ Production\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Statistical Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Journal of Forecasting\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annals of Applied Probability\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"European Journal of Work and Organizational Psychology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Economic Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Geography\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Business Ethics Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Academy of Management\
+      \ Learning and Education\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Destination Marketing and Management\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Tourism Management Perspectives\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Ecological Economics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Food Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economic Policy\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"International Review of Financial Analysis\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Tourism Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Organization and Environment\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Resources Policy\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"ACM Transactions on Information Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of Industrial Ecology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Mathematical Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Economic Geography\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Australasian Marketing Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Physical Distribution and Logistics Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economic\
+      \ Theory\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Group and Organization Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Journal of Business Venturing Insights\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Entrepreneurship and Regional Development\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Hospitality and Tourism Management\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Journal of International Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of International Business Policy\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Economics of the Household\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Journal of Consumer Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American Review of Public Administration\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Oxford Bulletin of Economics and Statistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Human Resource\
+      \ Development Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Mixed Methods Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Financial Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Accounting, Auditing and Accountability Journal\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Computational and Graphical Statistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Production Planning and Control\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Cities\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of Banking and Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Computers and Operations Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Advanced Engineering Informatics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Technology Transfer\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Foundations and Trends in Econometrics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Work, Aging and Retirement\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Marketing Theory\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economy and Society\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"AMS Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Environmental Informatics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Marketing Letters\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"New Technology, Work and Employment\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Marketing Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Auditing\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Internet Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Management in Engineering\
+      \ - ASCE\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Review of Agricultural Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Financial Econometrics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Econometric Theory\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Information Economics and Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Real Estate Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"European Journal of Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Financial Stability\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Transportation Research Interdisciplinary Perspectives\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European\
+      \ Management Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Law and Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"China Economic Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Psychology\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Environmental and Resource Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Intellectual Capital\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Decision Making: Applications in Management and Engineering\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Services Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Management Learning\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Human Resource Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Games and Economic Behavior\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Small Business Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Electronic\
+      \ Markets\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American Journal of Health Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Feminist Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Entrepreneurship and Management Journal\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Financial Markets\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Sport Management\
+      \ Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Business Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Econometrics Journal\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Money, Credit and Banking\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"R and D\
+      \ Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economic History Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"China Finance\
+      \ Review International\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Technology in Society\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Critical Perspectives on Accounting\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Management International Review\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Labour Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Internet of Things\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Logistics Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Project Management Journal\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Electronic Commerce\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Journal of Contextual Behavioral Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Hospitality and Tourism Technology\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"INFORMS Journal on Computing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Agricultural\
+      \ Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Quantitative Marketing and Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Industrial and Corporate Change\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Mathematics of Operations Research\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"British Journal of Industrial Relations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Public Relations\
+      \ Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Product and Brand Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Environmental Agreements: Politics, Law and Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Asia Pacific\
+      \ Journal of Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"World Bank Economic Review\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Accounting Literature\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Air Transport Management\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economics and Management Strategy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Ecological\
+      \ Indicators\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Career Development and Transition for Exceptional Individuals\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Industrial Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Work and Occupations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Management Science and Engineering\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Cliometrica\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"School Leadership and Management\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Information Technology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Agricultural Economics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Personal Selling and Sales Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Hospitality and Tourism Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Risk Research\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Corporate Governance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Manufacturing Processes\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Finance and Stochastics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Law, Economics,\
+      \ and Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Management Decision\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review\
+      \ of Black Political Economy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Competition and Change\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Information Technology and Tourism\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Comparative Migration Studies\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Patterns\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Stress Management\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Canadian Journal of Agricultural Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European\
+      \ Review of Economic History\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Cleaner Logistics and Supply Chain\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Management Review Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Industry and Innovation\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Structural Change and Economic Dynamics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of\
+      \ Managerial Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Marketing Review\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Energy Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of International Money and Finance\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Electronic Commerce Research and Applications\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Managerial\
+      \ Psychology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Governance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economic Modelling\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Tourism Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Human\
+      \ Resource Development International\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Human Resource Development Quarterly\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Entrepreneurial Behaviour and Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Consumption Markets and Culture\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Management Analytics\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Empirical Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"British Accounting Review\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Research in International Business and Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Journal of Fashion Marketing and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Informetrics\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Economics of Education Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Accounting and Public\
+      \ Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Financial Analysts Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of Industrial Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Nonlinear Analysis: Real World Applications\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Business and Politics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Regional Science and Urban Economics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Industrial Integration and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Enterprise Information Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Behavioral and Experimental\
+      \ Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"ASTIN Bulletin\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Electronic Journal\
+      \ of Probability\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Venture Capital\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economica\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Corporate Governance: An International Review\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Industrial Management and Data Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Sport Management\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Cambridge Journal of Regions, Economy and Society\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"EURO Journal\
+      \ on Transportation and Logistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Educational Assessment, Evaluation and Accountability\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"American Health and Drug Benefits\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Public Management Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the Association for Consumer Research\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Comparative Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Telecommunications\
+      \ Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Tijdschrift Voor Economische en Sociale Geografie\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Internet Commerce\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Scandinavian Journal of Hospitality and Tourism\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Choice Modelling\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Benchmarking\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Behavior and Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      IEEE Transactions on Big Data\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Scandinavian Journal of Management\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Stochastic Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Cornell Hospitality Quarterly\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Economic Development and Cultural Change\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Financial Innovation\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business Finance and Accounting\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Science Technology and Human Values\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Statistica Sinica\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Management Accounting Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Multivariate Analysis\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Industrial Relations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Accounting\
+      \ Information Systems\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annals of Applied Statistics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Economics of Transportation\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Cambridge Journal of Economics\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Construction Engineering and Management - ASCE\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Methods, Data, Analyses\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Journal of Industrial Relations\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"European Journal of Innovation Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal\
+      \ of Health Geographics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Applied Geography\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of Vacation Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Foundations and Trends in Accounting\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Economic Dynamics and Control\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Australian Journal of Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Quarterly Journal of Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Socio-Economic\
+      \ Planning Sciences\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Eurasian Geography and Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Forest Policy and Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Logistics Research and\
+      \ Applications\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Administrative Theory and Praxis\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Conflict Management and Peace Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Pacific Basin Finance Journal\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Inequality\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Public Performance\
+      \ & Management Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the American Taxation Association\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Emerging Markets Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Resources and Energy Economics\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"National Tax Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Management Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economic Analysis and Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annals of Tourism\
+      \ Research Empirical Insights\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Leadership and Organizational Studies\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Research on Management and Business Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Common Market Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Information Systems\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Tourism Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Brand Management\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Palgrave Communications\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Healthcare Leadership\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Central Banking\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Educational\
+      \ Management Administration and Leadership\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Personnel Review\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"European Accounting Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Global Journal of Flexible Systems Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Benefit-Cost Analysis\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Electronic\
+      \ Journal of Statistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Service Theory and Practice\" ) OR LIMIT-TO (\
+      \ EXACTSRCTITLE , \"Tourism Recreation Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Management and Organization Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Multinational Business Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Transactions in Operational Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Management Education\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Econometric Reviews\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Public Personnel Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Judgment and Decision Making\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Annals of Operations\
+      \ Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Journal of Health Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Economics and Human Biology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Enterprise Information Systems\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"International Journal of Wellbeing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Marine Policy\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of International Financial Markets, Institutions and Money\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Research in Transportation Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Industrial and Business Economics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Journal of Political Economy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Financial\
+      \ Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Leisure Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of International Economic Law\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Service Science\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Cognitive Computing in Engineering\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the\
+      \ Association for Information Science and Technology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Fuel Cells Bulletin\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Marketing Communications\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Econometrics\
+      \ and Statistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Leadership and Organization Development Journal\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Review of Industrial Organization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Responsible Innovation\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Organization Design\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"IEEE Transactions\
+      \ on Engineering Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Accounting Horizons\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Globalizations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Research in Globalization\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Asia Pacific Journal of Marketing and Logistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"OR Spectrum\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of the Japanese and International Economies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European\
+      \ Financial Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Creativity and Innovation Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Retail and Distribution Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"System Dynamics\
+      \ Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Asia Pacific Journal of Tourism Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Science and Engineering Ethics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Scandinavian Actuarial Journal\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Research in Transportation Business and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of Career Assessment\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Biometrical Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Annals of Actuarial Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the Royal Statistical Society. Series A:\
+      \ Statistics in Society\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Asia Pacific Journal of Human Resources\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Time Series Analysis\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"EuroMed Journal of Business\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Contingencies and Crisis Management\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Journal of Quality Technology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Naval Research Logistics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Innovation and Entrepreneurship\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"American Journal of Evaluation\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Sport Management Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of Engineering and Technology Management - JET-M\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Economics\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business and Technical Communication\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Journal of International Entrepreneurship\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Sustainability Accounting, Management\
+      \ and Policy Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Statistics and Computing\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"Management Communication Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Multinational Financial Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Lean Six Sigma\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Journal of Critical Infrastructure Protection\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Review of Economics\
+      \ and Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"German Journal of Human Resource Management\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Engineering, Construction and Architectural Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Information Society\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Asian Economic Papers\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Business Process Management\
+      \ Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Management Accounting Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Egyptian Informatics Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Construction Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Nonprofit Management and Leadership\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Total Quality\
+      \ Management and Business Excellence\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Maritime Economics and Logistics\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Gender in Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Utilities Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"European Journal of Management and Business Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economic and Industrial\
+      \ Democracy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Service Business\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal\
+      \ of Population Data Science\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Strategic Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Voluntas\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Employee Relations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of\
+      \ Sustainable Finance and Investment\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Education and Training\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"BRQ Business Research Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Systems Science:\
+      \ Operations and Logistics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of the Operational Research Society\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Futures\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Small Business and Entrepreneurship\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Optimization\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Consumer Culture\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Asia Pacific Management Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"China Journal of Accounting\
+      \ Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Eurasian Business Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Oeconomia\
+      \ Copernicana\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"National Institute Economic Review\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Cultural Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Clean Technologies and Environmental Policy\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Business Ethics, Environment and Responsibility\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Entrepreneurship and Innovation\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal\
+      \ of Business Communication\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business and Industrial Marketing\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Global Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Global Optimization\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Consumer Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Accounting and\
+      \ Business Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Public Budgeting, Accounting and Financial Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Heritage Tourism\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Emerging Markets\
+      \ Finance and Trade\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Institutional Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Selection and Assessment\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Asian Business and Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Intercultural Relations\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Entrepreneurship in Emerging Economies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Borsa Istanbul Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Behavioral Decision Making\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Social\
+      \ Responsibility Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Homeland Security and Emergency Management\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Social Entrepreneurship\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Review of Environmental and Resource Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"China and World Economy\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Industrial Relations\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Business Economics\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Competitiveness\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Electronic\
+      \ Commerce Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Human Capital\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"\
+      Meditari Accountancy Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Work Organisation, Labour and Globalisation\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Journal of Marketing Analytics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Psychology:\
+      \ Interdisciplinary and Applied\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Foundations and Trends in Entrepreneurship\" ) OR\
+      \ LIMIT-TO ( EXACTSRCTITLE , \"Bottom Line\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Transnational Corporations\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Economics of Innovation and New Technology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of International\
+      \ Financial Management and Accounting\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Management Development\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Latin American Economic Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Theoretical and\
+      \ Applied Electronic Commerce Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economic Inquiry\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"International Journal of Accounting and Information Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Construction\
+      \ Management and Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Policy Reform\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Young Consumers\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"EuroChoices\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of\
+      \ Humanitarian Logistics and Supply Chain Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Accounting and Finance\" )\
+      \ OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Structures\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Asia\
+      \ Business Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Contemporary Economic Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Open Innovation: Technology, Market, and Complexity\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of\
+      \ International Consumer Marketing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"TQM Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE ,\
+      \ \"International Journal of Productivity and Performance Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Quality Technology\
+      \ and Quantitative Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Evolutionary Economics\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"She Ji\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Futures Markets\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Behavioral and Experimental Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Cleaner and Responsible Consumption\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Computer Law and Security Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Management\
+      \ Research Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Quantitative Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal\
+      \ of Sports Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Humanities and Social Sciences Communications\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Electronic Commerce Research\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Asian Economic Policy Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Cultural Heritage\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Financial Markets,\
+      \ Institutions and Instruments\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Small Business and Enterprise Development\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Heritage Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Global\
+      \ Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"City, Culture and Society\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Business\
+      \ Strategy and Development\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economics, Finance and Administrative Science\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Intereconomics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Economia\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Journal of Consumer Affairs\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Family Business Management\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"Journal of Accounting, Auditing and Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"China Information\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"McKinsey Quarterly\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Group Decision and Negotiation\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Financial Accountability and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Spatial\
+      \ Economic Analysis\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of Political Economy\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Chinese Economy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"European Journal of Finance\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"China Economic Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Social Enterprise Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"IMA Journal of Management Mathematics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Asian Business and Economic\
+      \ Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Trees, Forests and People\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Managerial\
+      \ Auditing Journal\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International Journal of Sociology and Social Policy\" ) OR LIMIT-TO\
+      \ ( EXACTSRCTITLE , \"International Journal of Auditing\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Asia and the Pacific Policy\
+      \ Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Extremes\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Eurasian Economic Review\"\
+      \ ) OR LIMIT-TO ( EXACTSRCTITLE , \"Review of World Economics\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic\
+      \ Methodology\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Applied Accounting Research\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"Equilibrium. Quarterly Journal of Economics and Economic Policy\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Latin American\
+      \ Research Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Asymmetries\" ) OR LIMIT-TO ( EXACTSRCTITLE\
+      \ , \"South Asian Journal of Business Studies\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Entrepreneurial Business and Economics\
+      \ Review\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Applied Economic Analysis\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"International\
+      \ Journal of Health Economics and Management\" ) OR LIMIT-TO ( EXACTSRCTITLE , \"Journal of Economic Studies\" ) )"
+  Search Query 2:
+    label: Search Query 2 — FT50 2026 journal list
+    date_submitted: '2026-07-08'
+    records_retrieved: 818
+    source_title_count: 50
+    scopus_query: 'TITLE-ABS-KEY (("Artificial Intelligence" OR "Artificial-Intelligence" OR AI OR "Machine Learning" OR "Deep
+      learning" OR "cognitive computing" OR "Neuro-Symbolic AI" OR "Hybrid AI" OR "Symbolic AI" OR "Natural Language Processing"
+      OR "Conversational AI" OR "Virtual Assistant" OR "Chatbot" OR "chatbots" OR "ChatGPT" OR "Artificial neural network"
+      OR "neural network" OR "convolutional neural network" OR "recurrent neural networks" OR "LSTM" OR "Transformer Architecture"
+      OR "BERT" OR "GPT" OR "Graph Neural Networks" OR "GNN" OR "Graph Embeddings" OR "Attention Mechanism" OR "Diffusion
+      Models" OR "Large Language Models" OR "LLM" OR "Generative AI" OR "GenAI" OR "Retrieval-Augmented Generation" OR "RAG"
+      OR "Knowledge Representation" OR "Knowledge Graph" OR "Graph Embeddings" OR "semantic network" OR "knowledge-based system"
+      OR "logic programming" OR "Explainable AI" OR "XAI" OR "SHAP" OR "LIME" OR "Predictive AI" OR "Decision Support Systems"
+      OR "data mining" OR "text mining" OR "pattern recognition" OR "image recognition" OR "semantic analysis" OR "decision
+      tree" OR "Bayesian learning system" OR "support vector machine" OR "SVM" OR "supervised learning" OR "unsupervised learning"
+      OR "reinforcement learning" OR "Meta-Learning" OR "Self-Supervised Learning" OR "Few-Shot Learning" OR "Zero-Shot Learning"
+      OR "random forest" OR "logistic regression" OR "naive bayes" OR "k-nearest neighbors" OR "gradient boosting" OR "XGBoost"
+      OR "AdaBoost" OR "decision tree classifier" OR "Robot" OR "Humanoid robot" OR "robotic automation" OR "process automation"
+      OR "recommendation system" OR "recommender system" OR "autonomic computing" OR "computer vision" OR "speech recognition"
+      OR "Federated Learning" OR "cluster analysis" OR "heuristic search techniques") AND (("Innovation" OR "Patents And Inventions"
+      OR "Open Innovation" OR "Knowledge Management" OR "Product Development" OR "Competition" OR "Decision Making" OR "Societies
+      And Institutions" OR "Research And Development Management" OR "Technology Transfer" OR "Public Policy" OR "Digital Transformation"
+      OR "Economics" OR "Commerce" OR "Investments" OR "Industrial Management" OR "Technology" OR "Intellectual Capital" OR
+      "Sustainable Development" OR "Regression Analysis" OR "Knowledge-based Views" OR "Industry" OR "Big Data" OR "Research
+      And Development" OR "Innovation Performance" OR "Economic And Social Effects" OR "SMEs" OR "Research" OR "Performance"
+      OR "Knowledge Base" OR "Innovation Management" OR "Strategic Planning" OR "Productivity" OR "Product Innovation" OR
+      "Marketing" OR "Industrial Research" OR "Engineering Education" OR "Digitalization" OR "Sales" OR "Project Management"
+      OR "New Product Development" OR "Information Technology" OR "Information Management" OR "Biotechnology" OR "Systematic
+      Literature Review" OR "Natural Language Processing Systems" OR "Managers" OR "Digital Technologies" OR "Sentiment Analysis"
+      OR "Patents" OR "Management" OR "Education" OR "Diffusion" OR "Technology Adoption" OR "Sustainability" OR "Mathematical
+      Models" OR "Knowledge-based View" OR "Knowledge Spillovers" OR "Intellectual Property" OR "Industrial Economics" OR
+      "Technological Innovation" OR "Surveys" OR "Regional Planning" OR "Learning Systems" OR "Innovation System" OR "Forecasting"
+      OR "Employment" OR "Blockchain" OR "Topic Modeling" OR "Technological Change" OR "Robots" OR "Problem Solving" OR "Personnel"
+      OR "Knowledge" OR "COVID-19" OR "Automation" OR "Patent" OR "Human Capital" OR "Firm Performance" OR "External Knowledge"
+      OR "Economic Growth" OR "Developing Countries" OR "Bibliometric Analysis" OR "Absorptive Capacity" OR "Workers" OR "R&D"
+      OR "Product Design" OR "Mergers And Acquisitions" OR "Manufacturing Firms" OR "Knowledge Representation" OR "Crowdfunding"
+      OR "Business Models" OR "Triple Helix" OR "Theoretical Framework" OR "Statistical Methods" OR "Semantics" OR "Risk Assessment"
+      OR "Profitability" OR "Process Innovation" OR "Knowledge Economy" OR "Knowledge Acquisition" OR "Internet Of Things"
+      OR "Internet" OR "Human Resource Management" OR "Health Care" OR "Gender" OR "Engineering" OR "Emerging Technologies"
+      OR "Economic Growths" OR "Digital Storage" OR "Automotive Industry" OR "Technological Forecasting" OR "Start-ups" OR
+      "Social Network Analysis" OR "Social Aspects" OR "Research Agenda" OR "Random Forest" OR "Networks" OR "National Innovation
+      Systems" OR "Motivation" OR "Life Cycle" OR "Knowledge Transfer" OR "Knowledge Based" OR "Intellectual Property Rights"
+      OR "Innovation Policies" OR "Information Analysis" OR "Generative Artificial Intelligence" OR "Financial Performance"
+      OR "Finance" OR "Empirical Studies" OR "Decision-making" OR "Database Systems" OR "Data Analytics" OR "Customer Satisfaction"
+      OR "Crowdsourcing" OR "Conceptual Frameworks" OR "Competitive Advantage" OR "Communication" OR "Business Model Innovation")
+      AND ("Entrepreneurship" OR "Entrepreneurs" OR "Venture Creation" OR "Business Innovation" OR "Small Business" OR "Startups"
+      OR "New Ventures" OR "SMEs" OR "SME Entrepreneur" OR "Entrepreneurial Marketing" OR "Entrepreneurship Development" OR
+      "Entrepreneurial Ecosystems" OR "Entrepreneurial Decision-Making" OR "Entrepreneurial Cognition" OR "Entrepreneurial
+      Risk" OR "Entrepreneurial Uncertainty" OR "Risk Management" OR "Decision-Making Under Uncertainty" OR "Resilience in
+      Entrepreneurship" OR "Opportunity Ideation" OR "Barriers to Entry" OR "Market Access" OR "Techno-Stress" OR "Industry
+      4.0" OR "Digital Entrepreneurship" OR "Technology-Driven Entrepreneurship" OR "Product Development" OR "Technology Adoption"
+      OR "Technology Transfer" OR "Innovation Management" OR "Sustainable Development" OR "Entrepreneurial Investments" OR
+      "Innovation System" OR "Technological Change" OR "Technological Innovation" OR "Strategic Planning" OR "Emerging Technologies"
+      OR "Industry" OR "Innovation Performance" OR "Industrial Management" OR "Crowdsourcing" OR "Patents And Inventions"
+      OR "Open Innovation" OR "Intellectual Capital" OR "Entrepreneurial Finance" OR "Venture Capital" OR "Angel Investing"
+      OR "Crowdfunding" OR "Business Scaling" OR "Financial Sustainability" OR "Startup Growth" OR "Corporate Entrepreneurship"
+      OR "Intrapreneurship" OR "Industry 5.0"))
+
+      AND ( LIMIT-TO ( SRCTYPE , "j" ) ) AND ( LIMIT-TO ( DOCTYPE , "ar" ) OR LIMIT-TO ( DOCTYPE , "re" ) OR LIMIT-TO ( DOCTYPE
+      , "ed" ) OR LIMIT-TO ( DOCTYPE , "cp" ) ) AND ( LIMIT-TO ( SUBJAREA , "BUSI" ) OR LIMIT-TO ( SUBJAREA , "ECON" ) OR
+      LIMIT-TO ( SUBJAREA , "SOCI" ) OR LIMIT-TO ( SUBJAREA , "DECI" ) OR LIMIT-TO ( SUBJAREA , "ARTS" ) ) AND ( LIMIT-TO
+      ( LANGUAGE , "English" ) )
+
+      AND ( LIMIT-TO ( EXACTSRCTITLE , "Academy of Management Annals" ) OR LIMIT-TO ( EXACTSRCTITLE , "Academy of Management
+      Journal" ) OR LIMIT-TO ( EXACTSRCTITLE , "Academy of Management Review" ) OR LIMIT-TO ( EXACTSRCTITLE , "Accounting
+      Review" ) OR LIMIT-TO ( EXACTSRCTITLE , "Accounting, Organizations and Society" ) OR LIMIT-TO ( EXACTSRCTITLE , "Administrative
+      Science Quarterly" ) OR LIMIT-TO ( EXACTSRCTITLE , "American Economic Review" ) OR LIMIT-TO ( EXACTSRCTITLE , "American
+      Sociological Review" ) OR LIMIT-TO ( EXACTSRCTITLE , "Contemporary Accounting Research" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Econometrica" ) OR LIMIT-TO ( EXACTSRCTITLE , "Entrepreneurship Theory and Practice" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Harvard Business Review" ) OR LIMIT-TO ( EXACTSRCTITLE , "Human Resource Management" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Information Systems Research" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Accounting and Economics" ) OR LIMIT-TO
+      ( EXACTSRCTITLE , "Journal of Accounting Research" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Applied Psychology" )
+      OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Business Venturing" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Consumer Psychology"
+      ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Consumer Research" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Finance"
+      ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Financial and Quantitative Analysis" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal
+      of Financial Economics" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of International Business Studies" ) OR LIMIT-TO (
+      EXACTSRCTITLE , "Journal of Management" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Management Information Systems"
+      ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Management Studies" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Marketing"
+      ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Marketing Research" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Operations
+      Management" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Political Economy" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal
+      of the Academy of Marketing Science" ) OR LIMIT-TO ( EXACTSRCTITLE , "Management Science" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Manufacturing and Service Operations Management" ) OR LIMIT-TO ( EXACTSRCTITLE , "Marketing Science" ) OR LIMIT-TO
+      ( EXACTSRCTITLE , "MIS Quarterly Management Information Systems" ) OR LIMIT-TO ( EXACTSRCTITLE , "MIT Sloan Management
+      Review" ) OR LIMIT-TO ( EXACTSRCTITLE , "Operations Research" ) OR LIMIT-TO ( EXACTSRCTITLE , "Organization Science"
+      ) OR LIMIT-TO ( EXACTSRCTITLE , "Organizational Behavior and Human Decision Processes" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Production and Operations Management" ) OR LIMIT-TO ( EXACTSRCTITLE , "Psychological Science" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Quarterly Journal of Economics" ) OR LIMIT-TO ( EXACTSRCTITLE , "Research Policy" ) OR LIMIT-TO ( EXACTSRCTITLE ,
+      "Review of Accounting Studies" ) OR LIMIT-TO ( EXACTSRCTITLE , "Review of Economic Studies" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Review of Finance" ) OR LIMIT-TO ( EXACTSRCTITLE , "Review of Financial Studies" ) OR LIMIT-TO ( EXACTSRCTITLE ,
+      "Strategic Entrepreneurship Journal" ) OR LIMIT-TO ( EXACTSRCTITLE , "Strategic Management Journal" ) )'
+  Search Query 3:
+    label: Search Query 3 — Leading entrepreneurship journals as per Burnell et al. (2026)
+    date_submitted: '2026-07-08'
+    records_retrieved: 1097
+    source_title_count: 14
+    scopus_query: 'TITLE-ABS-KEY ( "Artificial Intelligence" OR "Artificial-Intelligence" OR AI OR "Machine Learning" OR "Deep
+      learning" OR "cognitive computing" OR "Neuro-Symbolic AI" OR "Hybrid AI" OR "Symbolic AI" OR "Natural Language Processing"
+      OR "Conversational AI" OR "Virtual Assistant" OR "Chatbot" OR "chatbots" OR "ChatGPT" OR "Artificial neural network"
+      OR "neural network" OR "convolutional neural network" OR "recurrent neural networks" OR "LSTM" OR "Transformer Architecture"
+      OR "BERT" OR "GPT" OR "Graph Neural Networks" OR "GNN" OR "Graph Embeddings" OR "Attention Mechanism" OR "Diffusion
+      Models" OR "Large Language Models" OR "LLM" OR "Generative AI" OR "GenAI" OR "Retrieval-Augmented Generation" OR "RAG"
+      OR "Knowledge Representation" OR "Knowledge Graph" OR "Graph Embeddings" OR "semantic network" OR "knowledge-based system"
+      OR "logic programming" OR "Explainable AI" OR "XAI" OR "SHAP" OR "LIME" OR "Predictive AI" OR "Decision Support Systems"
+      OR "data mining" OR "text mining" OR "pattern recognition" OR "image recognition" OR "semantic analysis" OR "decision
+      tree" OR "Bayesian learning system" OR "support vector machine" OR "SVM" OR "supervised learning" OR "unsupervised learning"
+      OR "reinforcement learning" OR "Meta-Learning" OR "Self-Supervised Learning" OR "Few-Shot Learning" OR "Zero-Shot Learning"
+      OR "random forest" OR "logistic regression" OR "naive bayes" OR "k-nearest neighbors" OR "gradient boosting" OR "XGBoost"
+      OR "AdaBoost" OR "decision tree classifier" OR "Robot" OR "Humanoid robot" OR "robotic automation" OR "process automation"
+      OR "recommendation system" OR "recommender system" OR "autonomic computing" OR "computer vision" OR "speech recognition"
+      OR "Federated Learning" OR "cluster analysis" OR "heuristic search techniques" )
+
+      AND ( LIMIT-TO ( SRCTYPE , "j" ) ) AND ( LIMIT-TO ( DOCTYPE , "ar" ) OR LIMIT-TO ( DOCTYPE , "re" ) OR LIMIT-TO ( DOCTYPE
+      , "ed" ) OR LIMIT-TO ( DOCTYPE , "cp" ) ) AND ( LIMIT-TO ( SUBJAREA , "BUSI" ) OR LIMIT-TO ( SUBJAREA , "ECON" ) OR
+      LIMIT-TO ( SUBJAREA , "SOCI" ) OR LIMIT-TO ( SUBJAREA , "DECI" ) OR LIMIT-TO ( SUBJAREA , "ARTS" ) ) AND ( LIMIT-TO
+      ( LANGUAGE , "English" ) )
+
+      AND ( LIMIT-TO ( EXACTSRCTITLE , "Entrepreneurship Theory and Practice" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of
+      Business Venturing" ) OR LIMIT-TO ( EXACTSRCTITLE , "Strategic Entrepreneurship Journal" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Strategic Management Journal" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Management" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Academy of Management Review" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Small Business Management" ) OR LIMIT-TO
+      ( EXACTSRCTITLE , "Organization Science" ) OR LIMIT-TO ( EXACTSRCTITLE , "Management Science" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Small Business Economics" ) OR LIMIT-TO ( EXACTSRCTITLE , "Academy of Management Journal" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Administrative Science Quarterly" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Management Studies" ) OR LIMIT-TO (
+      EXACTSRCTITLE , "Research Policy" ) )'
+  Search Query 4:
+    label: Search Query 4 — Other entrepreneurship journals
+    date_submitted: '2026-07-08'
+    records_retrieved: 1509
+    source_title_count: 17
+    scopus_query: 'TITLE-ABS-KEY ( "Artificial Intelligence" OR "Artificial-Intelligence" OR AI OR "Machine Learning" OR "Deep
+      learning" OR "cognitive computing" OR "Neuro-Symbolic AI" OR "Hybrid AI" OR "Symbolic AI" OR "Natural Language Processing"
+      OR "Conversational AI" OR "Virtual Assistant" OR "Chatbot" OR "chatbots" OR "ChatGPT" OR "Artificial neural network"
+      OR "neural network" OR "convolutional neural network" OR "recurrent neural networks" OR "LSTM" OR "Transformer Architecture"
+      OR "BERT" OR "GPT" OR "Graph Neural Networks" OR "GNN" OR "Graph Embeddings" OR "Attention Mechanism" OR "Diffusion
+      Models" OR "Large Language Models" OR "LLM" OR "Generative AI" OR "GenAI" OR "Retrieval-Augmented Generation" OR "RAG"
+      OR "Knowledge Representation" OR "Knowledge Graph" OR "Graph Embeddings" OR "semantic network" OR "knowledge-based system"
+      OR "logic programming" OR "Explainable AI" OR "XAI" OR "SHAP" OR "LIME" OR "Predictive AI" OR "Decision Support Systems"
+      OR "data mining" OR "text mining" OR "pattern recognition" OR "image recognition" OR "semantic analysis" OR "decision
+      tree" OR "Bayesian learning system" OR "support vector machine" OR "SVM" OR "supervised learning" OR "unsupervised learning"
+      OR "reinforcement learning" OR "Meta-Learning" OR "Self-Supervised Learning" OR "Few-Shot Learning" OR "Zero-Shot Learning"
+      OR "random forest" OR "logistic regression" OR "naive bayes" OR "k-nearest neighbors" OR "gradient boosting" OR "XGBoost"
+      OR "AdaBoost" OR "decision tree classifier" OR "Robot" OR "Humanoid robot" OR "robotic automation" OR "process automation"
+      OR "recommendation system" OR "recommender system" OR "autonomic computing" OR "computer vision" OR "speech recognition"
+      OR "Federated Learning" OR "cluster analysis" OR "heuristic search techniques" )
+
+      AND ( LIMIT-TO ( SRCTYPE , "j" ) ) AND ( LIMIT-TO ( DOCTYPE , "ar" ) OR LIMIT-TO ( DOCTYPE , "re" ) OR LIMIT-TO ( DOCTYPE
+      , "ed" ) OR LIMIT-TO ( DOCTYPE , "cp" ) ) AND ( LIMIT-TO ( SUBJAREA , "BUSI" ) OR LIMIT-TO ( SUBJAREA , "ECON" ) OR
+      LIMIT-TO ( SUBJAREA , "SOCI" ) OR LIMIT-TO ( SUBJAREA , "DECI" ) OR LIMIT-TO ( SUBJAREA , "ARTS" ) ) AND ( LIMIT-TO
+      ( LANGUAGE , "English" ) )
+
+      AND ( LIMIT-TO ( EXACTSRCTITLE , "Entrepreneurship and Regional Development" ) OR LIMIT-TO ( EXACTSRCTITLE , "European
+      Journal of Innovation Management" ) OR LIMIT-TO ( EXACTSRCTITLE , "International Entrepreneurship and Management Journal"
+      ) OR LIMIT-TO ( EXACTSRCTITLE , "International Journal of Entrepreneurial Behavior and Research" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "International Small Business Journal" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Business Venturing Insights" )
+      OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Entrepreneurship in Emerging Economies" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal
+      of Innovation and Knowledge" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Innovation and Entrepreneurship" ) OR LIMIT-TO
+      ( EXACTSRCTITLE , "Journal of Intellectual Capital" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Open Innovation: Technology,
+      Market, and Complexity" ) OR LIMIT-TO ( EXACTSRCTITLE , "Journal of Product Innovation Management" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Journal of the Knowledge Economy" ) OR LIMIT-TO ( EXACTSRCTITLE , "R and D Management" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "Technology Analysis and Strategic Management" ) OR LIMIT-TO ( EXACTSRCTITLE , "Technovation" ) OR LIMIT-TO ( EXACTSRCTITLE
+      , "The Journal of Technology Transfer" ) )'
+notes:
+- All source-title filters use LIMIT-TO ( EXACTSRCTITLE , ... ) format.
+- Source-title filter blocks are formatted as single-line OR chains.
+- Parenthetical qualifiers were removed from Query 1 source titles where Scopus rejected pasted source-title filters.
