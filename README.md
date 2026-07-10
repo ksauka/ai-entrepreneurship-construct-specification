@@ -33,7 +33,7 @@ ETV_V2/
   docs/                    # New architecture and platform documentation.
   scripts/                 # Thin command-line entrypoints.
   source_projects/         # Full copied source projects, kept as reference.
-  src/etv_v2/
+  src/aecsp/
     api/                   # Future FastAPI surface borrowed from esd_platform.
     analytics/             # Construct convergence, divergence, and contrast.
     corpus/                # Query import, merge, dedup, validation, provenance.
@@ -55,8 +55,8 @@ Stage 1     - Validate journals/source titles
 Stage 1.5   - Filter for AI x entrepreneurship relevance
 Stage 1.6   - Create one-hot query columns and query-specific views
 Stage 1B    - Export VOSviewer files for full corpus and Query 1-4 subsets
-Stage 2A    - Run BERTopic and KeyBERT/keyphrase extraction
-Stage 2A.5  - Code AI Specification Framework per paper
+Stage 2A.5  - Prove and select the paper-level specification coding model
+Stage 2A    - Grid-search, review, then run BERTopic and keyphrase extraction
 Stage 2B    - Build knowledge graph for theory elaboration
 Stage 3     - Serve analytics and visualization
 ```
@@ -96,11 +96,11 @@ BERTopic topics, KeyBERT phrases, and extracted keywords can be stored as `Topic
 
 The first stable contracts live in:
 
-- `src/etv_v2/corpus/query_provenance.py`
-- `src/etv_v2/corpus/merge.py`
-- `src/etv_v2/specification/schema.py`
-- `src/etv_v2/knowledge_graph/schema.py`
-- `src/etv_v2/pipeline/stages.py`
+- `src/aecsp/corpus/query_provenance.py`
+- `src/aecsp/corpus/merge.py`
+- `src/aecsp/specification/schema.py`
+- `src/aecsp/knowledge_graph/schema.py`
+- `src/aecsp/pipeline/stages.py`
 
 Run the contract tests with:
 

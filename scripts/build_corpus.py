@@ -28,28 +28,28 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from etv_v2.corpus.ingest import (  # noqa: E402
+from aecsp.corpus.ingest import (  # noqa: E402
     PAPER_ID_COLUMN,
     load_query_frame,
     merge_query_frames,
     query_view,
 )
-from etv_v2.corpus.query_provenance import (  # noqa: E402
+from aecsp.corpus.query_provenance import (  # noqa: E402
     QUERY_COUNT_COLUMN,
     SEARCH_QUERIES,
 )
-from etv_v2.corpus.relevance import (  # noqa: E402
+from aecsp.corpus.relevance import (  # noqa: E402
     RELEVANT_COLUMN,
     STRICT_RELEVANT_COLUMN,
     load_relevance_config,
     score_relevance,
 )
-from etv_v2.corpus.source_titles import (  # noqa: E402
+from aecsp.corpus.source_titles import (  # noqa: E402
     SOURCE_TITLE_VALID_COLUMN,
     load_source_title_universe,
     validate_source_titles,
 )
-from etv_v2.vos.export import export_vos_scopes  # noqa: E402
+from aecsp.vos.export import export_vos_scopes  # noqa: E402
 
 CONFIG_DIR = PROJECT_ROOT / "configs"
 INTERIM_DIR = PROJECT_ROOT / "data" / "interim"

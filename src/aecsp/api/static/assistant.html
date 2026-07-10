@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI-Entrepreneurship Construct Specification Platform - Assistant</title>
+<link rel="stylesheet" href="/static/esd.css" />
+<script src="/static/citation.js"></script>
+<style>
+  .q-list { display: flex; flex-direction: column; gap: 10px; }
+  .q-item { text-align: left; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line);
+            background: var(--bg-soft); cursor: pointer; transition: all 0.2s ease; font-size: 0.92em; color: var(--ink); }
+  .q-item:hover { border-color: var(--primary); transform: translateX(3px); }
+  .q-item.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .controls-inline { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+  .answer { min-height: 200px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="app-header">
+    <h1>Construct Specification Assistant</h1>
+    <p>Ask how AI is specified across the corpus. Each answer links to the exact papers behind it.</p>
+    <nav class="nav-links">
+      <a class="nav-link" href="/">Analytics Dashboard</a>
+      <a class="nav-link" href="/graph">Knowledge Graph</a>
+      <a class="nav-link active" href="/assistant">Assistant</a>
+    </nav>
+    <div class="toolbar">
+      <label>Dataset scope <select id="scope"></select></label>
+      <span id="status" class="status-pill warn">loading</span>
+    </div>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Questions</h2>
+      <div class="q-list" id="qlist"></div>
+    </div>
+    <div class="card">
+      <h2>Answer</h2>
+      <div id="controls" class="controls-inline"></div>
+      <div class="answer" id="answer"><p class="muted">Pick a question on the left.</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUESTIONS = [
+  { id:"role",   text:"Which papers treat AI as a given role, such as tool, actor, or capability?", column:"ai_role_function" },
+  { id:"type",   text:"Which papers use a given AI type, such as predictive or generative?",        column:"ai_type_form" },
+  { id:"mech",   text:"Which papers link AI to a given mechanism?",                                  column:"ai_mechanism" },
+  { id:"nomech", text:"Which papers omit the mechanism, leaving a black box claim?",                filter:{ai_mechanism:"mechanism missing"} },
+  { id:"typerole", text:"Same AI type but different role, a construct contrast",                     contrast:["ai_type_form","ai_role_function"] },
+  { id:"journals", text:"Which journals converge or fragment on AI specification?",                  groups:"Source title" },
+];
+let scope = "full_corpus";
+const api = (p) => fetch(p).then(r => r.json());
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function init() {
+  const h = await api("/api/health");
+  el("status").className = "status-pill " + (h.has_specifications ? "ok" : "warn");
+  el("status").textContent = h.has_specifications ? "specifications coded" : "run Stage 2A.5 for full answers";
+  const scopes = await api("/api/scopes");
+  el("scope").innerHTML = scopes.map(s => `<option value="${s.id}">${esc(s.label)} (${s.papers.toLocaleString()})</option>`).join("");
+  el("scope").onchange = e => { scope = e.target.value; el("controls").innerHTML=""; el("answer").innerHTML='<p class="muted">Pick a question.</p>'; };
+  el("qlist").innerHTML = QUESTIONS.map(q => `<div class="q-item" data-id="${q.id}" onclick="pick('${q.id}')">${esc(q.text)}</div>`).join("");
+}
+
+async function pick(id) {
+  document.querySelectorAll(".q-item").forEach(n => n.classList.toggle("active", n.dataset.id === id));
+  const q = QUESTIONS.find(x => x.id === id);
+  el("controls").innerHTML = ""; el("answer").innerHTML = "";
+
+  if (q.column) {
+    const values = await api(`/api/scope/${scope}/values?column=${q.column}`);
+    if (!values.length) { el("answer").innerHTML = note(); return; }
+    el("controls").innerHTML = `<select id="val">${values.map(v => `<option>${esc(v)}</option>`).join("")}</select>
+      <button class="btn" onclick="runFilter('${q.column}')">Find papers</button>`;
+  } else if (q.filter) {
+    runPapers(q.filter);
+  } else if (q.contrast) {
+    const rows = await api(`/api/scope/${scope}/contrast?shared=${q.contrast[0]}&differ=${q.contrast[1]}`);
+    el("answer").innerHTML = rows.length ? `<table><tr><th>AI type</th><th>Distinct roles</th><th>Papers</th></tr>` +
+      rows.map(r => `<tr><td>${esc(r.shared_value)}</td><td><span class="pill">${r.contrast_value_count}</span></td><td>${r.paper_count}</td></tr>`).join("") + `</table>` : note();
+  } else if (q.groups) {
+    const rows = await api(`/api/scope/${scope}/groups?by=${encodeURIComponent(q.groups)}`);
+    el("answer").innerHTML = rows.length ? `<table><tr><th>Journal</th><th>Papers</th><th>Fragmentation</th></tr>` +
+      rows.slice(0,30).map(r => `<tr><td>${esc(r["Source title"])}</td><td>${r.paper_count}</td><td>${Number(r.fragmentation_score).toFixed(2)}</td></tr>`).join("") + `</table>` : note();
+  }
+}
+
+async function runFilter(column) {
+  const value = el("val").value;
+  runPapers({ [column]: value });
+}
+async function runPapers(filters) {
+  const qs = Object.entries(filters).map(([k,v]) => `${k}:${v}`).join(",");
+  const items = await api(`/api/scope/${scope}/query?filters=${encodeURIComponent(qs)}`);
+  el("answer").innerHTML = items.length
+    ? `<p class="muted">${items.length} papers</p>` + items.map(paperEvidenceItem).join("")
+    : note();
+}
+const note = () => `<p class="muted">No results. This usually means specification codes have not been generated yet. Run Stage 2A.5 to code the papers.</p>`;
+init();
+</script>
+</body>
+</html>

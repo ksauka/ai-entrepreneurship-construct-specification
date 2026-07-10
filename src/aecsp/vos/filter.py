@@ -1,0 +1,117 @@
+"""VOS citation-connectivity cleaning filter (per scope).
+
+VOSviewer drops papers with zero total link strength when it builds a citation
+map, so the papers present in a scope's saved map are exactly the ones connected
+in that scope's citation network. This module treats the map purely as a filter:
+it does not read clusters or link strengths.
+
+For each scope it splits the corpus into two datasets:
+- retained: papers whose DOI appears in the scope's VOS map (citation-connected),
+  carrying no VOS columns, and
+- dropped: papers absent from the map (isolated / zero total link strength).
+
+The step is optional and per scope. A scope is processed only when its map file
+exists and is at least as new as the processed corpus; if the corpus is newer
+than the map, the map is treated as stale and the scope is skipped.
+
+Input maps live in data/vosdata/ named <scope>_vos.csv (see SCOPE_VOS_FILES).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pandas as pd
+
+from aecsp.corpus.scopes import scope_frame
+
+SCOPE_VOS_FILES: dict[str, str] = {
+    "full_corpus": "master_corpus_vos.csv",
+    "query_1": "query_1_vos.csv",
+    "query_2": "query_2_vos.csv",
+    "query_3": "query_3_vos.csv",
+    "query_4": "query_4_vos.csv",
+}
+
+
+def normalize_doi(value: object) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"^https?://(dx\.)?doi\.org/", "", text)
+    return re.sub(r"\s+", "", text).rstrip(".,;)")
+
+
+def vos_status(vos_path: Path, reference_path: Path) -> str:
+    """'current', 'missing', or 'stale' for one scope's VOS map."""
+
+    if not vos_path.exists():
+        return "missing"
+    if reference_path.exists() and reference_path.stat().st_mtime > vos_path.stat().st_mtime:
+        return "stale"
+    return "current"
+
+
+def load_vos_dois(path: Path) -> set[str]:
+    """Normalized DOI set present in a VOS map (the citation-connected papers)."""
+
+    df = pd.read_csv(path, sep=None, engine="python", dtype=str, keep_default_na=False)
+    doi_col = _find_column(list(df.columns), "doi", "url", "link")
+    if doi_col is None:
+        return set()
+    return {d for d in df[doi_col].map(normalize_doi) if d}
+
+
+def split_scope(
+    master: pd.DataFrame, scope_id: str, vos_dois: set[str]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (retained, dropped) for one scope, without adding VOS columns."""
+
+    scope_papers = scope_frame(master, scope_id)
+    doi_norm = scope_papers.get("DOI", pd.Series([""] * len(scope_papers))).map(normalize_doi)
+    retained_mask = doi_norm.isin(vos_dois)
+    retained = scope_papers[retained_mask].reset_index(drop=True)
+    dropped = scope_papers[~retained_mask].reset_index(drop=True)
+    return retained, dropped
+
+
+def filter_all_scopes(
+    master: pd.DataFrame,
+    vos_dir: Path,
+    reference_path: Path,
+    output_dir: Path,
+) -> dict:
+    """Process every scope whose VOS map is current; write retained/dropped CSVs."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stats: dict = {}
+    for scope_id, filename in SCOPE_VOS_FILES.items():
+        vos_path = vos_dir / filename
+        status = vos_status(vos_path, reference_path)
+        if status != "current":
+            stats[scope_id] = {"status": status}
+            continue
+
+        vos_dois = load_vos_dois(vos_path)
+        retained, dropped = split_scope(master, scope_id, vos_dois)
+        retained.to_csv(output_dir / f"{scope_id}_retained.csv", index=False, encoding="utf-8-sig")
+        dropped.to_csv(output_dir / f"{scope_id}_dropped.csv", index=False, encoding="utf-8-sig")
+
+        total = len(retained) + len(dropped)
+        stats[scope_id] = {
+            "status": "filtered",
+            "map_dois": len(vos_dois),
+            "scope_papers": total,
+            "retained": len(retained),
+            "dropped": len(dropped),
+            "retained_share": round(len(retained) / total, 4) if total else 0.0,
+        }
+    return stats
+
+
+def _find_column(columns: list[str], *needles: str) -> str | None:
+    lowered = {c.lower().strip(): c for c in columns}
+    for needle in needles:
+        for lc, original in lowered.items():
+            if needle in lc:
+                return original
+    return None

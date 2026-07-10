@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI-Entrepreneurship Construct Specification Platform - Analytics Dashboard</title>
+<link rel="stylesheet" href="/static/esd.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/citation.js"></script>
+</head>
+<body>
+<div class="container">
+  <header class="app-header">
+    <h1>AI-Entrepreneurship Construct Specification Platform</h1>
+    <p>This platform examines how entrepreneurship research specifies artificial intelligence, and shows where those specifications agree, differ, or break down.</p>
+    <nav class="nav-links">
+      <a class="nav-link active" href="/">Analytics Dashboard</a>
+      <a class="nav-link" href="/graph">Knowledge Graph</a>
+      <a class="nav-link" href="/assistant">Assistant</a>
+    </nav>
+    <div class="toolbar">
+      <label>Dataset scope
+        <select id="scope"></select>
+      </label>
+      <span id="status" class="status-pill warn">loading</span>
+      <button class="btn" onclick="openReport()">Generate report</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="stat-grid" id="cards"></div>
+  </div>
+
+  <div class="card">
+    <h2>Performance analysis <span class="sub">productivity and citation impact</span></h2>
+    <div class="stat-grid" id="perfCards"></div>
+    <h3 style="margin-top:18px">Annual production and citations</h3>
+    <div class="chart-wrap"><canvas id="annualChart"></canvas></div>
+    <div class="grid-2" style="margin-top:18px">
+      <div><h3>Most productive journals</h3><table id="perfJournals"><tbody></tbody></table></div>
+      <div><h3>Most productive authors</h3><table id="perfAuthors"><tbody></tbody></table></div>
+    </div>
+    <h3 style="margin-top:18px">Most cited papers</h3>
+    <table id="citedTable"><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Specification dimension convergence <span class="sub">click a dominant value for the evidence papers</span></h2>
+    <table id="dimTable"><tbody></tbody></table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Construct contrast <span class="sub">same AI type, different role</span></h2>
+      <table id="contrastTable"><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Most fragmented journals</h2>
+      <table id="journalTable"><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<aside id="panel" class="side-panel"><span class="close" onclick="closePanel()">close</span><div id="panelBody"></div></aside>
+
+<script>
+const DIMS = [
+  ["ai_role_function","AI role / function"], ["ai_type_form","AI type / form"],
+  ["ai_mechanism","Mechanism"], ["level_of_analysis","Level of analysis"],
+  ["entrepreneurial_process_stage","Process stage"], ["scope_conditions","Scope conditions"],
+  ["definition_construct_clarity","Definition clarity"],
+];
+let scope = "full_corpus", annualChart = null;
+const api = (p) => fetch(p).then(r => r.json());
+const el = (id) => document.getElementById(id);
+const fmt = (x) => (x == null ? "n/a" : Number(x).toFixed(2));
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function init() {
+  const h = await api("/api/health");
+  const neo = h.neo4j ? "Neo4j connected" : "CSV mode";
+  el("status").className = "status-pill " + (h.has_specifications ? "ok" : "warn");
+  el("status").textContent = `${h.papers_loaded.toLocaleString()} papers · specifications: ${h.has_specifications ? "coded" : "not yet"} · ${neo}`;
+  const scopes = await api("/api/scopes");
+  el("scope").innerHTML = scopes.map(s => `<option value="${s.id}">${esc(s.label)} (${s.papers.toLocaleString()})</option>`).join("");
+  el("scope").onchange = e => { scope = e.target.value; render(); };
+  render();
+}
+
+async function render() {
+  renderPerformance();
+  const ov = await api(`/api/scope/${scope}/overview`);
+  el("cards").innerHTML = `
+    <div class="stat-tile"><div class="n">${ov.paper_count.toLocaleString()}</div><div class="l">Papers</div></div>
+    <div class="stat-tile"><div class="n">${fmt(ov.overall_specification_clarity_score)}</div><div class="l">Specification clarity</div></div>
+    <div class="stat-tile"><div class="n">${fmt(ov.fragmentation_score)}</div><div class="l">Fragmentation</div></div>`;
+
+  el("dimTable").querySelector("tbody").innerHTML =
+    `<tr><th>Dimension</th><th>Convergence</th><th></th><th>Dominant value</th></tr>` +
+    DIMS.map(([col,label]) => {
+      const score = ov.dimension_convergence[col] ?? 0;
+      const dom = ov.dominant_values[col] || "not specified";
+      return `<tr><td>${label}</td>
+        <td><div class="bar"><span style="width:${Math.round(score*100)}%"></span></div></td>
+        <td>${fmt(score)}</td>
+        <td class="clickable" onclick="showEvidence('${col}','${esc(dom).replace(/'/g,"\\'")}')">${esc(dom)}</td></tr>`;
+    }).join("");
+
+  const contrast = await api(`/api/scope/${scope}/contrast?shared=ai_type_form&differ=ai_role_function`);
+  el("contrastTable").querySelector("tbody").innerHTML = contrast.length
+    ? `<tr><th>AI type</th><th>Distinct roles</th><th>Papers</th></tr>` + contrast.slice(0,12).map(c =>
+        `<tr><td>${esc(c.shared_value)}</td><td><span class="pill">${c.contrast_value_count}</span></td><td>${c.paper_count}</td></tr>`).join("")
+    : `<tr><td class="muted">Needs specification codes. Run Stage 2A.5.</td></tr>`;
+
+  const journals = await api(`/api/scope/${scope}/groups?by=Source title`);
+  el("journalTable").querySelector("tbody").innerHTML = journals.length
+    ? `<tr><th>Journal</th><th>Papers</th><th>Fragmentation</th></tr>` + journals.slice(0,12).map(j =>
+        `<tr><td>${esc(j["Source title"])}</td><td>${j.paper_count}</td><td>${fmt(j.fragmentation_score)}</td></tr>`).join("")
+    : `<tr><td class="muted">Needs specification codes. Run Stage 2A.5.</td></tr>`;
+}
+
+async function showEvidence(column, value) {
+  const items = await api(`/api/scope/${scope}/evidence?column=${encodeURIComponent(column)}&value=${encodeURIComponent(value)}`);
+  el("panelBody").innerHTML = `<h2>${esc(value)} <span class="muted">· ${items.length} papers</span></h2>` +
+    items.slice(0,100).map(paperEvidenceItem).join("");
+  el("panel").classList.add("open");
+}
+async function renderPerformance() {
+  const p = await api(`/api/scope/${scope}/performance`);
+  const s = p.summary;
+  el("perfCards").innerHTML = `
+    <div class="stat-tile"><div class="n">${s.total_citations.toLocaleString()}</div><div class="l">Total citations</div></div>
+    <div class="stat-tile"><div class="n">${fmt(s.mean_citations)}</div><div class="l">Mean citations per paper</div></div>
+    <div class="stat-tile"><div class="n">${Math.round(s.cited_share*100)}%</div><div class="l">Papers cited at least once</div></div>
+    <div class="stat-tile"><div class="n">${s.year_min ? s.year_min + " to " + s.year_max : "n/a"}</div><div class="l">Publication years</div></div>`;
+
+  const labels = p.annual_production.map(a => a.year);
+  if (annualChart) annualChart.destroy();
+  annualChart = new Chart(el("annualChart"), {
+    type: "line",
+    data: { labels, datasets: [
+      { label: "Papers", data: p.annual_production.map(a => a.papers), borderColor: "#3498db",
+        backgroundColor: "rgba(52,152,219,.15)", fill: true, tension: 0.3, yAxisID: "y" },
+      { label: "Citations", data: p.annual_production.map(a => a.citations), borderColor: "#e74c3c",
+        backgroundColor: "rgba(231,76,60,.10)", fill: true, tension: 0.3, yAxisID: "y1" },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: "Papers" } },
+        y1: { beginAtZero: true, position: "right", title: { display: true, text: "Citations" }, grid: { drawOnChartArea: false } },
+      } },
+  });
+
+  el("perfJournals").querySelector("tbody").innerHTML =
+    `<tr><th>Journal</th><th>Papers</th><th>Citations</th></tr>` + p.top_journals.map(j =>
+      `<tr><td>${esc(j["Source title"])}</td><td>${j.papers}</td><td>${j.citations.toLocaleString()}</td></tr>`).join("");
+  el("perfAuthors").querySelector("tbody").innerHTML =
+    `<tr><th>Author</th><th>Papers</th></tr>` + p.top_authors.map(a =>
+      `<tr><td>${esc(a.author)}</td><td>${a.papers}</td></tr>`).join("");
+  el("citedTable").querySelector("tbody").innerHTML =
+    `<tr><th>Citation</th><th>Title</th><th>Journal</th><th>Citations</th></tr>` + p.most_cited.map(m =>
+      `<tr><td>${esc(citation(m))}</td><td>${paperTitleLink(m)}</td><td>${esc(m["Source title"])}</td><td>${m.citations.toLocaleString()}</td></tr>`).join("");
+}
+
+function closePanel(){ el("panel").classList.remove("open"); }
+function openReport(){ window.open(`/api/scope/${scope}/report`, "_blank"); }
+init();
+</script>
+</body>
+</html>

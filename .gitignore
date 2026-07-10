@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+*.log
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -24,3 +25,6 @@ source_projects/**/.git/
 source_projects/
 *Zone.Identifier
 data/queries/*.csv
+.env
+data/neo4j/
+data/interim/spec_cache/

@@ -1,6 +1,6 @@
-from etv_v2.corpus.query_provenance import QUERY_ONE_HOT_COLUMNS, SEARCH_QUERIES
-from etv_v2.knowledge_graph.schema import NODE_SPECS, RELATIONSHIP_SPECS
-from etv_v2.specification.schema import SPECIFICATION_DIMENSIONS
+from aecsp.corpus.query_provenance import QUERY_ONE_HOT_COLUMNS, SEARCH_QUERIES
+from aecsp.knowledge_graph.schema import NODE_SPECS, RELATIONSHIP_SPECS
+from aecsp.specification.schema import SPECIFICATION_DIMENSIONS
 
 
 def test_four_search_queries_are_defined() -> None:

@@ -1,6 +1,6 @@
 import pytest
 
-from etv_v2.corpus import (
+from aecsp.corpus import (
     CorpusMergeError,
     SEARCH_QUERIES,
     merge_query_records,

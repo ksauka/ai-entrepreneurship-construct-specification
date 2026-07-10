@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "etv-v2"
+name = "ai-entrepreneurship-construct-specification"
 version = "0.1.0"
-description = "Theory-elaboration evidence platform for diagnosing AI construct specification in entrepreneurship research."
+description = "Platform for diagnosing how artificial intelligence is specified as a construct in entrepreneurship research."
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = [
@@ -32,6 +32,9 @@ graph = [
 nlp = [
   "bertopic>=0.16",
   "keybert>=0.8",
+  "yake>=0.4",
+  "gensim>=4.3",
+  "plotly>=5.0",
 ]
 viz = [
   "uvicorn>=0.23",

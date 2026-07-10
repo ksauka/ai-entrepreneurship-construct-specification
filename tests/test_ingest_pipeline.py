@@ -5,9 +5,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from etv_v2.corpus.ingest import IngestError, merge_query_frames, query_view
-from etv_v2.corpus.relevance import load_relevance_config, score_relevance
-from etv_v2.corpus.source_titles import (
+from aecsp.corpus.ingest import IngestError, merge_query_frames, query_view
+from aecsp.corpus.relevance import load_relevance_config, score_relevance
+from aecsp.corpus.source_titles import (
     load_source_title_universe,
     normalize_source_title,
     validate_source_titles,

@@ -36,4 +36,4 @@ ETV_V2 should be refactored by vertical slices, not by moving every old file at 
 
 ## Working Rule
 
-Keep `source_projects/` as reference material. New code should live in `src/etv_v2` unless there is a specific reason to preserve a legacy path.
+Keep `source_projects/` as reference material. New code should live in `src/aecsp` unless there is a specific reason to preserve a legacy path.

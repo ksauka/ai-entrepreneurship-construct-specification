@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI-Entrepreneurship Construct Specification Platform - Knowledge Graph</title>
+<link rel="stylesheet" href="/static/esd.css" />
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script src="/static/citation.js"></script>
+<style>
+  .container { max-width: 98vw; }
+  .kg-controls { display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; margin-top: 14px; }
+  .kg-controls .grp { display: flex; flex-direction: column; gap: 4px; font-size: 0.8em; color: var(--muted); }
+  .kg-controls select { min-width: 90px; }
+  .toggles { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .toggles label { display: flex; align-items: center; gap: 5px; font-size: 0.82em; color: var(--ink); }
+  .kg-stage { position: relative; }
+  #network { width: 100%; height: 66vh; min-height: 420px; background: #fff; border-radius: 12px; border: 1px solid var(--line); }
+  .kg-float { position: absolute; background: rgba(255,255,255,0.97); border: 1px solid var(--line);
+              border-radius: 10px; box-shadow: var(--shadow); padding: 14px 16px; z-index: 20; }
+  .legend { top: 16px; right: 16px; max-width: 220px; }
+  .legend h4 { color: var(--ink); font-size: 0.9em; margin-bottom: 8px; }
+  .legend .item { display: flex; align-items: center; gap: 8px; font-size: 0.8em; margin: 3px 0; color: var(--ink); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .infopanel { top: 16px; left: 16px; max-width: 340px; display: none; }
+  .infopanel h4 { color: var(--ink); margin-bottom: 6px; padding-right: 20px; }
+  .infopanel .close { position: absolute; top: 10px; right: 12px; cursor: pointer; color: var(--muted); }
+  .infopanel .prop { font-size: 0.82em; margin: 4px 0; line-height: 1.4; }
+  .infopanel .prop b { color: var(--muted); font-weight: 600; }
+  .loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+             background: rgba(255,255,255,0.95); padding: 16px 22px; border-radius: 10px; box-shadow: var(--shadow); z-index: 30; }
+  .statsbar { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; font-size: 0.82em; color: var(--muted); }
+  .statsbar b { color: var(--ink); }
+  .spec-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .spec-row .k { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="app-header">
+    <h1>Knowledge Graph</h1>
+    <p>Each dataset draws its own graph. Nodes are coloured by type; papers are sized by citations. Click any node for its details and evidence.</p>
+    <nav class="nav-links">
+      <a class="nav-link" href="/">Analytics Dashboard</a>
+      <a class="nav-link active" href="/graph">Knowledge Graph</a>
+      <a class="nav-link" href="/assistant">Assistant</a>
+    </nav>
+    <div class="kg-controls">
+      <div class="grp">Dataset scope<select id="scope"></select></div>
+      <div class="grp">View<select id="mode">
+        <option value="publications">Publication network</option>
+        <option value="contrast">Construct contrast</option>
+      </select></div>
+      <div class="grp">Publications<select id="limit">
+        <option>10</option><option>25</option><option selected>50</option>
+        <option>100</option><option>250</option><option value="100000">All</option>
+      </select></div>
+      <div class="grp">Relationships<select id="edgeLimit">
+        <option value="500">500</option><option value="1000">1,000</option>
+        <option value="2500">2,500</option><option value="0" selected>All</option>
+      </select></div>
+      <button class="btn" onclick="load()">Refresh</button>
+      <button class="btn btn-outline" onclick="if(network) network.fit()">Fit view</button>
+      <span id="status" class="status-pill warn">loading</span>
+    </div>
+    <div class="toggles" id="toggles"><span style="font-weight:600;color:var(--ink);font-size:.82em">Node types:</span></div>
+  </header>
+
+  <div class="card">
+    <div class="kg-stage">
+      <div id="network"></div>
+      <div class="kg-float legend" id="legend"><h4>Node types</h4></div>
+      <div class="kg-float infopanel" id="infopanel"><span class="close" onclick="hideInfo()">✕</span><div id="infobody"></div></div>
+      <div class="loading" id="loading">Loading graph…</div>
+    </div>
+    <div class="statsbar" id="statsbar"></div>
+  </div>
+</div>
+
+<aside id="panel" class="side-panel"><span class="close" onclick="closePanel()">close</span><div id="panelBody"></div></aside>
+
+<script>
+const LABEL_COLOURS = {
+  Publication:"#e74c3c", Author:"#3498db", Journal:"#95a5a6", Institution:"#8e44ad",
+  Keyword:"#f39c12", Reference:"#7f8c8d", Topic:"#2ecc71",
+  AIRole:"#c0392b", AIType:"#2980b9", Mechanism:"#27ae60", LevelOfAnalysis:"#d4ac0d",
+  ProcessStage:"#9b59b6", ScopeCondition:"#1abc9c", DefinitionClarity:"#34495e",
+  SpecificationProblem:"#e67e22", SpecificationProfile:"#bdc3c7",
+};
+const LABEL_NAMES = {
+  Publication:"Publication", Author:"Author", Journal:"Journal", Institution:"Institution",
+  Keyword:"Keyword", Reference:"Reference", Topic:"Topic",
+  AIRole:"AI role", AIType:"AI type", Mechanism:"Mechanism", LevelOfAnalysis:"Level of analysis",
+  ProcessStage:"Process stage", ScopeCondition:"Scope condition", DefinitionClarity:"Definition clarity",
+  SpecificationProblem:"Specification problem", SpecificationProfile:"Specification profile",
+  ai_role_function:"AI role", ai_type_form:"AI type", ai_mechanism:"Mechanism",
+  level_of_analysis:"Level", entrepreneurial_process_stage:"Process",
+};
+const EDGE_COLOURS = { CITES:"#e74c3c", REFERENCES:"#c0392b", WROTE:"#3498db", HAS_TOPIC:"#2ecc71",
+  HAS_KEYWORD:"#f39c12", CO_AUTHORED_WITH:"#2980b9", AFFILIATED_WITH:"#8e44ad",
+  PUBLISHED_IN:"#95a5a6", HAS_SPECIFICATION:"#c0392b" };
+const EDGE_NAMES = { WROTE:"wrote", CITES:"cites", REFERENCES:"references", HAS_TOPIC:"has topic",
+  HAS_KEYWORD:"has keyword", CO_AUTHORED_WITH:"co-author", AFFILIATED_WITH:"affiliated with",
+  PUBLISHED_IN:"published in", PUBLISHED_IN_YEAR:"in year", CAPTURED_BY:"captured by",
+  HAS_SPECIFICATION:"has specification", SPECIFIES_ROLE:"role", SPECIFIES_TYPE:"type",
+  SPECIFIES_MECHANISM:"mechanism", SPECIFIES_LEVEL:"level", SPECIFIES_PROCESS:"process",
+  SPECIFIES_SCOPE:"scope", HAS_DEFINITION_CLARITY:"clarity", HAS_SPECIFICATION_PROBLEM:"problem" };
+const TOGGLES = [
+  { id:"Author", labels:["Author"], on:true }, { id:"Journal", labels:["Journal"], on:true },
+  { id:"Institution", labels:["Institution"], on:true }, { id:"Topic", labels:["Topic"], on:true },
+  { id:"Specification", labels:["AIRole","AIType","Mechanism","LevelOfAnalysis","ProcessStage","ScopeCondition","DefinitionClarity","SpecificationProfile","SpecificationProblem"], on:true },
+  { id:"Keyword", labels:["Keyword"], on:false }, { id:"Reference", labels:["Reference"], on:false },
+];
+const SPEC_FIELDS = [
+  ["ai_role_function","AI role"], ["ai_type_form","AI type"], ["ai_mechanism","Mechanism"],
+  ["level_of_analysis","Level"], ["entrepreneurial_process_stage","Process"],
+  ["scope_conditions","Scope"], ["definition_construct_clarity","Definition clarity"],
+  ["specification_problem","Specification problem"],
+];
+let scope = "full_corpus", currentMode = "publications", network = null;
+const api = (p) => fetch(p).then(r => r.json());
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function drawLegend() {
+  el("legend").innerHTML = "<h4>Node types</h4>" + Object.keys(LABEL_COLOURS).map(k =>
+    `<div class="item"><span class="dot" style="background:${LABEL_COLOURS[k]}"></span>${LABEL_NAMES[k]||k}</div>`).join("");
+}
+
+async function init() {
+  drawLegend();
+  const h = await api("/api/health");
+  el("status").className = "status-pill " + (h.neo4j ? "ok" : "warn");
+  el("status").textContent = h.neo4j ? "Neo4j connected" : "CSV mode";
+  el("toggles").innerHTML += TOGGLES.map(t =>
+    `<label><input type="checkbox" id="tg_${t.id}" ${t.on?"checked":""} onchange="load()"> ${LABEL_NAMES[t.labels[0]]||t.id}</label>`).join("");
+  const scopes = await api("/api/scopes");
+  el("scope").innerHTML = scopes.map(s => `<option value="${s.id}">${esc(s.label)} (${s.papers.toLocaleString()})</option>`).join("");
+  el("scope").onchange = e => { scope = e.target.value; load(); };
+  el("mode").onchange = load; el("limit").onchange = load; el("edgeLimit").onchange = load;
+  load();
+}
+
+function includeLabels() {
+  const labels = ["Publication"];
+  for (const t of TOGGLES) if (el(`tg_${t.id}`) && el(`tg_${t.id}`).checked) labels.push(...t.labels);
+  return labels.join(",");
+}
+
+async function load() {
+  currentMode = el("mode").value;
+  hideInfo();
+  el("loading").style.display = "block";
+  const url = `/api/scope/${scope}/graph?mode=${currentMode}&limit=${el("limit").value}`
+    + `&edge_limit=${el("edgeLimit").value}&include=${encodeURIComponent(includeLabels())}`;
+  const data = await api(url);
+
+  // Single source of truth for colour: the frontend LABEL_COLOURS dict, the
+  // same one the legend uses. We do NOT pass `group` to vis-network, otherwise
+  // it applies its own automatic palette and node colours drift from the legend.
+  const nodes = new vis.DataSet(data.nodes.map(n => {
+    const colour = LABEL_COLOURS[n.group] || "#95a5a6";
+    return {
+      id: n.id, label: n.label, value: n.value || 6, nodeType: n.group, meta: n.meta || {},
+      color: { background: colour, border: "#2c3e50", highlight: { background: colour, border: "#2c3e50" } },
+      shape: n.group === "Publication" ? "dot" : "square",
+      font: { size: n.group === "Publication" ? 13 : 11, color: "#2c3e50" },
+    };
+  }));
+  const edges = new vis.DataSet(data.edges.map(e => ({
+    from: e.from, to: e.to, value: e.value, arrows: e.arrows,
+    label: EDGE_NAMES[e.type] || e.type,
+    color: { color: EDGE_COLOURS[e.type] || "#c8ccd4", opacity: 0.7, highlight: "#2c3e50" },
+    font: { size: 9, color: "#7f8c8d", strokeWidth: 3, strokeColor: "#ffffff", align: "middle" },
+  })));
+
+  network = new vis.Network(el("network"), { nodes, edges }, {
+    nodes: { scaling: { min: 6, max: 46 } },
+    edges: { smooth: { type: "continuous" }, scaling: { min: 1, max: 8 } },
+    physics: { barnesHut: { gravitationalConstant: -8000, springLength: 140, avoidOverlap: 0.4 }, stabilization: { iterations: 160 } },
+    interaction: { hover: true, tooltipDelay: 150, navigationButtons: true, keyboard: false },
+  });
+  network.on("click", (params) => {
+    if (!params.nodes.length) { hideInfo(); return; }
+    showInfo(nodes.get(params.nodes[0]));
+  });
+  network.once("stabilizationIterationsDone", () => { el("loading").style.display = "none"; network.fit(); });
+  setTimeout(() => { el("loading").style.display = "none"; }, 4000);
+
+  drawStats(data);
+}
+
+function drawStats(data) {
+  const c = data.counts || {};
+  const order = ["Publication","Author","Journal","Institution","Topic","Keyword","Reference"];
+  const parts = [`<span><b>${data.nodes.length.toLocaleString()}</b> nodes</span>`,
+                 `<span><b>${data.edges.length.toLocaleString()}</b> relationships</span>`];
+  for (const k of order) if (c[k]) parts.push(`<span><b>${c[k].toLocaleString()}</b> ${LABEL_NAMES[k]||k}</span>`);
+  el("statsbar").innerHTML = parts.join("");
+  el("status").className = "status-pill ok";
+  el("status").textContent = `${data.nodes.length} nodes · ${data.edges.length} links`;
+}
+
+async function showInfo(node) {
+  const m = node.meta || {};
+  const sep = node.id.indexOf("::");
+  const label = node.id.slice(0, sep), value = node.id.slice(sep + 2);
+  const q = (s) => String(s).replace(/'/g, "\\'");
+  el("infopanel").style.display = "block";
+
+  if (label === "Publication") {
+    const specs = SPEC_FIELDS.filter(([k]) => m[k]);
+    el("infobody").innerHTML = `<h4>${esc(LABEL_NAMES[label] || label)}</h4>
+      <div class="prop"><b>Title</b><br>${paperTitleLink({ Title: m.Title, DOI: m.DOI })}</div>
+      <div class="prop"><b>Citation</b> ${esc(citation({ Authors: m.Authors, Year: m.Year }))}</div>
+      <div class="prop"><b>Journal</b> ${esc(m.Journal)} (${esc(m.Year)})</div>
+      <div class="prop"><b>Citations</b> ${esc(m.Citations)} · <b>Queries</b> ${esc(m.queries)}</div>`
+      + (specs.length ? `<div class="prop"><b>Specification</b><br>${specs.map(([k,l]) => `${l}: ${esc(m[k])}`).join("<br>")}</div>` : "")
+      + `<div class="prop"><a href="#" onclick="showPaper('${q(value)}');return false;">Open full specification and evidence →</a></div>`;
+    return;
+  }
+
+  // Non-publication node: load the papers connected to it and list them.
+  el("infobody").innerHTML = `<h4>${esc(LABEL_NAMES[label] || label)}</h4>
+    <div class="prop"><b>${esc(value)}</b></div><div class="prop muted">Loading papers…</div>`;
+  const items = await api(`/api/scope/${scope}/connected?label=${encodeURIComponent(label)}&value=${encodeURIComponent(value)}`);
+  const preview = items.slice(0, 6).map(p =>
+    `<div class="prop">• ${paperTitleLink(p)} <span class="muted">${esc(p.Year)}</span></div>`).join("");
+  const more = items.length > 6
+    ? `<div class="prop"><a href="#" onclick="showConnected('${q(label)}','${q(value)}');return false;">View all ${items.length} papers →</a></div>` : "";
+  el("infobody").innerHTML = `<h4>${esc(LABEL_NAMES[label] || label)}</h4>
+    <div class="prop"><b>${esc(value)}</b></div>
+    <div class="prop"><b>${items.length} paper${items.length === 1 ? "" : "s"}</b> in this dataset</div>
+    ${preview}${more}`;
+}
+function hideInfo(){ el("infopanel").style.display = "none"; }
+
+function shade(hex) { return hex; }
+
+async function showPaper(pid) {
+  const p = await api(`/api/paper/${pid}`);
+  if (p.detail) return;
+  const specRows = SPEC_FIELDS.filter(([k]) => p[k])
+    .map(([k,l]) => `<div class="spec-row"><span class="k">${l}</span><span>${esc(p[k])}</span></div>`).join("")
+    || `<p class="muted">Not coded yet. Run Stage 2A.5.</p>`;
+  const near = (list, title) => list && list.length
+    ? `<h3 style="margin-top:16px">${title}</h3>` + list.map(x =>
+        `<div class="ev-item"><div class="t">${esc(x.Title)}</div><div class="m">${esc(x["Source title"])} · ${esc(x.Year)}</div></div>`).join("") : "";
+  el("panelBody").innerHTML =
+    `<h2>${paperTitleLink(p)}</h2><p class="m">${esc(citation(p))} · ${esc(p["Source title"])} · ${esc(p.query_sources)}</p>
+     <h3 style="margin-top:14px">Specification profile</h3>${specRows}
+     ${near(p.convergent_papers,"Nearest convergent papers")}${near(p.contrasting_papers,"Nearest contrasting papers")}`;
+  el("panel").classList.add("open");
+}
+async function showConnected(label, value) {
+  const items = await api(`/api/scope/${scope}/connected?label=${encodeURIComponent(label)}&value=${encodeURIComponent(value)}`);
+  el("panelBody").innerHTML = `<h2>${esc(LABEL_NAMES[label]||label)}: ${esc(value)} <span class="muted">· ${items.length} papers</span></h2>` +
+    (items.length ? items.slice(0,100).map(paperEvidenceItem).join("") : `<p class="muted">No connected papers found.</p>`);
+  el("panel").classList.add("open");
+}
+function closePanel(){ el("panel").classList.remove("open"); }
+init();
+</script>
+</body>
+</html>

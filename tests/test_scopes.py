@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from etv_v2.corpus.scopes import (
+from aecsp.corpus.scopes import (
     DATASET_SCOPES,
     ScopeError,
     iter_scopes,

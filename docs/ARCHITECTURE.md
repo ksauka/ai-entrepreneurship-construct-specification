@@ -1,6 +1,6 @@
 # ETV_V2 Architecture
 
-ETV_V2 is organized as a clean project with the old systems kept as source material. The working code should live in `src/etv_v2`; copied code from the old projects should be adapted into that package only when it matches the new platform contract.
+ETV_V2 is organized as a clean project with the old systems kept as source material. The working code should live in `src/aecsp`; copied code from the old projects should be adapted into that package only when it matches the new platform contract.
 
 ## Source Roles
 
