@@ -47,6 +47,8 @@ from typing import TYPE_CHECKING, List, Dict, Tuple, Optional
 
 import numpy as np
 
+from aecsp.progress import ProgressReporter
+
 if TYPE_CHECKING:
     from bertopic import BERTopic
     from sentence_transformers import SentenceTransformer
@@ -257,8 +259,9 @@ def optimize_topic_count_grid_search(
     logger.info("\nThis may take 5-10 minutes...\n")
 
     results = []
+    grid_progress = ProgressReporter("Topic grid", len(min_topic_sizes), every=1)
 
-    for min_size in min_topic_sizes:
+    for configuration_number, min_size in enumerate(min_topic_sizes, start=1):
         logger.info(f"[{min_size}] Training with min_topic_size={min_size}...")
 
         # Train model
@@ -355,6 +358,10 @@ def optimize_topic_count_grid_search(
         logger.info(f"   Topics: {n_topics}, Outliers: {outlier_rate:.1%}, "
                    f"Silhouette: {sil_score:.3f}, Diversity: {diversity:.3f}, "
                    f"Score: {score:.3f}")
+        grid_progress.update(
+            configuration_number,
+            detail=f"min_size={min_size}, topics={n_topics}, outliers={outlier_rate:.1%}",
+        )
 
     # A range is a review aid, not an implicit methodological constraint.
     filtered_results = results

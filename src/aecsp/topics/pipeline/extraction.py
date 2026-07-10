@@ -47,6 +47,9 @@ from collections import defaultdict, Counter
 
 import numpy as np
 import pandas as pd
+
+from aecsp.progress import ProgressReporter
+
 if TYPE_CHECKING:
     from bertopic import BERTopic
 
@@ -457,6 +460,10 @@ def extract_ai_terms_by_topic(
 
     # For each topic, find which AI phrases appear in its documents
     topic_ai_terms = {}
+    ai_topic_progress = ProgressReporter(
+        "AI terms by topic", sum(len(indices) for indices in topic_docs.values()), every=250
+    )
+    ai_topic_done = 0
 
     for topic_id in sorted(topic_docs.keys()):
         doc_indices = topic_docs[topic_id]
@@ -477,6 +484,8 @@ def extract_ai_terms_by_topic(
                 phrase_index=phrase_index,
             ):
                 term_counts[phrase] += 1
+            ai_topic_done += 1
+            ai_topic_progress.update(ai_topic_done, detail=f"topic={topic_id}")
 
         topic_ai_terms[topic_id] = term_counts
 
@@ -565,6 +574,12 @@ def extract_entrepreneurship_terms_by_topic(
 
     # For each topic, find which entrepreneurship phrases appear
     topic_ent_terms = {}
+    ent_topic_progress = ProgressReporter(
+        "Entrepreneurship terms by topic",
+        sum(len(indices) for indices in topic_docs.values()),
+        every=250,
+    )
+    ent_topic_done = 0
 
     for topic_id in sorted(topic_docs.keys()):
         doc_indices = topic_docs[topic_id]
@@ -580,6 +595,8 @@ def extract_entrepreneurship_terms_by_topic(
                 full_text, all_ent, phrase_index=phrase_index
             ):
                 term_counts[phrase] += 1
+            ent_topic_done += 1
+            ent_topic_progress.update(ent_topic_done, detail=f"topic={topic_id}")
 
         topic_ent_terms[topic_id] = term_counts
 
@@ -651,11 +668,15 @@ def extract_ai_terms_by_paper(
     logger.info(f"  Searching for {len(all_ai)} AI phrases across {len(doc_index_df)} papers...")
 
     rows = []
-    for _, doc_row in doc_index_df.iterrows():
+    ai_paper_progress = ProgressReporter(
+        "AI terms by paper", len(doc_index_df), every=250
+    )
+    for paper_number, (_, doc_row) in enumerate(doc_index_df.iterrows(), start=1):
         orig_idx = doc_row['original_index']
         doc_local_idx = doc_row['doc_local_index']
 
         if orig_idx >= len(df_work):
+            ai_paper_progress.update(paper_number, detail="skipped invalid index")
             continue
 
         paper = df_work.iloc[orig_idx]
@@ -678,6 +699,7 @@ def extract_ai_terms_by_paper(
             'ai_keywords': dict(ai_found),
             'ai_keyword_count': len(ai_found)
         })
+        ai_paper_progress.update(paper_number, detail=str(eid))
 
     df_ai_by_paper = pd.DataFrame(rows)
 
@@ -724,11 +746,15 @@ def extract_entrepreneurship_terms_by_paper(
     logger.info(f"  Searching for {len(all_ent)} entrepreneurship phrases across {len(doc_index_df)} papers...")
 
     rows = []
-    for _, doc_row in doc_index_df.iterrows():
+    ent_paper_progress = ProgressReporter(
+        "Entrepreneurship terms by paper", len(doc_index_df), every=250
+    )
+    for paper_number, (_, doc_row) in enumerate(doc_index_df.iterrows(), start=1):
         orig_idx = doc_row['original_index']
         doc_local_idx = doc_row['doc_local_index']
 
         if orig_idx >= len(df_work):
+            ent_paper_progress.update(paper_number, detail="skipped invalid index")
             continue
 
         paper = df_work.iloc[orig_idx]
@@ -748,6 +774,7 @@ def extract_entrepreneurship_terms_by_paper(
             'ent_keywords': dict(ent_found),
             'ent_keyword_count': len(ent_found)
         })
+        ent_paper_progress.update(paper_number, detail=str(eid))
 
     df_ent_by_paper = pd.DataFrame(rows)
 

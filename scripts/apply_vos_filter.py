@@ -42,7 +42,9 @@ def main() -> None:
     master = pd.read_csv(master_path, dtype=str, keep_default_na=False)
 
     print(f"Applying VOS filter from {VOS_DIR}...")
-    stats = filter_all_scopes(master, VOS_DIR, master_path, OUTPUT_DIR)
+    stats = filter_all_scopes(
+        master, VOS_DIR, master_path, OUTPUT_DIR, show_progress=True
+    )
 
     for scope_id, info in stats.items():
         if info["status"] == "filtered":

@@ -49,6 +49,7 @@ from aecsp.corpus.source_titles import (  # noqa: E402
     load_source_title_universe,
     validate_source_titles,
 )
+from aecsp.progress import ProgressReporter  # noqa: E402
 from aecsp.vos.export import export_vos_scopes  # noqa: E402
 
 CONFIG_DIR = PROJECT_ROOT / "configs"
@@ -73,6 +74,7 @@ def main() -> None:
 
     report: dict = {"timestamp": datetime.now().isoformat(), "stages": {}}
     started = time.time()
+    progress = ProgressReporter("Corpus pipeline", 6, started=started)
 
     # ---- Stage 0: load raw exports -------------------------------------
     print("Stage 0: loading raw Query 1-4 exports...")
@@ -94,6 +96,7 @@ def main() -> None:
         }
         print(f"  {query_id}: {len(frame):,} records (expected {expected:,})")
     report["stages"]["stage_0"] = stage0
+    progress.update(1, detail="Stage 0 loaded")
 
     # ---- Stage 0.5: merge + dedup + provenance --------------------------
     print("Stage 0.5: merging and deduplicating with query provenance...")
@@ -117,6 +120,7 @@ def main() -> None:
     )
     INTERIM_DIR.mkdir(parents=True, exist_ok=True)
     master.to_csv(INTERIM_DIR / "stage0_5_merged.csv", index=False, encoding="utf-8-sig")
+    progress.update(2, detail="Stage 0.5 merged")
 
     # ---- Stage 1: source-title validation --------------------------------
     print("Stage 1: validating source titles against the query universe...")
@@ -138,6 +142,7 @@ def main() -> None:
         )
     if not args.keep_invalid_source_titles:
         master = master[master[SOURCE_TITLE_VALID_COLUMN] == 1].reset_index(drop=True)
+    progress.update(3, detail="Stage 1 source titles")
 
     # ---- Stage 1.5: AI x entrepreneurship relevance ----------------------
     print("Stage 1.5: scoring AI x entrepreneurship relevance...")
@@ -165,6 +170,7 @@ def main() -> None:
         )
     if not args.skip_relevance_filter:
         master = master[master[RELEVANT_COLUMN] == 1].reset_index(drop=True)
+    progress.update(4, detail="Stage 1.5 relevance")
 
     # ---- Stage 1.6: master corpus + query views --------------------------
     print("Stage 1.6: writing master corpus and query views...")
@@ -178,6 +184,7 @@ def main() -> None:
         print(f"  {query.id}: {len(view):,} records")
     report["stages"]["stage_1_6"] = stage16
     print(f"  master corpus: {len(master):,} records")
+    progress.update(5, detail="Stage 1.6 outputs")
 
     # ---- Stage 1B: VOSviewer exports --------------------------------------
     print("Stage 1B: exporting VOSviewer files for the five scopes...")
@@ -185,6 +192,7 @@ def main() -> None:
     report["stages"]["stage_1b"] = vos_stats
     for scope, info in vos_stats.items():
         print(f"  {scope}: {info['records']:,} records")
+    progress.update(6, detail="Stage 1B VOS exports")
 
     report["paper_id_column"] = PAPER_ID_COLUMN
     report["runtime_seconds"] = round(time.time() - started, 1)

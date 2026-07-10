@@ -89,7 +89,7 @@ def main() -> None:
     master = prepare_topic_columns(master)
     print(f"Building graph from {len(master):,} publications...")
 
-    graph = build_publication_graph(master.to_dict("records"))
+    graph = build_publication_graph(master.to_dict("records"), show_progress=True)
     print(f"  nodes: {graph.node_count():,} | relationships: {graph.relationship_count():,}")
     for label in (
         "Publication", "Author", "Journal", "Year", "SearchQuery", "Institution",
@@ -117,7 +117,7 @@ def main() -> None:
         print(f"Loading into Neo4j at {uri} (wipe={args.wipe})...")
         driver = connect(uri, user, password)
         try:
-            counts = load_graph(driver, graph, wipe=args.wipe)
+            counts = load_graph(driver, graph, wipe=args.wipe, show_progress=True)
         finally:
             driver.close()
         print(f"  loaded {counts['nodes']:,} nodes, {counts['relationships']:,} relationships")

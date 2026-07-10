@@ -1,0 +1,60 @@
+"""Dependency-free, flushed progress reporting for long project workflows."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+
+
+def format_duration(seconds: float | None) -> str:
+    if seconds is None or seconds < 0:
+        return "--:--"
+    total = int(seconds)
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:d}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:02d}:{secs:02d}"
+
+
+@dataclass
+class ProgressReporter:
+    """Print durable progress lines suitable for terminals and redirected logs."""
+
+    label: str
+    total: int
+    every: int = 1
+    width: int = 30
+    started: float = field(default_factory=time.time)
+
+    def line(
+        self,
+        completed: int,
+        *,
+        detail: str = "",
+        failures: int = 0,
+    ) -> str:
+        fraction = completed / self.total if self.total else 1.0
+        filled = min(self.width, int(self.width * fraction))
+        bar = "#" * filled + "-" * (self.width - filled)
+        elapsed = time.time() - self.started
+        rate = completed / elapsed if elapsed > 0 else 0.0
+        remaining = (self.total - completed) / rate if rate > 0 else None
+        suffix = f" | {detail}" if detail else ""
+        return (
+            f"{self.label} [{bar}] {completed:,}/{self.total:,} ({fraction:6.2%}) | "
+            f"elapsed {format_duration(elapsed)} | {rate:.3f}/s | "
+            f"ETA {format_duration(remaining)} | failures {failures}{suffix}"
+        )
+
+    def update(
+        self,
+        completed: int,
+        *,
+        detail: str = "",
+        failures: int = 0,
+        force: bool = False,
+    ) -> None:
+        if force or completed == self.total or completed % max(1, self.every) == 0:
+            print(
+                self.line(completed, detail=detail, failures=failures),
+                flush=True,
+            )

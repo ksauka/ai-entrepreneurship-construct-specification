@@ -23,6 +23,16 @@ topic modeling concurrently because both can compete for the RTX 5070:
 Later stages read earlier outputs, although the app and graph degrade gracefully
 when optional outputs are absent.
 
+## Progress reporting
+
+Long project scripts print flushed, log-safe progress lines containing a bar,
+completed/total counts, percentage, elapsed time, processing rate, ETA, and
+failure count. This applies to corpus stages, specification requests, topic
+phrase extraction and optimization, VOS scopes, graph records, and Neo4j load
+batches. Output remains visible with `tail -f` when a command is redirected to
+a log. The human-in-the-loop curation command already reports its current and
+total review position as `[current/total]` and saves after every decision.
+
 ## 0. One-time housekeeping
 
 Done 2026-07-10: the superseded VOS cluster files (`import_clusters.py`,
@@ -81,6 +91,20 @@ python scripts/run_specification.py --model gpt-4.1-nano
 # provider branch is implemented and its current model identifier is confirmed.
 python scripts/run_specification.py --model <research-model>
 ```
+
+The runner flushes progress immediately. For every uncached paper it prints:
+
+```text
+START 24/22322 | <paper_id> | <title>
+DONE <paper_id> in 03:41
+Specification [####--------------------------] 24/22322 (0.11%) |
+elapsed 1:24:03 | 0.005/s | ETA 1234:56:00 | failures 0 | <paper_id>
+```
+
+`START` is printed before the blocking model request, so a slow paper is visible
+even while the model is generating. The bar advances after the response is
+cached or the attempt fails. Startup also reports how many papers are already
+cached and excluded from the remaining total.
 
 Each command writes model-specific outputs and never overwrites another model:
 

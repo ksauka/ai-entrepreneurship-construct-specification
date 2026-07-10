@@ -58,6 +58,7 @@ import yaml  # noqa: E402
 
 from aecsp.corpus.query_provenance import SEARCH_QUERIES  # noqa: E402
 from aecsp.corpus.scopes import iter_scopes  # noqa: E402
+from aecsp.progress import ProgressReporter  # noqa: E402
 from aecsp.topics.pipeline import extraction, optimization, phrase_detection, training  # noqa: E402
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -262,8 +263,12 @@ def run_grid_searches(
 
     root = TOPICS_DIR / "optimization"
     recommendations: dict[str, dict] = {}
+    scope_progress = ProgressReporter("Topic optimization scopes", 5, every=1)
+    scopes_done = 0
 
     def optimize_scope(scope_id, docs, scope_embeddings):
+        nonlocal scopes_done
+
         eligible_sizes = [size for size in min_topic_sizes if size < len(docs)]
         if not eligible_sizes:
             raise ValueError(f"no min_topic_size is smaller than {scope_id} ({len(docs)} papers)")
@@ -282,6 +287,8 @@ def run_grid_searches(
             "recommended_topic_count": payload["recommended"]["n_topics"],
             "selection_status": payload["selection_status"],
         }
+        scopes_done += 1
+        scope_progress.update(scopes_done, detail=scope_id)
 
     optimize_scope("full_corpus", phrase_documents, embeddings)
     for query in SEARCH_QUERIES:
@@ -596,7 +603,8 @@ def main() -> None:
     # ---- Native per-query models (reuse the single phrase pass) -----------
     if not args.skip_native:
         report["native_models"] = {}
-        for query in SEARCH_QUERIES:
+        native_progress = ProgressReporter("Native topic models", len(SEARCH_QUERIES), every=1)
+        for query_number, query in enumerate(SEARCH_QUERIES, start=1):
             flags = (
                 pd.to_numeric(df_work[query.one_hot_column], errors="coerce")
                 .fillna(0)
@@ -659,6 +667,7 @@ def main() -> None:
                 ),
             }
             logger.info("%d native topics for %s", len(topics_q), query.id)
+            native_progress.update(query_number, detail=query.id)
 
     logger.info("Writing master_corpus_topics.csv...")
     master.to_csv(

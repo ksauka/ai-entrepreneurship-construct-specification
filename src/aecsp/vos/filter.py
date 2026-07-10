@@ -25,6 +25,7 @@ from pathlib import Path
 import pandas as pd
 
 from aecsp.corpus.scopes import scope_frame
+from aecsp.progress import ProgressReporter
 
 SCOPE_VOS_FILES: dict[str, str] = {
     "full_corpus": "master_corpus_vos.csv",
@@ -79,16 +80,25 @@ def filter_all_scopes(
     vos_dir: Path,
     reference_path: Path,
     output_dir: Path,
+    *,
+    show_progress: bool = False,
 ) -> dict:
     """Process every scope whose VOS map is current; write retained/dropped CSVs."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
     stats: dict = {}
-    for scope_id, filename in SCOPE_VOS_FILES.items():
+    progress = (
+        ProgressReporter("VOS scopes", len(SCOPE_VOS_FILES)) if show_progress else None
+    )
+    for scope_number, (scope_id, filename) in enumerate(
+        SCOPE_VOS_FILES.items(), start=1
+    ):
         vos_path = vos_dir / filename
         status = vos_status(vos_path, reference_path)
         if status != "current":
             stats[scope_id] = {"status": status}
+            if progress is not None:
+                progress.update(scope_number, detail=f"{scope_id}: {status}")
             continue
 
         vos_dois = load_vos_dois(vos_path)
@@ -105,6 +115,8 @@ def filter_all_scopes(
             "dropped": len(dropped),
             "retained_share": round(len(retained) / total, 4) if total else 0.0,
         }
+        if progress is not None:
+            progress.update(scope_number, detail=f"{scope_id}: filtered")
     return stats
 
 

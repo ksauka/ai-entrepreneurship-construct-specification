@@ -36,6 +36,8 @@ from gensim.models.phrases import Phrases, ENGLISH_CONNECTOR_WORDS
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from aecsp.progress import ProgressReporter
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,10 +124,10 @@ def detect_phrases(
     )
 
     important_phrases = set()
+    document_progress = ProgressReporter(
+        "Hybrid phrase extraction", len(documents), every=100
+    )
     for idx, doc in enumerate(documents):
-        if idx % 100 == 0 and idx > 0:
-            logger.info(f"       Progress: {idx:,}/{len(documents):,} documents ({idx/len(documents)*100:.1f}%)")
-
         # KeyBERT extraction (1-4 grams)
         try:
             kb_kw = keybert_model.extract_keywords(
@@ -150,6 +152,11 @@ def detect_phrases(
                     important_phrases.add(phrase.lower().strip())
         except:
             pass
+
+        document_progress.update(
+            idx + 1,
+            detail=f"phrases={len(important_phrases):,}",
+        )
 
     logger.info(f"        Extracted {len(important_phrases):,} unique semantic keyphrases (pre-filtering)")
 

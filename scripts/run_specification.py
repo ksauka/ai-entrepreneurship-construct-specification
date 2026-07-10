@@ -44,6 +44,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 import pandas as pd  # noqa: E402
 
 from aecsp.corpus.scopes import SCOPE_BY_ID, scope_frame  # noqa: E402
+from aecsp.progress import ProgressReporter, format_duration  # noqa: E402
 from aecsp.specification.llm_coder import (  # noqa: E402
     DEFAULT_MODEL,
     cache_key,
@@ -72,7 +73,7 @@ EST_OUTPUT_TOKENS = 700  # structured profile with evidence + confidence
 
 def load_corpus() -> pd.DataFrame:
     path = PROCESSED_DIR / "master_corpus.csv"
-    print(f"Loading corpus: {path.name}")
+    print(f"Loading corpus: {path.name}", flush=True)
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
@@ -121,7 +122,7 @@ def main() -> None:
         ) / 1_000_000
         est_line = f"est. cost ({model}): ${est_cost:.2f}"
     print(f"Scope '{args.scope}': {len(scoped):,} papers | cached for {model}: "
-          f"{cached:,} | to code now: {len(todo):,} | {est_line}")
+          f"{cached:,} | to code now: {len(todo):,} | {est_line}", flush=True)
 
     if args.dry_run:
         return
@@ -134,10 +135,13 @@ def main() -> None:
 
     client = OpenAI(api_key=api_key, base_url=base_url)
     print(f"Coding {len(todo):,} papers with {model}"
-          f"{' via ' + base_url if base_url else ''}...")
+          f"{' via ' + base_url if base_url else ''}...", flush=True)
 
     started = time.time()
     failures: list[str] = []
+    progress = ProgressReporter("Specification", len(todo), every=1, started=started)
+    if todo.empty:
+        progress.update(0, detail="all papers cached", force=True)
     for done, (_, row) in enumerate(todo.iterrows(), start=1):
         paper = {
             "paper_id": row["paper_id"],
@@ -147,17 +151,32 @@ def main() -> None:
             "journal": row.get("Source title", ""),
             "year": row.get("Year", ""),
         }
+        print(
+            f"\n  START {done:,}/{len(todo):,} | {paper['paper_id']} | "
+            f"{paper['title'][:90]}",
+            flush=True,
+        )
+        paper_started = time.time()
         try:
             code_paper(client, model, paper, cache_dir)
+            outcome = "DONE"
         except Exception as error:  # keep going; failures are re-tried next run
             failures.append(f"{paper['paper_id']}: {error}")
-            print(f"  FAILED {paper['paper_id']}: {error}")
-        if done % 25 == 0 or done == len(todo):
-            rate = done / (time.time() - started)
-            print(f"  {done:,}/{len(todo):,} coded ({rate:.1f} papers/s)")
+            outcome = "FAILED"
+            print(f"  FAILED {paper['paper_id']}: {error}", flush=True)
+        print(
+            f"  {outcome} {paper['paper_id']} in "
+            f"{format_duration(time.time() - paper_started)}",
+            flush=True,
+        )
+        progress.update(
+            done,
+            failures=len(failures),
+            detail=paper["paper_id"],
+        )
 
     # Assemble the full coded dataset for this scope from the cache.
-    print("Assembling coded dataset from cache...")
+    print("Assembling coded dataset from cache...", flush=True)
     records = []
     for pid in scoped["paper_id"]:
         cache_path = cache_dir / cache_key(pid)

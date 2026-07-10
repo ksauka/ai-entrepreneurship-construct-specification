@@ -13,6 +13,7 @@ from typing import Any
 
 from aecsp.knowledge_graph.records import GraphDraft
 from aecsp.knowledge_graph.schema import NODE_SPECS
+from aecsp.progress import ProgressReporter
 
 
 def connect(uri: str, user: str, password: str):
@@ -37,19 +38,36 @@ def create_constraints(session) -> None:
         )
 
 
-def load_graph(driver, graph: GraphDraft, wipe: bool = False, batch_size: int = 1000) -> dict:
+def load_graph(
+    driver,
+    graph: GraphDraft,
+    wipe: bool = False,
+    batch_size: int = 1000,
+    *,
+    show_progress: bool = False,
+) -> dict:
     """Ingest all nodes and relationships; return counts."""
 
     with driver.session() as session:
         if wipe:
             session.run("MATCH (n) DETACH DELETE n")
         create_constraints(session)
-        nodes = _load_nodes(session, graph, batch_size)
-        rels = _load_relationships(session, graph, batch_size)
+        node_progress = (
+            ProgressReporter("Neo4j nodes", graph.node_count(), every=batch_size)
+            if show_progress else None
+        )
+        nodes = _load_nodes(session, graph, batch_size, node_progress)
+        relationship_progress = (
+            ProgressReporter(
+                "Neo4j relationships", graph.relationship_count(), every=batch_size
+            )
+            if show_progress else None
+        )
+        rels = _load_relationships(session, graph, batch_size, relationship_progress)
     return {"nodes": nodes, "relationships": rels}
 
 
-def _load_nodes(session, graph: GraphDraft, batch_size: int) -> int:
+def _load_nodes(session, graph: GraphDraft, batch_size: int, progress=None) -> int:
     # Group by (label, key) so each MERGE statement is homogeneous.
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in graph.to_node_rows():
@@ -67,10 +85,12 @@ def _load_nodes(session, graph: GraphDraft, batch_size: int) -> int:
         for chunk in _chunks(rows, batch_size):
             session.run(query, rows=chunk)
             total += len(chunk)
+            if progress is not None:
+                progress.update(total, detail=label, force=True)
     return total
 
 
-def _load_relationships(session, graph: GraphDraft, batch_size: int) -> int:
+def _load_relationships(session, graph: GraphDraft, batch_size: int, progress=None) -> int:
     grouped: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in graph.to_relationship_rows():
         signature = (
@@ -110,6 +130,8 @@ def _load_relationships(session, graph: GraphDraft, batch_size: int) -> int:
         for chunk in _chunks(rows, batch_size):
             session.run(query, rows=chunk)
             total += len(chunk)
+            if progress is not None:
+                progress.update(total, detail=rel_type, force=True)
     return total
 
 

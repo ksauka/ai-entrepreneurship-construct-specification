@@ -24,6 +24,7 @@ from typing import Any
 
 from aecsp.corpus.query_provenance import QUERY_SOURCE_COLUMN, SEARCH_QUERIES
 from aecsp.knowledge_graph.records import GraphDraft, NodeRef
+from aecsp.progress import ProgressReporter
 from aecsp.specification.schema import (
     SPECIFICATION_DIMENSIONS,
     SPECIFICATION_PROBLEM_COLUMN,
@@ -66,7 +67,9 @@ class GraphBuildError(ValueError):
     """Raised when a record cannot be converted into the graph contract."""
 
 
-def build_publication_graph(rows: Iterable[Mapping[str, Any]]) -> GraphDraft:
+def build_publication_graph(
+    rows: Iterable[Mapping[str, Any]], *, show_progress: bool = False
+) -> GraphDraft:
     """Build a graph draft from paper records.
 
     Rows are materialised so a first pass can index DOIs (for internal CITES
@@ -76,6 +79,11 @@ def build_publication_graph(rows: Iterable[Mapping[str, Any]]) -> GraphDraft:
     rows = list(rows)
     doi_index = _build_doi_index(rows)
     graph = GraphDraft()
+    progress = (
+        ProgressReporter("Graph publications", len(rows), every=250)
+        if show_progress
+        else None
+    )
 
     for index, row in enumerate(rows, start=1):
         publication_ref = _add_publication(graph, row, index)
@@ -89,6 +97,8 @@ def build_publication_graph(rows: Iterable[Mapping[str, Any]]) -> GraphDraft:
         _add_keywords(graph, publication_ref, row)
         _add_references(graph, publication_ref, row, doi_index)
         _add_specification(graph, publication_ref, row)
+        if progress is not None:
+            progress.update(index, detail=str(publication_ref.value))
 
     return graph
 
