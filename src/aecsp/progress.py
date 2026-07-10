@@ -33,8 +33,16 @@ class ProgressReporter:
         failures: int = 0,
     ) -> str:
         fraction = completed / self.total if self.total else 1.0
+        fraction = min(1.0, max(0.0, fraction))
         filled = min(self.width, int(self.width * fraction))
-        bar = "#" * filled + "-" * (self.width - filled)
+        if completed >= self.total or filled == self.width:
+            bar = "#" * self.width
+        elif completed > 0:
+            # Keep early progress visible even when the corpus is much larger
+            # than the bar's character resolution.
+            bar = "#" * filled + ">" + "-" * (self.width - filled - 1)
+        else:
+            bar = "-" * self.width
         elapsed = time.time() - self.started
         rate = completed / elapsed if elapsed > 0 else 0.0
         remaining = (self.total - completed) / rate if rate > 0 else None

@@ -24,6 +24,7 @@ source_projects/**/.env
 source_projects/**/.git/
 source_projects/
 *Zone.Identifier
+~$*.pptx
 data/queries/*.csv
 .env
 data/neo4j/

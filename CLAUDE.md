@@ -40,19 +40,28 @@ DONE — stages 0 -> 1B (committed on main; `python scripts/build_corpus.py`, ~2
 - 1.6 master_corpus.csv + query_1..4.csv
 - 1B five VOSviewer exports in data/exports/vosviewer/
 
-BUILT, awaiting your runs — stages 2A / 2A.5 (branch stage-2a):
-- 2A `scripts/run_topics.py`: GLOBAL BERTopic (feeds KG, comparable) + NATIVE per-query
-  models (each dataset's own topics) + KeyBERT on full_corpus. Embeddings computed once.
-- 2A.5 `scripts/run_specification.py`: OpenAI GPT codes 7 dimensions/paper, JSON-schema
-  structured output, per-paper cache in data/interim/spec_cache/, --dry-run cost preview.
-  Needs .env with OPENAI_API_KEY.
+BUILT, awaiting the full runs — stages 2A / 2A.5 / 2B / 3 (branch stage-2a).
+AUTHORITATIVE detail and execution order: docs/RUNBOOK.md (commands) and
+docs/HANDOFF.md (status, locked decisions, objective). Highlights:
+- 2A.5 `scripts/run_specification.py`: robust coder for the 7 dimensions with
+  per-dimension evidence, stated/inferred/absent epistemics, and confidence; any
+  OpenAI-compatible endpoint (--local = Ollama, or OpenAI via .env); cache per paper
+  AND per model in data/interim/spec_cache/<model>/. MULTI-MODEL INTER-RATER DESIGN:
+  every study model codes the FULL corpus (llama3.2, qwen3.5, gpt-4.1-nano, research
+  model); no model-selection tournament; all outputs kept per model for inter-rater
+  reliability across the five scopes. Specification runs BEFORE topics (GPU sharing).
+- 2A.5b `scripts/curate_specification.py`: per-dimension human review; auto-accept =
+  'stated' + confidence >= 0.8; overrides separate from the immutable LLM cache.
+- 2A `scripts/run_topics.py`: hybrid phrase detection (checkpointed under
+  data/interim/topics/), then --optimize-only five-scope grid search whose
+  recommendations REQUIRE HUMAN APPROVAL (--use-optimized or explicit
+  --global-min-topic-size). Global + native models write Plotly diagnostics.
+- 2B graph + docker-compose and Stage 3 FastAPI app are built; KG page awaits visual
+  confirmation. Stage 4 (specification + contrast analysis, the research deliverable)
+  is NOT BUILT.
 
-TODO:
-- 2B Neo4j knowledge graph — `scripts/build_graph.py`, docker-compose, loader, graph
-  stats. (Being built now.) In-memory GraphDraft builder + node/rel schema already exist
-  in `src/aecsp/knowledge_graph/`.
-- 3 FastAPI analytics + visualisation with evidence traceability (every statistic
-  clickable back to its paper list, per scope).
+Paper framing (do not regress): SPECIFICATION AND CONTRASTING - "specification before
+accumulation". The workbook's P1-P4 propositions are the retired OLD framing.
 
 ## Environment
 - Repo: ~/projects/ETV_V2 (WSL Ubuntu), remote https://github.com/ksauka/ETV_V2.git
