@@ -12,12 +12,12 @@ conda activate graphrag
 Run the remaining work in this order. Do not run specification coding and
 topic modeling concurrently because both can compete for the RTX 5070:
 
-1. Finish the 25-paper llama/Qwen/gpt-4.1-nano comparison set.
-2. Curate and compare the same papers; approve a research-grade candidate.
-3. Run the approved model on Query 3 first, then extend its cache to full corpus.
-4. Run five-scope topic optimization and inspect every metric table and graph.
-5. Explicitly approve the topic recommendations, then run the final topic models.
-6. Apply optional VOS filtering, build/load the graph, verify the app, and build
+1. Run every specification model over the complete master corpus, sequentially.
+2. Curate every model and compute inter-rater reliability across all model results
+   for `full_corpus` and Query 1-4.
+3. Run five-scope topic optimization and inspect every metric table and graph.
+4. Explicitly approve the topic recommendations, then run the final topic models.
+5. Apply optional VOS filtering, build/load the graph, verify the app, and build
    the Stage 4 specification-and-contrast analysis.
 
 Later stages read earlier outputs, although the app and graph degrade gracefully
@@ -47,51 +47,58 @@ python scripts/build_corpus.py
 Outputs: `data/processed/master_corpus.csv`, `data/processed/query_1..4.csv`,
 `data/exports/vosviewer/vos_*.csv`.
 
-## 2. Stage 2A.5 first: prove specification coding and model selection
+## 2. Stage 2A.5 first: full multi-model specification experiment
 
 Specification coding is the conceptual centre and runs before topic modeling.
 Code each paper once on the full corpus; the resulting paper-level codes are
 then analyzed through all five overlapping views (`full_corpus`, `query_1..4`).
 Do not pay to recode the same paper separately for each query.
 
-The model-isolated cache is permanent audit state:
+Every study model must code the complete `master_corpus.csv`. The cache is
+permanent model-specific audit state:
 
 ```text
 data/interim/spec_cache/
-    llama3.2/              # local smoke/rehearsal papers
-    qwen3.5_9b-q4_K_M/     # stronger local rehearsal
-    gpt-4.1-nano/          # affordable paid pilot
-    <research-model>/      # benchmark winner for the research-grade run
+    llama3.2/              # full llama3.2 experiment
+    qwen3.5_9b-q4_K_M/     # full Qwen experiment
+    gpt-4.1-nano/          # full gpt-4.1-nano experiment
+    claude-sonnet-5/       # full research-grade experiment when implemented
+    <additional-model>/    # any additional full study model
 ```
 
-The research model is selected after agreement, evidence-grounding, structured
-output reliability, latency, and projected full-run cost are compared on the
-same stratified papers. Claude Sonnet 5 is a candidate, not a locked winner;
-model availability and pricing must be rechecked when that decision is made.
+There is no benchmark winner and no model-selection gate. All model outputs are
+research data used for inter-rater reliability and substantive comparison.
+Limited runs may test plumbing, but they do not replace the required full run.
+Run one model at a time because local models and topics share the RTX 5070.
 
 ```bash
-# llama3.2 already has 23 cached papers; add two to complete the comparison set.
-python scripts/run_specification.py --local --limit 2
-python scripts/run_specification.py --local --model qwen3.5:9b-q4_K_M --limit 25
-python scripts/run_specification.py --model gpt-4.1-nano --limit 25
+# Existing cache files are reused automatically; do not delete them.
+python scripts/run_specification.py --local --model llama3.2
+python scripts/run_specification.py --local --model qwen3.5:9b-q4_K_M
+python scripts/run_specification.py --model gpt-4.1-nano
+
+# Run the research-grade provider/model over the same full corpus after its
+# provider branch is implemented and its current model identifier is confirmed.
+python scripts/run_specification.py --model <research-model>
 ```
 
-Curate and compare the same papers before approving a research-grade model.
-For a staged production rollout, code Query 3 (Leading entrepreneurship
-journals) first, then extend to the full corpus. The full run skips every Query
-3 paper already present in that model's cache:
+Each command writes model-specific outputs and never overwrites another model:
 
-```bash
-python scripts/run_specification.py --scope query_3 --model <benchmark-winner>
-python scripts/run_specification.py --scope full_corpus --model <benchmark-winner>
+```text
+paper_specifications_<model>.csv
+specification_report_<model>.json
+curation_overrides_<model>.json
+paper_specifications_curated_<model>.csv
 ```
 
-Query 1-4 are still five overlapping analysis views, not five duplicate coding
-jobs. The full-corpus cache is the union used by downstream comparisons.
+For each model, the full paper-level result is analyzed as five overlapping
+experiments: `full_corpus`, `query_1`, `query_2`, `query_3`, and `query_4`.
+Coding remains query-invariant, so do not make five duplicate LLM calls per
+model. The scope flags create the five datasets for reliability and analysis.
 
 ## 3. Curate and compare specification models
 
-Review each model on the same papers before approving the research-grade model.
+Curate every full model result and retain every model for inter-rater analysis.
 Auto-accept requires `stated` evidence and confidence >= 0.8; everything else
 queues least-confident-first. Human overrides remain separate from the immutable
 per-model LLM cache.
@@ -100,6 +107,7 @@ per-model LLM cache.
 python scripts/curate_specification.py --model llama3.2 --report
 python scripts/curate_specification.py --model qwen3.5_9b-q4_K_M --report
 python scripts/curate_specification.py --model gpt-4.1-nano --report
+python scripts/curate_specification.py --model <research-model> --report
 
 python scripts/curate_specification.py --model <model>
 python scripts/curate_specification.py --model <model> --export
@@ -111,7 +119,9 @@ batch-accepts the remaining dimension queue, and `q` saves and quits. Decisions
 save after every action and are resumable.
 
 Outputs: `curation_overrides_<model>.json` and, with `--export`,
-`paper_specifications_curated.csv` with per-dimension curation status columns.
+`paper_specifications_curated_<model>.csv` with per-dimension curation status
+columns. The inter-rater reliability analysis across these model-specific files
+and all five scopes is a required research stage and is not built yet.
 
 ## 4. Stage 2A: optimize, review, then run topics (GPU)
 

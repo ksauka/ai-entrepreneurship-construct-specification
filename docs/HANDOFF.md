@@ -34,7 +34,7 @@
   human-in-the-loop review (modeled on the paper_screening reference). Auto-accept = 'stated' evidence
   + confidence >= 0.8; rest queues least-confident-first; d defers a dimension corpus-wide; decisions
   in `curation_overrides_<model>.json`, LLM cache never modified; `--export` writes
-  `paper_specifications_curated.csv` with `<dim>_curation` status columns.
+  `paper_specifications_curated_<model>.csv` with `<dim>_curation` status columns.
 - **Stage 2B graph** (BUILT): `src/aecsp/knowledge_graph/{schema.py,builder.py,neo4j_loader.py}` +
   `scripts/build_graph.py` (`--export-csv` or `--load`). `docker-compose.yml` for Neo4j.
 - **VOS cleaning filter** (BUILT): `src/aecsp/vos/filter.py` + `scripts/apply_vos_filter.py` +
@@ -71,15 +71,17 @@
   phrase work. Standard UMAP, HDBSCAN, CountVectorizer/c-TF-IDF, YAKE, gensim, pandas, extraction,
   and grid metrics remain CPU-bound. High CPU use does not imply CUDA was unused. GPU UMAP/HDBSCAN
   via RAPIDS cuML is not implemented or validated. Do not run specification and topics concurrently.
-- **Specification coding model ladder (revised 2026-07-10)**: prove the pipeline on local Ollama,
-  run an affordable paid pilot, then benchmark current affordable frontier candidates on the same
-  stratified papers. Claude Sonnet 5 is a candidate, NOT a locked winner. Select the research-grade
-  model using agreement, evidence grounding, structured-output reliability, latency, and projected
-  full-run cost. Cache remains isolated per model under `data/interim/spec_cache/<model>/`, so model
-  comparisons never contaminate one another. Code each paper once, then analyze the codes through
-  all five overlapping dataset views; do not run five duplicate LLM coding jobs. Query 3 (Leading
-  entrepreneurship journals) is the priority research-grade rollout, after which the same model cache
-  can be extended to `full_corpus` without recoding Query 3 papers.
+- **Specification coding experiment (corrected 2026-07-10)**: every study model, from llama3.2 and
+  Qwen through gpt-4.1-nano and the research-grade model, must code the complete master corpus. There
+  is NO benchmark winner or model-selection gate. Every model's full output is retained as research
+  data for inter-rater reliability and substantive comparison. Cache and exports remain isolated per
+  model under `data/interim/spec_cache/<model>/` and `data/processed/specification/*_<model>.*`.
+  Each model codes every paper once; its result is then analyzed across `full_corpus` and Query 1-4.
+  The five scopes are five overlapping analytical datasets, not five duplicate LLM calls per model.
+- **Working responsibility**: the USER runs all model, topic, graph, Docker, and app commands in WSL.
+  Codex provides exact commands, analyzes logs/errors/results supplied by the user, and performs only
+  requested code edits, fixes, refactors, tests, and documentation changes. Codex does not launch
+  long-running research models unless the user explicitly asks it to do so.
 
 ## END-TO-END OBJECTIVE (specification and contrasting - NOT the old propositions paper)
 IMPORTANT: the workbook's propositions (P1-P4) belong to the OLD paper framing and are retired.
@@ -119,9 +121,9 @@ that convergence, divergence, construct contrast, and misspecification are audit
     master_corpus.csv: 22,345 papers, 5 overlapping scopes
                               |
                               v
-    [2A.5 specification model ladder]                                IN PROGRESS
-    llama 25 -> Qwen 25 -> gpt-4.1-nano 25 -> curate/compare
-    -> approve research model -> Query 3 -> extend cache to full corpus
+    [2A.5 full multi-model experiment]                               IN PROGRESS
+    llama full -> Qwen full -> gpt-4.1-nano full -> research model full
+    -> curate every model -> inter-rater reliability in all 5 scopes
                               |
                               v
     [2A topic optimization]                                          BUILT, NOT RUN
@@ -146,9 +148,9 @@ that convergence, divergence, construct contrast, and misspecification are audit
     manuscript evidence and construct-contrast tables
 
 ## WHAT REMAINS TO REACH THE OBJECTIVE
-1. Specification first: finish local/Qwen rehearsals, run the paid pilot, compare candidates on the
-   same validation papers, approve the research model, then complete curation. Preserved cache state:
-   `data/interim/spec_cache/llama3.2/` contains 23 papers after the stopped local run.
+1. Specification first: run llama3.2, Qwen, gpt-4.1-nano, and the research-grade model over the full
+   master corpus, sequentially. Preserve every model-specific cache and export. Then curate every
+   model and compute inter-rater reliability across all model outputs for all five scopes.
 2. Topics second: run `scripts/run_topics.py --optimize-only` across `full_corpus` and Query 1-4,
    inspect the grid tables and graphs, then explicitly approve final parameters or use the reviewed
    recommendations. The earlier unvalidated 95-topic run was stopped and must not be treated as final.
@@ -165,10 +167,13 @@ that convergence, divergence, construct contrast, and misspecification are audit
    level x mechanism cross-tabs - exportable as manuscript tables. Not designed yet; design
    against the specification-and-contrasting framing above (NOT the old P1-P4 propositions).
 8. Housekeeping: commit the stage-2a batch in logical units; push to the GitHub remote.
+9. Multi-model downstream plumbing: `build_graph.py` and `GraphService` still read the legacy generic
+   `paper_specifications.csv`. Before Stage 2B/app specification views, add explicit model selection
+   or multi-model comparison support. Do not silently use the most recently completed model.
 
 ## CURRENT STATE AND NEXT STEPS (2026-07-10)
-No `run_topics.py` or `run_specification.py` process is currently running. Both were gracefully
-stopped before the pipeline changes. The earlier Stage 2A run produced an unvalidated 95-topic global
+No `run_topics.py` or `run_specification.py` process is currently running. All were terminated at the
+user's request so the workflow can restart from documented commands. The earlier Stage 2A run produced an unvalidated 95-topic global
 model from one fixed HDBSCAN configuration, not grid search. Those artifacts are diagnostic only.
 
 Topic modeling now has a two-phase optimization boundary. Run five-scope optimization only after the
@@ -180,22 +185,21 @@ the first expensive phrase/embedding pass. Later final runs reuse it. The column
 `ent_term_count`, `keybert_phrases` as `term:count;...` (builder strips scores).
 
 Spec coder was verified end to end on local llama3.2. The interrupted continuation left 23 valid
-per-paper cache files in `data/interim/spec_cache/llama3.2/`; preserve them. The Qwen cache directory
-will be `qwen3.5_9b-q4_K_M/`, the paid pilot `gpt-4.1-nano/`, and the eventual research model gets its
-own sanitized directory name.
+per-paper cache files in `data/interim/spec_cache/llama3.2/`; preserve and reuse them when the USER
+runs the full llama command. Qwen uses `qwen3.5_9b-q4_K_M/`, gpt-4.1-nano uses `gpt-4.1-nano/`, and
+the research-grade model gets its own sanitized directory. Raw reports and curated CSV exports are
+now model-specific so one full model run cannot overwrite another.
 
 Next, in order (details in docs/RUNBOOK.md):
-1. Complete the llama comparison set from 23 to 25 cached papers:
-   `python scripts/run_specification.py --local --limit 2`.
-2. Run the Qwen local rehearsal on the same first 25 papers:
-   `python scripts/run_specification.py --local --model qwen3.5:9b-q4_K_M --limit 25`,
-   then curate it: `python scripts/curate_specification.py --model qwen3.5_9b-q4_K_M`.
-3. Paid pilot: `--model gpt-4.1-nano --limit 25`; curate and compare against Qwen/llama.
-4. Approve a research-grade model from the benchmark; do not assume Sonnet 5 wins. Run Query 3
-   first, then extend that same cache to `full_corpus`.
-5. Run `python scripts/run_topics.py --optimize-only`, inspect all five scopes' CSV/JSON/HTML
+1. USER runs full llama3.2: `python scripts/run_specification.py --local --model llama3.2`.
+2. USER runs full Qwen: `python scripts/run_specification.py --local --model qwen3.5:9b-q4_K_M`.
+3. USER runs full gpt-4.1-nano: `python scripts/run_specification.py --model gpt-4.1-nano`.
+4. Add the research-grade provider branch, then USER runs that model over the full corpus too.
+5. Curate every model-specific output and implement/run inter-rater reliability across every model
+   for `full_corpus` and Query 1-4. No model is discarded as a losing benchmark.
+6. USER runs `python scripts/run_topics.py --optimize-only`, inspects all five scopes' CSV/JSON/HTML
    diagnostics, then explicitly run `--use-optimized` or provide approved manual parameters.
-6. Create VOS maps if used, run Stage 2B graph export/load, verify the KG page, and implement Stage 4.
+7. Create VOS maps if used, run Stage 2B graph export/load, verify the KG page, and implement Stage 4.
 
 ## Also pending
 - DONE 2026-07-10: superseded VOS files and `src/aecsp/topics/extract.py` deleted (were untracked;
@@ -212,4 +216,4 @@ Next, in order (details in docs/RUNBOOK.md):
 - Big uncommitted batch on branch `stage-2a`; commit in logical units. New since the last handoff:
   connected five-scope topic grid search, checkpoint reuse, behavior-preserving accelerated term
   extraction, required Plotly diagnostic graphs, explicit final-selection gate, specification-first
-  execution order, benchmark-based research model selection, updated tests, RUNBOOK, and HANDOFF.
+  execution order, full multi-model reliability design, updated tests, RUNBOOK, and HANDOFF.

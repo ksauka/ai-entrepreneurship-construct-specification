@@ -11,21 +11,22 @@ Setup for real runs (one-time): create .env in the project root (gitignored):
 Usage (from the project root, graphrag env):
     python scripts/run_specification.py --dry-run            # count + cost estimate
     python scripts/run_specification.py --local --limit 5    # free test via Ollama
-    python scripts/run_specification.py --limit 25           # paid pilot batch
-    python scripts/run_specification.py                      # full corpus
+    python scripts/run_specification.py --limit 25           # optional smoke check
+    python scripts/run_specification.py                      # full corpus for this model
     python scripts/run_specification.py --scope query_3      # one query view only
 
 Agreed cost ladder (2026-07-10): test end-to-end on local Ollama (free),
-pilot 25-50 papers on gpt-4.1-nano, then benchmark affordable frontier models
-on the same validation papers before selecting the research-grade model.
+Every study model is run over the full corpus and preserved independently for
+inter-rater reliability and five-scope comparison. Limited runs are plumbing
+checks only; they are not a model-selection tournament.
 
 Coding is cached per paper AND per model in data/interim/spec_cache/<model>/,
 so local test codings never contaminate the final run, interrupted runs
 resume for free, and recoding only happens if the cache file is deleted.
 
 Outputs:
-    data/processed/specification/paper_specifications.csv
-    data/processed/specification/specification_report.json
+    data/processed/specification/paper_specifications_<model>.csv
+    data/processed/specification/specification_report_<model>.json
 """
 
 from __future__ import annotations
@@ -165,7 +166,8 @@ def main() -> None:
     coded = pd.DataFrame(records)
 
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = SPEC_DIR / "paper_specifications.csv"
+    model_slug = cache_dir.name
+    out_path = SPEC_DIR / f"paper_specifications_{model_slug}.csv"
     coded.to_csv(out_path, index=False, encoding="utf-8-sig")
 
     report = {
@@ -179,7 +181,9 @@ def main() -> None:
         "failures": failures,
         "runtime_seconds": round(time.time() - started, 1),
     }
-    with open(SPEC_DIR / "specification_report.json", "w", encoding="utf-8") as handle:
+    with open(
+        SPEC_DIR / f"specification_report_{model_slug}.json", "w", encoding="utf-8"
+    ) as handle:
         json.dump(report, handle, indent=2)
     print(f"Done: {len(coded):,} coded papers -> {out_path}")
     if failures:

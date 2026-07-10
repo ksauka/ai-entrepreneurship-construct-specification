@@ -7,9 +7,9 @@ brief-aligned columns plus, per dimension, the evidence, its epistemic status
 to accept or queue each dimension.
 
 Design (2026-07-10, with Kudzai):
-- Provider: any OpenAI-compatible endpoint. OpenAI GPT for paid pilots (key
+- Provider: any OpenAI-compatible endpoint. OpenAI GPT for full study runs (key
   from .env, never committed); local Ollama (http://localhost:11434/v1) for
-  free end-to-end testing. Paid-pilot default gpt-4.1-nano, overridable with
+  local full-model experiments. OpenAI default gpt-4.1-nano, overridable with
   OPENAI_MODEL or --model.
 - Structured output: JSON schema so every response parses into the
   controlled vocabularies; evidence is generated BEFORE the code within each

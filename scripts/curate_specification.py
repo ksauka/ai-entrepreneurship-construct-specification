@@ -27,7 +27,7 @@ Review commands:
 
 Outputs:
     data/processed/specification/curation_overrides_<model>.json
-    data/processed/specification/paper_specifications_curated.csv  (--export)
+    data/processed/specification/paper_specifications_curated_<model>.csv  (--export)
 """
 
 from __future__ import annotations
@@ -176,7 +176,7 @@ def main() -> None:
                         help="Auto-accept confidence threshold (default 0.8).")
     parser.add_argument("--report", action="store_true", help="Status counts only.")
     parser.add_argument("--export", action="store_true",
-                        help="Write paper_specifications_curated.csv and exit.")
+                        help="Write the model-specific curated CSV and exit.")
     args = parser.parse_args()
 
     cache_dir, model_slug = resolve_cache_dir(args.model)
@@ -194,7 +194,7 @@ def main() -> None:
         if args.export:
             frame = curated_frame(records, overrides, args.threshold)
             SPEC_DIR.mkdir(parents=True, exist_ok=True)
-            out_path = SPEC_DIR / "paper_specifications_curated.csv"
+            out_path = SPEC_DIR / f"paper_specifications_curated_{model_slug}.csv"
             frame.to_csv(out_path, index=False, encoding="utf-8-sig")
             print(f"Curated dataset -> {out_path}")
         return

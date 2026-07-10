@@ -55,7 +55,7 @@ Stage 1     - Validate journals/source titles
 Stage 1.5   - Filter for AI x entrepreneurship relevance
 Stage 1.6   - Create one-hot query columns and query-specific views
 Stage 1B    - Export VOSviewer files for full corpus and Query 1-4 subsets
-Stage 2A.5  - Prove and select the paper-level specification coding model
+Stage 2A.5  - Run full multi-model specification coding for reliability
 Stage 2A    - Grid-search, review, then run BERTopic and keyphrase extraction
 Stage 2B    - Build knowledge graph for theory elaboration
 Stage 3     - Serve analytics and visualization
