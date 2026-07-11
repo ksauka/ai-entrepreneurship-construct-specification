@@ -1,40 +1,7 @@
-"""
-optimization.py
+"""Evaluate BERTopic configurations and recommend topic parameters.
 
-Automatic topic count optimization using hierarchical merging and grid search approaches.
-
-Analogous to STM's searchK() function that tries different topic counts and evaluates
-held-out likelihood, residuals, semantic coherence, etc.
-
-TWO APPROACHES:
-1. Hierarchical merging: Distance threshold / coherence-based (principled, slower)
-2. Grid search: Multiple min_topic_size values with composite scoring (practical, faster)
-
-USAGE:
-    from theory_elaboration.topic_modeling import (
-        optimize_topic_count_hierarchical,
-        optimize_topic_count_grid_search
-    )
-
-    # Approach 1: Hierarchical (principled)
-    optimal_topics, metrics = optimize_topic_count_hierarchical(
-        model=trained_model,
-        documents=documents,
-        embeddings=embeddings,
-        min_topics=10,
-        max_topics=50,
-        method="distance_threshold"  # or "coherence_max"
-    )
-
-    # Approach 2: Grid search (practical)
-    optimal_min_size, results = optimize_topic_count_grid_search(
-        documents=documents,
-        embeddings=embeddings,
-        embedding_model=sentence_transformer,
-        min_topic_sizes=[8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30],
-        target_topic_range=(10, 25),
-        plot_metrics=True
-    )
+Inputs: documents, embeddings, candidate settings, and optional trained models.
+Outputs: hierarchical or grid-search metrics, recommendations, and diagnostics.
 """
 
 from __future__ import annotations

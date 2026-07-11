@@ -1,22 +1,7 @@
-"""Stage 1.5: lexical AI x business/entrepreneurship relevance scoring.
+"""Score lexical relevance to AI and entrepreneurship or business.
 
-Two relevance flags are produced so downstream views can scope without
-re-running the pipeline:
-
-``corpus_relevant`` (master filter, broad)
-    AI term matched AND (entrepreneurship OR business term matched OR the
-    paper is in a Query 3/4 entrepreneurship journal). This keeps the master
-    corpus at the AI x business scope Query 1 was designed for; the five
-    query views do the narrowing downstream.
-
-``ai_ent_relevant`` (strict analytical flag)
-    AI term matched AND (entrepreneurship term matched OR the paper is in a
-    Query 3/4 entrepreneurship journal, where the venue supplies the domain).
-    Papers whose only entrepreneurship matches are "weak" terms need two.
-
-Ported from the source project's config-driven Stage 1.5 (lexical pass only;
-the sentence-transformer semantic rescue is deferred until the nlp extras are
-installed).
+Inputs: corpus text, query provenance, and configured keyword groups.
+Outputs: broad corpus and strict analytical relevance flags and match details.
 """
 
 from __future__ import annotations

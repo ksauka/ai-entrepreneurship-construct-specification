@@ -1,7 +1,6 @@
-"""Schema for paper-level AI construct specification coding (Stage 2A.5).
+"""Define controlled dimensions for paper-level AI specification coding.
 
-Column names follow the project brief exactly so the coded dataset, the graph
-builder, and the manuscript tables all speak the same language.
+Inputs: none. Outputs: dimension metadata, allowed values, and column contracts.
 """
 
 from __future__ import annotations
@@ -252,7 +251,7 @@ FULL_TEXT_SENSITIVE: tuple[str, ...] = (
     "theories_mentioned",
 )
 
-# Epistemics and enrichment columns added by the robust coder (2026-07-10):
+# Additional fields that preserve epistemic and theoretical coding detail.
 # theories_mentioned mirrors the workbook's "Ent Theories Discussed"
 # annotation; ai_mechanism_logic captures the causal logic in the paper's
 # own terms (the black-box diagnosis is auditable only with this).

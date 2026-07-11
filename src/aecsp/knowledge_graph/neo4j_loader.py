@@ -1,9 +1,7 @@
-"""Load an in-memory GraphDraft into Neo4j (Stage 2B).
+"""Load an in-memory graph draft into Neo4j.
 
-Ingestion is idempotent: nodes are MERGEd on their (label, key) identity and
-relationships on their endpoints + type, so re-running updates rather than
-duplicates. The neo4j driver is imported lazily so this module stays importable
-without it.
+Inputs: a Neo4j driver, GraphDraft, and load options.
+Outputs: idempotently merged graph records and ingestion counts.
 """
 
 from __future__ import annotations

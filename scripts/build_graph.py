@@ -1,20 +1,7 @@
-"""Stage 2B: build the ETV_V2 knowledge graph from the processed corpus.
+"""Build and export or load the project knowledge graph.
 
-Combines the master corpus, BERTopic/KeyBERT outputs (if present), and the
-Stage 2A.5 specification codes (if present) into one GraphDraft, then either
-loads it into Neo4j or exports node/relationship CSVs.
-
-Usage (project root, graphrag env):
-    python scripts/build_graph.py --export-csv        # write CSVs, no DB needed
-    python scripts/build_graph.py --load              # push into Neo4j (docker compose up -d first)
-    python scripts/build_graph.py --load --wipe       # clear the DB first
-
-Graph backbone (see src/aecsp/knowledge_graph/schema.py):
-  (:Author)-[:WROTE]->(:Publication)-[:PUBLISHED_IN]->(:Journal)
-  (:Publication)-[:PUBLISHED_IN_YEAR]->(:Year)
-  (:Publication)-[:CAPTURED_BY]->(:SearchQuery)
-  (:Publication)-[:HAS_TOPIC {extraction_method}]->(:Topic)
-  (:Publication)-[:HAS_SPECIFICATION]->(:SpecificationProfile)-[:SPECIFIES_*]->(dimension nodes)
+Inputs: the processed corpus with optional topic and specification columns.
+Outputs: graph node and relationship CSVs and, when requested, Neo4j records.
 """
 
 from __future__ import annotations
@@ -30,6 +17,7 @@ import pandas as pd  # noqa: E402
 
 from aecsp.knowledge_graph.builder import build_publication_graph  # noqa: E402
 from aecsp.specification.llm_coder import load_env  # noqa: E402
+from aecsp.specification.paths import specification_csv_path  # noqa: E402
 from aecsp.specification.schema import SPECIFICATION_COLUMNS  # noqa: E402
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -44,8 +32,8 @@ def load_corpus() -> pd.DataFrame:
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def attach_specifications(master: pd.DataFrame) -> pd.DataFrame:
-    spec_path = PROCESSED_DIR / "specification" / "paper_specifications.csv"
+def attach_specifications(master: pd.DataFrame, model: str | None = None) -> pd.DataFrame:
+    spec_path = specification_csv_path(PROCESSED_DIR, model=model)
     if not spec_path.exists():
         print("  (no specification file yet — graph will omit specification nodes)")
         return master
@@ -80,12 +68,13 @@ def main() -> None:
     parser.add_argument("--export-csv", action="store_true", help="Write node/rel CSVs.")
     parser.add_argument("--load", action="store_true", help="Load into Neo4j.")
     parser.add_argument("--wipe", action="store_true", help="Clear Neo4j before loading.")
+    parser.add_argument("--model", default=None, help="Specification model; defaults to the experiment register primary.")
     args = parser.parse_args()
     if not (args.export_csv or args.load):
         args.export_csv = True  # sensible default: no DB required
 
     master = load_corpus()
-    master = attach_specifications(master)
+    master = attach_specifications(master, model=args.model)
     master = prepare_topic_columns(master)
     print(f"Building graph from {len(master):,} publications...")
 

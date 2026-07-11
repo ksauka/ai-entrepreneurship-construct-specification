@@ -1,10 +1,7 @@
-"""Canonical dataset scopes for all post-Stage-1.5 outputs.
+"""Define and select the canonical overlapping dataset scopes.
 
-Every downstream stage (VOS exports, BERTopic, KeyBERT, specification
-statistics, knowledge graph queries, analytics views, manuscript tables)
-selects papers through these scopes so the five required views stay
-consistent. Scopes are one-hot column filters over the master corpus —
-overlapping views, never independent corpora.
+Inputs: the master corpus and its query-membership columns.
+Outputs: consistent full-corpus and Query 1-4 DataFrame views.
 """
 
 from __future__ import annotations

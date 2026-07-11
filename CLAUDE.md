@@ -46,9 +46,14 @@ docs/HANDOFF.md (status, locked decisions, objective). Highlights:
 - 2A.5 `scripts/run_specification.py`: robust coder for the 7 dimensions with
   per-dimension evidence, stated/inferred/absent epistemics, and confidence; any
   OpenAI-compatible endpoint (--local = Ollama, or OpenAI via .env); cache per paper
-  AND per model in data/interim/spec_cache/<model>/. MULTI-MODEL INTER-RATER DESIGN:
-  every study model codes the FULL corpus (llama3.2, qwen3.5, gpt-4.1-nano, research
-  model); no model-selection tournament; all outputs kept per model for inter-rater
+  AND per protocol/model in data/interim/spec_cache/spec-v3/<model>/ (uniform
+  4,096-token ceiling + mechanism/logic coupling + needs_full_text discipline;
+  spec-v1* and spec-v2 dirs are retired pilots). MULTI-MODEL
+  INTER-RATER DESIGN: GPT-5.4 mini is the authoritative FULL-corpus rater;
+  completed GPT-4.1 nano is the baseline/sensitivity dataset; llama3.2 and
+  gemma4:31b are supplementary validation raters, with IRR
+  computed only on their common successful paper-ID intersection with nano.
+  Qwen 3.5 27B is an excluded structured-output pilot; retained outputs are kept per model for inter-rater
   reliability across the five scopes. Specification runs BEFORE topics (GPU sharing).
 - 2A.5b `scripts/curate_specification.py`: per-dimension human review; auto-accept =
   'stated' + confidence >= 0.8; overrides separate from the immutable LLM cache.

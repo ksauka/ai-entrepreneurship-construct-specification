@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
 
@@ -24,6 +25,8 @@ class ProgressReporter:
     every: int = 1
     width: int = 30
     started: float = field(default_factory=time.time)
+    in_place: bool = False
+    _last_line_width: int = field(default=0, init=False, repr=False)
 
     def line(
         self,
@@ -62,7 +65,14 @@ class ProgressReporter:
         force: bool = False,
     ) -> None:
         if force or completed == self.total or completed % max(1, self.every) == 0:
-            print(
-                self.line(completed, detail=detail, failures=failures),
-                flush=True,
-            )
+            line = self.line(completed, detail=detail, failures=failures)
+            if self.in_place and sys.stdout.isatty():
+                padded = line.ljust(self._last_line_width)
+                self._last_line_width = len(line)
+                print(
+                    f"\r{padded}",
+                    end="\n" if completed == self.total else "",
+                    flush=True,
+                )
+            else:
+                print(line, flush=True)

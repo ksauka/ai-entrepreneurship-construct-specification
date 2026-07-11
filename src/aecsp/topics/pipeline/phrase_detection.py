@@ -1,27 +1,7 @@
-"""
-phrase_detection.py
+"""Detect and classify domain-relevant multi-word phrases.
 
-Hybrid phrase detection combining semantic (KeyBERT + YAKE) and statistical (gensim Phrases)
-approaches with seed-guided filtering for AI and entrepreneurship term preservation.
-
-KEY FEATURES:
-- Semantic extraction: KeyBERT + YAKE for important multi-word terms
-- Seed-guided filtering: 0.65 similarity threshold to AI/entrepreneurship seeds
-- Statistical collocations: gensim Phrases (NPMI scoring)
-- Preserves domain-relevant phrases: "machine_learning", "venture_capital", etc.
-- Filters noise: Generic terms like "data collection", "sample size"
-
-USAGE:
-    from theory_elaboration.topic_modeling import detect_phrases
-
-    bigram_model, trigram_model, phrase_docs, stats = detect_phrases(
-        documents=documents,
-        seed_model=sentence_transformer,
-        seed_embeddings=seed_embeddings,
-        ai_seeds=ai_seed_list,
-        ent_seeds=ent_seed_list,
-        all_seeds=combined_seed_list
-    )
+Inputs: documents, semantic models and embeddings, and domain seed terms.
+Outputs: phrase models, transformed documents, classified phrases, and statistics.
 """
 
 from __future__ import annotations

@@ -1,11 +1,7 @@
-"""Stage 3 FastAPI app: scope-aware construct-specification analytics.
+"""Define the FastAPI application for construct-specification analytics.
 
-Run (project root, graphrag env):
-    uvicorn aecsp.api.main:app --reload --app-dir src
-Then open http://localhost:8000
-
-Neo4j is used when reachable (creds from .env); otherwise the app runs from the
-processed CSVs. Every analytics response includes the paper_ids behind it.
+Inputs: processed datasets and optional Neo4j connection settings.
+Outputs: HTTP analytics, evidence, graph, report, and static-interface routes.
 """
 
 from __future__ import annotations

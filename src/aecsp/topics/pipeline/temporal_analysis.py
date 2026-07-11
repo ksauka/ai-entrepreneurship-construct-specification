@@ -1,22 +1,7 @@
-"""
-temporal_analysis.py
+"""Analyze topic change over time and across bibliometric groups.
 
-Temporal and VOS cluster analysis of topic evolution.
-
-KEY FEATURES:
-- Topics over time: Track emergence, growth, and decline (2000-2024)
-- VOS community analysis: Topics per bibliometric cluster
-- Replaces STM year covariate with BERTopic's built-in temporal support
-
-USAGE:
-    from theory_elaboration.topic_modeling import analyze_topics_over_time
-
-    topics_over_time_df = analyze_topics_over_time(
-        model=trained_model,
-        documents=phrase_documents,
-        doc_index_df=doc_index_df,
-        df_work=df_work
-    )
+Inputs: a trained BERTopic model, documents, indexes, and publication metadata.
+Outputs: temporal topic and group-level summary tables.
 """
 
 from __future__ import annotations

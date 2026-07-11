@@ -1,8 +1,6 @@
-"""Target knowledge graph schema for ETV_V2.
+"""Define the knowledge graph node and relationship contracts.
 
-This module defines the contract for the new graph. It intentionally keeps the
-old workable Publication -> Topic path while adding query provenance,
-bibliometric context, VOS membership, and AI specification structure.
+Inputs: none. Outputs: immutable node and relationship specifications.
 """
 
 from __future__ import annotations

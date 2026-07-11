@@ -1,24 +1,7 @@
-"""
-post_processing.py
+"""Filter and summarize BERTopic results for downstream analysis.
 
-Post-processing filters for BERTopic outputs before Stage 2B.
-
-KEY FEATURES:
-- Exclude outliers (topic == -1 or None)
-- Filter to Stage 2B ready papers (≥2 AI terms + ≥2 ent terms)
-- Generate topic distribution statistics
-- Merge document metadata with keywords
-
-USAGE:
-    from theory_elaboration.topic_modeling import filter_assigned_papers
-
-    assigned_papers, stage2b_papers = filter_assigned_papers(
-        doc_topics_df=doc_topics,
-        doc_index_df=doc_index,
-        ai_terms_df=ai_terms_by_paper,
-        ent_terms_df=ent_terms_by_paper,
-        out_dir=output_dir
-    )
+Inputs: topic assignments, document indexes, and paper-level domain terms.
+Outputs: assigned-paper datasets, filtered datasets, and topic statistics.
 """
 
 from __future__ import annotations

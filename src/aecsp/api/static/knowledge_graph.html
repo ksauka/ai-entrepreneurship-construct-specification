@@ -105,12 +105,28 @@ const EDGE_NAMES = { WROTE:"wrote", CITES:"cites", REFERENCES:"references", HAS_
   HAS_SPECIFICATION:"has specification", SPECIFIES_ROLE:"role", SPECIFIES_TYPE:"type",
   SPECIFIES_MECHANISM:"mechanism", SPECIFIES_LEVEL:"level", SPECIFIES_PROCESS:"process",
   SPECIFIES_SCOPE:"scope", HAS_DEFINITION_CLARITY:"clarity", HAS_SPECIFICATION_PROBLEM:"problem" };
+// One checkbox per agreed node type. Publication is not listed: it is the
+// graph backbone and always included. SpecificationProfile is the per-paper
+// hub the SPECIFIES_* edges hang off, so it is auto-included whenever any
+// specification dimension is on (see includeLabels).
 const TOGGLES = [
-  { id:"Author", labels:["Author"], on:true }, { id:"Journal", labels:["Journal"], on:true },
-  { id:"Institution", labels:["Institution"], on:true }, { id:"Topic", labels:["Topic"], on:true },
-  { id:"Specification", labels:["AIRole","AIType","Mechanism","LevelOfAnalysis","ProcessStage","ScopeCondition","DefinitionClarity","SpecificationProfile","SpecificationProblem"], on:true },
-  { id:"Keyword", labels:["Keyword"], on:false }, { id:"Reference", labels:["Reference"], on:false },
+  { id:"Author", labels:["Author"], on:true },
+  { id:"Journal", labels:["Journal"], on:true },
+  { id:"Institution", labels:["Institution"], on:true },
+  { id:"Topic", labels:["Topic"], on:true },
+  { id:"AIRole", labels:["AIRole"], on:true },
+  { id:"AIType", labels:["AIType"], on:true },
+  { id:"Mechanism", labels:["Mechanism"], on:true },
+  { id:"LevelOfAnalysis", labels:["LevelOfAnalysis"], on:true },
+  { id:"ProcessStage", labels:["ProcessStage"], on:true },
+  { id:"ScopeCondition", labels:["ScopeCondition"], on:true },
+  { id:"DefinitionClarity", labels:["DefinitionClarity"], on:true },
+  { id:"SpecificationProblem", labels:["SpecificationProblem"], on:true },
+  { id:"Keyword", labels:["Keyword"], on:false },
+  { id:"Reference", labels:["Reference"], on:false },
 ];
+const SPEC_NODE_LABELS = ["AIRole","AIType","Mechanism","LevelOfAnalysis",
+  "ProcessStage","ScopeCondition","DefinitionClarity","SpecificationProblem"];
 const SPEC_FIELDS = [
   ["ai_role_function","AI role"], ["ai_type_form","AI type"], ["ai_mechanism","Mechanism"],
   ["level_of_analysis","Level"], ["entrepreneurial_process_stage","Process"],
@@ -132,7 +148,9 @@ async function init() {
   const h = await api("/api/health");
   el("status").className = "status-pill " + (h.neo4j ? "ok" : "warn");
   el("status").textContent = h.neo4j ? "Neo4j connected" : "CSV mode";
-  el("toggles").innerHTML += TOGGLES.map(t =>
+  el("toggles").innerHTML += `<label title="Always shown: publications are the graph backbone">`
+    + `<input type="checkbox" checked disabled> Publication</label>`
+    + TOGGLES.map(t =>
     `<label><input type="checkbox" id="tg_${t.id}" ${t.on?"checked":""} onchange="load()"> ${LABEL_NAMES[t.labels[0]]||t.id}</label>`).join("");
   const scopes = await api("/api/scopes");
   el("scope").innerHTML = scopes.map(s => `<option value="${s.id}">${esc(s.label)} (${s.papers.toLocaleString()})</option>`).join("");
@@ -144,6 +162,9 @@ async function init() {
 function includeLabels() {
   const labels = ["Publication"];
   for (const t of TOGGLES) if (el(`tg_${t.id}`) && el(`tg_${t.id}`).checked) labels.push(...t.labels);
+  // The SpecificationProfile hub carries the SPECIFIES_* edges; without it the
+  // dimension nodes float disconnected, so bring it in with any dimension.
+  if (labels.some(l => SPEC_NODE_LABELS.includes(l))) labels.push("SpecificationProfile");
   return labels.join(",");
 }
 

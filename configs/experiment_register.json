@@ -1,0 +1,28 @@
+{
+  "locked_at": "2026-07-11",
+  "protocol_id": "spec-v3",
+  "protocol_fingerprint": "04d00994822c239a35149a6ac4dcf46db9b803095f582a400bb133a5f1e4457c",
+  "primary_model": "gpt-5.4-mini-2026-03-17",
+  "baseline_models": ["gpt-4.1-nano-2025-04-14"],
+  "validation_models": ["llama3.2", "gemma4:31b"],
+  "excluded_models": ["qwen3.5:27b"],
+  "corpus_path": "data/processed/master_corpus.csv",
+  "corpus_sha256": "f7e7043c22cdd4ad3e68ca912f896b2376347eb204e531c4753e46eeb683d592",
+  "git_head_at_lock": "6ed6571989251ac4732a413740f573bd95b2e2d3",
+  "working_tree_clean_at_lock": false,
+  "working_diff_sha256_at_lock": "64a34a03288cbb6c64c7e43b4a91e7a5488b592b3335111e39c36b822faad525",
+  "analysis_rules": {
+    "mechanism_empty_logic_correction": true,
+    "index_keywords_in_prompt": false,
+    "construct_clarity_score_primary": false,
+    "entropy_interpretation": "category_concentration_only"
+  },
+  "primary_scopes": ["full_corpus"],
+  "sensitivity_scopes": ["strict_ai_ent", "query_1", "query_2", "query_3", "query_4"],
+  "manifests": {
+    "human_validation_key": "data/interim/human_validation/private_sample_key.csv",
+    "human_validation_blind_template": "data/interim/human_validation/blind_coding_template.csv",
+    "gpt54mini_challenge": "data/interim/spec_pilots/gpt54mini_challenge_50.csv"
+  },
+  "methods_lock": "docs/METHODS_LOCK.md"
+}

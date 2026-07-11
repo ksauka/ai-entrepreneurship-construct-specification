@@ -1,19 +1,7 @@
-"""Build the aecsp knowledge graph draft from paper-level records.
+"""Build an in-memory knowledge graph from paper-level records.
 
-Enriched Stage 2B builder. Keeps the original backbone (Publication, Author,
-Journal, Year, SearchQuery, Topic, SpecificationProfile) and adds, from columns
-already present in the Scopus corpus:
-
-- Institution nodes and (Author)-[:AFFILIATED_WITH]->(Institution)
-- (Author)-[:CO_AUTHORED_WITH]-(Author) from shared papers
-- Keyword nodes (Author Keywords, Index Keywords, normalized KeyBERT) via
-  (Publication)-[:HAS_KEYWORD {source}]->(Keyword), kept separate from Topic
-- Reference nodes and (Publication)-[:REFERENCES]->(Reference) for cited works
-  that carry a DOI, plus internal (Publication)-[:CITES]->(Publication) when a
-  reference DOI resolves to another paper in the corpus
-
-VOS clusters are deliberately not in the graph: VOS is a citation-connectivity
-cleaning step, not graph metadata.
+Inputs: corpus records with bibliographic, query, topic, and specification data.
+Outputs: a GraphDraft containing normalized nodes and relationships.
 """
 
 from __future__ import annotations

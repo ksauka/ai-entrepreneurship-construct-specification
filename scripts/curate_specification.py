@@ -1,33 +1,7 @@
-"""Stage 2A.5 curation UI: review LLM-coded dimensions, per dimension.
+"""Review and export model-specific specification codes.
 
-Usage (from the project root, graphrag env):
-
-    python scripts/curate_specification.py --model llama3.2            # review queue
-    python scripts/curate_specification.py --model llama3.2 --report   # status counts only
-    python scripts/curate_specification.py --model llama3.2 --export   # write curated CSV
-    python scripts/curate_specification.py --model llama3.2 --threshold 0.7
-
-How it works (agreed 2026-07-10):
-- Codes with evidence_type 'stated' and confidence >= threshold (default 0.8)
-  are auto-accepted; only the rest queue for review.
-- The queue is grouped by dimension, least confident first, so the reader
-  works through one dimension's judgment at a time.
-- Decisions are saved to data/processed/specification/
-  curation_overrides_<model>.json after every keystroke (resumable); the LLM
-  cache under data/interim/spec_cache/<model>/ is never modified.
-
-Review commands:
-    Enter / a   accept the LLM code
-    1..N        override with the numbered allowed value
-    e           show the paper's abstract
-    s           skip (stays llm_unreviewed)
-    d           defer this DIMENSION corpus-wide (e.g. needs full text)
-    B           batch-accept every remaining queued item of this dimension
-    q           save and quit
-
-Outputs:
-    data/processed/specification/curation_overrides_<model>.json
-    data/processed/specification/paper_specifications_curated_<model>.csv  (--export)
+Inputs: one model's cached paper-level specification records and saved human
+overrides. Outputs: resumable override JSON and an optional curated CSV.
 """
 
 from __future__ import annotations
@@ -51,7 +25,11 @@ from aecsp.specification.curation import (  # noqa: E402
     save_overrides,
     status_report,
 )
-from aecsp.specification.llm_coder import model_cache_dir  # noqa: E402
+from aecsp.specification.llm_coder import (  # noqa: E402
+    PROTOCOL_ID,
+    model_cache_dir,
+    protocol_for_model,
+)
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 SPEC_DIR = PROCESSED_DIR / "specification"
@@ -68,14 +46,20 @@ RESET = "\033[0m"
 def resolve_cache_dir(model: str | None) -> tuple[Path, str]:
     """Cache dir for --model, or the only coded model when unambiguous."""
 
-    available = sorted(d.name for d in CACHE_ROOT.iterdir() if d.is_dir()) if CACHE_ROOT.exists() else []
+    protocol_id = protocol_for_model(model)[0] if model else PROTOCOL_ID
+    protocol_root = CACHE_ROOT / protocol_id
+    available = (
+        sorted(d.name for d in protocol_root.iterdir() if d.is_dir())
+        if protocol_root.exists()
+        else []
+    )
     if model:
-        cache_dir = model_cache_dir(CACHE_ROOT, model)
+        cache_dir = model_cache_dir(CACHE_ROOT, model, protocol_id)
         if not cache_dir.exists():
             sys.exit(f"No cache for model '{model}'. Coded models: {available or 'none'}")
         return cache_dir, cache_dir.name
     if len(available) == 1:
-        return CACHE_ROOT / available[0], available[0]
+        return protocol_root / available[0], available[0]
     sys.exit(f"Pass --model. Coded models: {available or 'none'}")
 
 
@@ -183,7 +167,9 @@ def main() -> None:
     records = load_coded_records(cache_dir)
     if not records:
         sys.exit(f"No coded papers in {cache_dir}")
-    overrides_path = SPEC_DIR / f"curation_overrides_{model_slug}.json"
+    protocol_id = protocol_for_model(args.model or model_slug)[0]
+    experiment_slug = f"{model_slug}_{protocol_id}"
+    overrides_path = SPEC_DIR / f"curation_overrides_{experiment_slug}.json"
     overrides = load_overrides(overrides_path)
     print(f"Model: {model_slug} | coded papers: {len(records):,} | "
           f"threshold: {args.threshold} | overrides: {overrides_path.name}")
@@ -194,7 +180,7 @@ def main() -> None:
         if args.export:
             frame = curated_frame(records, overrides, args.threshold)
             SPEC_DIR.mkdir(parents=True, exist_ok=True)
-            out_path = SPEC_DIR / f"paper_specifications_curated_{model_slug}.csv"
+            out_path = SPEC_DIR / f"paper_specifications_curated_{experiment_slug}.csv"
             frame.to_csv(out_path, index=False, encoding="utf-8-sig")
             print(f"Curated dataset -> {out_path}")
         return

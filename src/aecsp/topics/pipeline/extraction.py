@@ -1,39 +1,7 @@
-"""
-extraction.py
+"""Extract topics, assignments, and domain terms from BERTopic models.
 
-Extract topics, document assignments, and domain-specific terms (AI, entrepreneurship)
-from trained BERTopic models. Generates SKOS construction contract artifacts.
-
-KEY FEATURES:
-- Data-driven topic labels from top keywords
-- Outlier handling with probability-based reassignment
-- SKOS contract generation (3 tables: topics, topic_terms, doc_topics)
-- Paper-level keyword extraction for Stage 2B integration
-- Topic-level keyword extraction for domain analysis
-
-USAGE:
-    from theory_elaboration.topic_modeling import (
-        extract_topics,
-        assign_document_topics,
-        export_bertopic_artifacts,
-        extract_ai_terms_by_topic,
-        extract_ai_terms_by_paper
-    )
-
-    # Extract topic summaries
-    topics_df = extract_topics(model)
-
-    # Assign documents to topics
-    doc_topics_df = assign_document_topics(
-        model, documents,
-        min_reassign_prob=0.05,
-        reassign_outliers=True
-    )
-
-    # Generate SKOS contract (3 tables)
-    export_bertopic_artifacts(
-        model, doc_topics_df, doc_index_df, out_dir
-    )
+Inputs: a trained model, documents, document indexes, and domain vocabularies.
+Outputs: topic, term, assignment, and paper-level keyword tables.
 """
 
 from __future__ import annotations

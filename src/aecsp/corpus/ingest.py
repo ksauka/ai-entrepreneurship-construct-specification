@@ -1,9 +1,7 @@
-"""Stage 0 / 0.5: load Query 1-4 Scopus exports and merge with query provenance.
+"""Load, merge, and deduplicate Scopus query exports.
 
-This is the pandas implementation used for the real July 2026 corpus. It keeps
-the same deduplication priority as :mod:`aecsp.corpus.merge` (EID, then DOI,
-then normalized title-year) but works on whole DataFrames so the 30k-record
-Query 1 export stays fast, and all original Scopus columns survive the merge.
+Inputs: one or more CSV files per search query.
+Outputs: DataFrames with stable paper identifiers and query provenance.
 """
 
 from __future__ import annotations

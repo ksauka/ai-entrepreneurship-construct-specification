@@ -1,8 +1,4 @@
-"""API surface for the ETV_V2 platform.
-
-The FastAPI application will be migrated here after the corpus and graph export
-contracts are stable.
-"""
+"""Expose the platform API package and its implementation status."""
 
 API_PACKAGE_STATUS = "planned"
 

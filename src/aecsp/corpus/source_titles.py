@@ -1,10 +1,7 @@
-"""Stage 1: validate source titles against the Query 1-4 source-title universe.
+"""Validate corpus source titles against configured query titles.
 
-The universe is derived from the saved Scopus queries themselves: every
-``LIMIT-TO ( EXACTSRCTITLE , "..." )`` clause in
-``configs/search_queries_july2026_q1_q4.yaml``. A record whose source title is
-outside that universe was captured by a query facet drift (Scopus sometimes
-returns variant source titles) and gets flagged rather than silently kept.
+Inputs: corpus records and the saved Scopus query configuration.
+Outputs: normalized title sets and a source-title validity flag per record.
 """
 
 from __future__ import annotations

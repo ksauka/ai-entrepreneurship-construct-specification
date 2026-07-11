@@ -1,24 +1,7 @@
-"""
-training.py
+"""Train configured BERTopic models.
 
-BERTopic model training with BERT embeddings, UMAP dimensionality reduction, and HDBSCAN clustering.
-
-KEY IMPROVEMENTS OVER TOP2VEC:
-- Better embeddings: BERT (all-MiniLM-L6-v2) > Doc2Vec for semantic quality
-- More control: Explicit UMAP + HDBSCAN configuration
-- Temporal support: Built-in topics_over_time() method
-- Metadata support: Can analyze topics by groups (VOS clusters, journals, etc.)
-- Reproducible: Fixed random seeds for deterministic results
-
-USAGE:
-    from theory_elaboration.topic_modeling import train_bertopic
-
-    model = train_bertopic(
-        documents=phrase_documents,
-        embedding_model=sentence_transformer,
-        nr_topics="auto",  # or specific number
-        min_topic_size=15
-    )
+Inputs: documents, an embedding model, and UMAP, HDBSCAN, and topic settings.
+Outputs: a fitted BERTopic model and document topic assignments.
 """
 
 from __future__ import annotations

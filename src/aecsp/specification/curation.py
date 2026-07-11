@@ -1,21 +1,7 @@
-"""Stage 2A.5 curation: human review of LLM-coded specification dimensions.
+"""Prepare, apply, and export human review of specification codes.
 
-The LLM coder emits, per paper and dimension, a code plus evidence, an
-epistemic label (stated / inferred / absent), and a confidence score.
-Curation turns those into research-grade codes without anyone reading 22k
-papers:
-
-- Dimensions coded from explicit statements at high confidence are
-  auto-accepted (agreed 2026-07-10: confidence >= 0.8 AND evidence_type
-  'stated').
-- Everything else queues for per-dimension human review, least confident
-  first, where the reader accepts or overrides the LLM code.
-- Dimensions that honestly need the full paper (definition fit, theory use)
-  can be deferred corpus-wide and revisited in a later full-text pass.
-
-Human decisions live in a separate overrides file; the LLM originals in
-data/interim/spec_cache/<model>/ are never modified, so the audit trail
-(what the model coded, and what the human changed) stays complete.
+Inputs: model-coded cache records, confidence settings, and saved overrides.
+Outputs: review queues, curation summaries, and curated paper-level data.
 """
 
 from __future__ import annotations
@@ -45,6 +31,7 @@ def load_coded_records(cache_dir: Path) -> list[dict[str, Any]]:
     return [
         json.loads(path.read_text(encoding="utf-8"))
         for path in sorted(cache_dir.glob("*.json"))
+        if path.name != "protocol_manifest.json"
     ]
 
 

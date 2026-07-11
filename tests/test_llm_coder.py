@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from aecsp.specification.llm_coder import (
+    PROTOCOL_ID,
     SYSTEM_PROMPT,
     build_user_prompt,
     cache_key,
@@ -11,6 +12,9 @@ from aecsp.specification.llm_coder import (
     flatten_profile,
     load_env,
     model_cache_dir,
+    protocol_fingerprint,
+    protocol_for_model,
+    protocol_parameters,
     response_json_schema,
 )
 from aecsp.specification.schema import (
@@ -101,6 +105,28 @@ def test_cache_is_isolated_per_model(tmp_path: Path):
     paid = model_cache_dir(tmp_path, "gpt-4.1-nano")
     assert local != paid
     assert local.parent == paid.parent == tmp_path
+
+
+def test_standard_protocol_has_its_own_cache_namespace(tmp_path: Path):
+    cache_dir = model_cache_dir(tmp_path, "llama3.2", PROTOCOL_ID)
+
+    assert cache_dir == tmp_path / PROTOCOL_ID / "llama3.2"
+    assert protocol_parameters()["temperature"] == 0.0
+    assert protocol_parameters()["seed"] == 42
+    assert len(protocol_fingerprint()) == 64
+
+
+def test_protocol_is_uniform_across_all_raters():
+    # One instrument for every rater; no per-model ceilings.
+    assert PROTOCOL_ID == "spec-v3"
+    for model in ("gemma4:31b", "llama3.2", "gpt-4.1-nano-2025-04-14", "qwen3.5:27b"):
+        assert protocol_for_model(model) == (PROTOCOL_ID, 4096)
+
+
+def test_prompt_carries_the_spec_v3_discipline_rules():
+    prose = " ".join(SYSTEM_PROMPT.split())
+    assert "Mechanism requires causal logic" in prose
+    assert "needs_full_text is a signal, not a caveat" in prose
 
 
 def test_code_paper_uses_cache_without_client(tmp_path: Path):

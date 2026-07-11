@@ -1,15 +1,7 @@
-"""Apply the VOS citation-connectivity cleaning filter (per scope).
+"""Filter corpus scopes by VOSviewer citation connectivity.
 
-Reads the per-scope VOS maps from data/vosdata/ and, for each scope whose map
-is present and not older than the processed corpus, writes two datasets:
-    data/processed/vos_filtered/<scope>_retained.csv
-    data/processed/vos_filtered/<scope>_dropped.csv
-
-Scopes without a current map are skipped, so run this as each VOSviewer map
-finishes. VOSviewer for a large corpus can take many minutes per scope.
-
-Usage (project root, graphrag env):
-    python scripts/apply_vos_filter.py
+Inputs: the master corpus and current per-scope VOSviewer maps.
+Outputs: retained and dropped CSV files per scope plus a filter report.
 """
 
 from __future__ import annotations

@@ -1,12 +1,7 @@
-"""Stage 3 data-access layer: Neo4j-backed with a CSV fallback.
+"""Provide graph and analytical data to the API.
 
-Tabular analytics (scope overviews, distributions, convergence/contrast,
-evidence lists) are computed from the processed paper-level data so the app
-works even before Neo4j is running. When a Neo4j driver is available, the
-graph-traversal endpoints (paper neighbourhood, contrast network) use it.
-
-Every method that reports a statistic also exposes the underlying paper_ids so
-the UI can show the evidence behind any number (brief section 10).
+Inputs: processed paper-level CSV files and an optional Neo4j driver.
+Outputs: scope metrics, evidence records, and graph traversal results.
 """
 
 from __future__ import annotations
@@ -28,6 +23,7 @@ from aecsp.specification.schema import (
     SPECIFICATION_DIMENSIONS,
     SPECIFICATION_PROBLEM_COLUMN,
 )
+from aecsp.specification.paths import specification_csv_path
 
 PROCESSED_DIR = Path(__file__).resolve().parents[3] / "data" / "processed"
 
@@ -56,9 +52,10 @@ def _short_title(title: object, width: int = 42) -> str:
 class GraphService:
     """Serves scope-aware analytics and evidence to the API."""
 
-    def __init__(self, processed_dir: Path = PROCESSED_DIR, neo4j_driver=None) -> None:
+    def __init__(self, processed_dir: Path = PROCESSED_DIR, neo4j_driver=None, model: str | None = None) -> None:
         self.processed_dir = processed_dir
         self.driver = neo4j_driver
+        self.model = model
         self.papers = self._load_papers()
 
     # ---- loading --------------------------------------------------------
@@ -70,7 +67,7 @@ class GraphService:
             return pd.DataFrame()
         papers = pd.read_csv(path, dtype=str, keep_default_na=False)
 
-        spec_path = self.processed_dir / "specification" / "paper_specifications.csv"
+        spec_path = specification_csv_path(self.processed_dir, model=self.model)
         if spec_path.exists():
             specs = pd.read_csv(spec_path, dtype=str, keep_default_na=False)
             keep = ["paper_id"] + [c for c in SPECIFICATION_COLUMNS if c in specs.columns]

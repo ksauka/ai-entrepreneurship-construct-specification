@@ -1,17 +1,8 @@
-"""Run Stages 0 -> 1B: raw Query 1-4 exports to master corpus + VOS files.
+"""Build the analytical corpus and VOSviewer exports.
 
-Usage (from the ETV_V2 project root):
-
-    python scripts/build_corpus.py [--skip-relevance-filter]
-
-Outputs:
-    data/interim/stage0_5_merged.csv            merged, deduplicated, provenance-aware
-    data/interim/stage1_rejected_source_title.csv
-    data/interim/stage1_5_rejected_relevance.csv
-    data/processed/master_corpus.csv            Stage 1.6 master analytical dataset
-    data/processed/query_1.csv ... query_4.csv  overlapping query views
-    data/exports/vosviewer/vos_*.csv            five VOSviewer scope exports
-    data/processed/pipeline_report.json         stage-by-stage statistics
+Inputs: configured raw Query 1-4 Scopus CSV exports.
+Outputs: merged and rejected interim files, the master corpus, query views,
+VOSviewer scope exports, and a pipeline report.
 """
 
 from __future__ import annotations

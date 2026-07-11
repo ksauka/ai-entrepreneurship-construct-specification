@@ -1,41 +1,8 @@
-"""Stage 2A: hybrid phrase detection + BERTopic models (global + per-query native).
+"""Optimize and train global and per-query BERTopic models.
 
-Usage (from the project root, graphrag env):
-
-    python scripts/run_topics.py --optimize-only      # five grids + graphs; no final model
-    python scripts/run_topics.py --use-optimized      # after reviewing recommendations
-    python scripts/run_topics.py --global-min-topic-size 50  # explicit manual choice
-
-What runs (decisions 2026-07-09/10 with Kudzai):
-- Unified text per paper: Title + Abstract + Author Keywords + Index Keywords.
-- Seed terms from configs/ai_keyword_config.yaml, embedded once.
-- Hybrid phrase detection and embeddings are checkpointed under
-  data/interim/topics/ and reused by optimization and final training.
-- Grid search runs independently for full_corpus and Query 1-4. Recommendations
-  and diagnostic graphs require human review; no topic count is silently approved.
-- GLOBAL BERTopic model on the full master corpus -> canonical topic columns
-  on master_corpus_topics.csv (feeds the knowledge graph; comparable across
-  views), with outlier reassignment.
-- NATIVE BERTopic models per query view (Query 1-4), each dataset's own
-  topic structure for the app's per-dataset interaction.
-- AI and entrepreneurship term tables (per topic and per paper) derived from
-  the keyphrase statistics; per-paper terms land on the master file as the
-  keybert_phrases column the graph builder consumes.
-
-Outputs:
-    data/processed/master_corpus_topics.csv           master + global topics + terms
-    data/processed/topics/keyphrases_detected.json    domain-classified phrases
-    data/processed/topics/optimization/               five grids + review graphs
-    data/processed/topics/global/
-        topics_summary.csv, topics.csv, topic_terms.csv, doc_topics.csv,
-        ai_terms_by_topic.csv, ent_terms_by_topic.csv,
-        ai_terms_by_paper.csv, ent_terms_by_paper.csv,
-        topic_summary_<scope>.csv (x5)
-    data/processed/topics/native/<query>/ (x4)
-        assignments.csv, topics_summary.csv, topics.csv, topic_terms.csv,
-        doc_topics.csv, topic_summary.csv
-        diagnostics/                                  final-model PNG/HTML graphs
-    data/processed/topics/topics_report.json
+Inputs: the master corpus, domain seed configuration, and optional checkpoints
+or approved optimization settings. Outputs: topic assignments, term tables,
+diagnostics, model artifacts, an enriched master corpus, and a run report.
 """
 
 from __future__ import annotations

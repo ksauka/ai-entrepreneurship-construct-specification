@@ -1,10 +1,7 @@
-"""Stage 1B: write VOSviewer-ready Scopus CSVs for the five dataset scopes.
+"""Export canonical corpus scopes as VOSviewer-compatible Scopus CSV files.
 
-VOSviewer reads Scopus CSV exports directly, so each scope export keeps the
-original Scopus columns (VOSviewer needs Authors, Title, Year, Source title,
-Cited by, DOI, Abstract, Author Keywords, Index Keywords, References, EID).
-ETV_V2 provenance columns are dropped from the export because VOSviewer would
-treat them as unknown metadata.
+Inputs: the master corpus with original Scopus fields and query provenance.
+Outputs: one VOSviewer-ready CSV for each dataset scope.
 """
 
 from __future__ import annotations

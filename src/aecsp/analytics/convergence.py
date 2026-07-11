@@ -1,15 +1,7 @@
-"""Layer 5: construct convergence, divergence, and contrast analytics.
+"""Calculate convergence, divergence, and contrast in specification codes.
 
-Operates on the paper-level specification codes (Stage 2A.5 columns). Every
-statistic is traceable: functions return the contributing ``paper_id`` lists
-alongside the scores so the platform can show the evidence behind any number.
-
-Convergence for a group = how concentrated its papers are on each of the seven
-specification dimensions (1.0 = all papers agree, 0.0 = maximally fragmented),
-reusing the entropy-based :func:`summarize_distribution`.
-
-Construct contrast = papers that agree on one dimension but differ on another
-(e.g. same AI type, different role) — the core theoretical signal.
+Inputs: paper-level specification data, optionally grouped by corpus fields.
+Outputs: traceable metrics and the paper identifiers contributing to them.
 """
 
 from __future__ import annotations

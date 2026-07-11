@@ -1,20 +1,7 @@
-"""VOS citation-connectivity cleaning filter (per scope).
+"""Split corpus scopes by VOSviewer citation connectivity.
 
-VOSviewer drops papers with zero total link strength when it builds a citation
-map, so the papers present in a scope's saved map are exactly the ones connected
-in that scope's citation network. This module treats the map purely as a filter:
-it does not read clusters or link strengths.
-
-For each scope it splits the corpus into two datasets:
-- retained: papers whose DOI appears in the scope's VOS map (citation-connected),
-  carrying no VOS columns, and
-- dropped: papers absent from the map (isolated / zero total link strength).
-
-The step is optional and per scope. A scope is processed only when its map file
-exists and is at least as new as the processed corpus; if the corpus is newer
-than the map, the map is treated as stale and the scope is skipped.
-
-Input maps live in data/vosdata/ named <scope>_vos.csv (see SCOPE_VOS_FILES).
+Inputs: the master corpus, per-scope VOSviewer maps, and file timestamps.
+Outputs: retained and dropped scope datasets with processing statistics.
 """
 
 from __future__ import annotations

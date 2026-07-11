@@ -1,9 +1,7 @@
-"""Scope report generation for the platform.
+"""Generate printable specification reports for dataset scopes.
 
-Produces a self-contained, printable HTML report describing how artificial
-intelligence is specified across one dataset scope. Written in plain prose so a
-researcher can read it, save it as PDF from the browser, or paste sections into
-a manuscript. No decorative symbols are used.
+Inputs: scope analytics and their supporting paper records.
+Outputs: self-contained HTML reports with traceable evidence.
 """
 
 from __future__ import annotations
