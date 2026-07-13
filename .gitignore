@@ -29,3 +29,16 @@ data/queries/*.csv
 .env
 data/neo4j/
 data/interim/spec_cache/
+
+# Keep research and agent documentation local. Only the root README is tracked.
+*.md
+!/README.md
+*.txt
+*.doc
+*.docx
+*.xlsx
+.claude/
+reports/
+
+# Accidental root-level command-output capture (for example, `sh \`).
+/sh ?
