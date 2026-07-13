@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Manage the ETV workbench SSH connection and Ollama tunnel.
+# Inputs: WORKBENCH_* settings from the project .env file.
+# Outputs: SSH sessions, diagnostics, or a local Ollama port forward.
+
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+PROJECT_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+ENV_FILE="${ETV_WORKBENCH_ENV:-$PROJECT_ROOT/.env}"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+    echo "Workbench environment file not found: $ENV_FILE" >&2
+    exit 1
+fi
+
+# Source only the workbench settings. Other project .env entries may not use
+# shell syntax and must never be evaluated by this helper.
+set -a
+source <(grep -E '^WORKBENCH_[A-Z0-9_]+=' "$ENV_FILE" || true)
+set +a
+
+required=(
+    WORKBENCH_SSH_HOST
+    WORKBENCH_SSH_USER
+    WORKBENCH_SSH_PORT
+    WORKBENCH_SSH_KEY
+    WORKBENCH_OLLAMA_PORT
+)
+for name in "${required[@]}"; do
+    if [[ -z "${!name:-}" ]]; then
+        echo "Missing $name in $ENV_FILE" >&2
+        exit 1
+    fi
+done
+
+WORKBENCH_MODEL="${WORKBENCH_MODEL:-gemma4:31b}"
+WORKBENCH_LOCAL_PORT="${WORKBENCH_LOCAL_PORT:-11435}"
+TARGET="$WORKBENCH_SSH_USER@$WORKBENCH_SSH_HOST"
+SSH=(
+    ssh
+    -p "$WORKBENCH_SSH_PORT"
+    -i "$WORKBENCH_SSH_KEY"
+    "$TARGET"
+)
+
+usage() {
+    cat <<'EOF'
+Usage: etv-workbench <command>
+
+Commands:
+  check       Verify passwordless SSH, GPUs, Ollama, and installed models.
+  shell       Open an interactive SSH session.
+  tunnel      Forward local port 11435 (or WORKBENCH_LOCAL_PORT) to Ollama.
+  test        Verify the forwarded Ollama endpoint.
+  gpu         Show remote GPU state.
+  models      List remote Ollama models.
+  running     Show models currently loaded by remote Ollama.
+  model       Show the configured model and its Modelfile.
+  fingerprint Print the remote SSH host-key fingerprints for verification.
+  help        Show this message.
+
+Set ETV_WORKBENCH_ENV to use a different environment file.
+EOF
+}
+
+case "${1:-help}" in
+    check)
+        "${SSH[@]:0:1}" -o BatchMode=yes "${SSH[@]:1}" \
+            'hostname; nvidia-smi; ollama --version; ollama list'
+        ;;
+    shell)
+        exec "${SSH[@]}"
+        ;;
+    tunnel)
+        echo "Forwarding http://127.0.0.1:$WORKBENCH_LOCAL_PORT to workbench Ollama."
+        echo "Keep this terminal open; press Ctrl+C to close the tunnel."
+        exec ssh -N \
+            -p "$WORKBENCH_SSH_PORT" \
+            -i "$WORKBENCH_SSH_KEY" \
+            -L "$WORKBENCH_LOCAL_PORT:127.0.0.1:$WORKBENCH_OLLAMA_PORT" \
+            "$TARGET"
+        ;;
+    test)
+        curl -fsS "http://127.0.0.1:$WORKBENCH_LOCAL_PORT/api/tags" >/dev/null
+        echo "Workbench Ollama reachable on http://127.0.0.1:$WORKBENCH_LOCAL_PORT"
+        ;;
+    gpu)
+        "${SSH[@]}" nvidia-smi
+        ;;
+    models)
+        "${SSH[@]}" ollama list
+        ;;
+    running)
+        "${SSH[@]}" ollama ps
+        ;;
+    model)
+        printf 'Configured model: %s\n' "$WORKBENCH_MODEL"
+        "${SSH[@]}" ollama show "$WORKBENCH_MODEL" --modelfile
+        ;;
+    fingerprint)
+        ssh-keyscan -p "$WORKBENCH_SSH_PORT" "$WORKBENCH_SSH_HOST" 2>/dev/null \
+            | ssh-keygen -lf -
+        ;;
+    help|-h|--help)
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
