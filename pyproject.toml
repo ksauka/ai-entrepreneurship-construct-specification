@@ -39,6 +39,9 @@ nlp = [
 viz = [
   "uvicorn>=0.23",
 ]
+providers = [
+  "google-genai>=1.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
