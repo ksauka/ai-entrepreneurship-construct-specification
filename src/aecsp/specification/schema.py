@@ -226,10 +226,42 @@ SPECIFICATION_PROBLEM_VALUES: tuple[str, ...] = (
     "construct fragmentation",
 )
 
+# Whether AI is the object of inquiry, an analytical method used by the
+# researchers, or both. This is distinct from the technical AI form recorded
+# in ``ai_type_form``.
+AI_STUDY_STATUS_COLUMN = "ai_method_or_phenomenon"
+AI_STUDY_STATUS_VALUES: tuple[str, ...] = (
+    "method",
+    "phenomenon",
+    "both",
+    "unclear",
+)
+
+AI_STUDY_STATUS_FIELD = SpecificationDimension(
+    id="ai_study_status",
+    label="AI Study Status",
+    column=AI_STUDY_STATUS_COLUMN,
+    graph_node_label="AIStudyStatus",
+    relationship_type="CLASSIFIES_AI_AS",
+    question=(
+        "Is AI the phenomenon being studied, a research method used by the "
+        "authors, both, or unclear from the available evidence?"
+    ),
+    allowed_values=AI_STUDY_STATUS_VALUES,
+)
+
+# The model protocol remains the seven evidence-bearing dimensions above.
+# Curation additionally reviews AI study status, which is a required analytic
+# classification but does not have its own model-generated evidence fields.
+CURATABLE_SPECIFICATION_FIELDS: tuple[SpecificationDimension, ...] = (
+    *SPECIFICATION_DIMENSIONS,
+    AI_STUDY_STATUS_FIELD,
+)
+
 # Additional paper-level indicator columns from the brief that support the
 # seven dimensions but are not graph dimension nodes themselves.
 AUXILIARY_COLUMNS: tuple[str, ...] = (
-    "ai_method_or_phenomenon",
+    AI_STUDY_STATUS_COLUMN,
     "process_sequence_specified",
     "ai_definition_present",
     "ai_distinction_present",

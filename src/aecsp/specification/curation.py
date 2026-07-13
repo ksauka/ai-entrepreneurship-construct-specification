@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from aecsp.specification.schema import SPECIFICATION_DIMENSIONS
+from aecsp.specification.schema import CURATABLE_SPECIFICATION_FIELDS
 
 DEFAULT_ACCEPT_THRESHOLD = 0.8
 
@@ -28,11 +28,14 @@ LLM_UNREVIEWED = "llm_unreviewed"
 def load_coded_records(cache_dir: Path) -> list[dict[str, Any]]:
     """All coded papers for one model, straight from the per-paper cache."""
 
-    return [
-        json.loads(path.read_text(encoding="utf-8"))
-        for path in sorted(cache_dir.glob("*.json"))
-        if path.name != "protocol_manifest.json"
-    ]
+    records = []
+    for path in sorted(cache_dir.glob("*.json")):
+        if path.name == "protocol_manifest.json":
+            continue
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if "paper_id" in record:
+            records.append(record)
+    return records
 
 
 def is_auto_accepted(
@@ -94,8 +97,10 @@ def build_review_queue(
 
     overrides = overrides or empty_overrides()
     queue: list[dict[str, Any]] = []
-    for dimension in SPECIFICATION_DIMENSIONS:
+    for dimension in CURATABLE_SPECIFICATION_FIELDS:
         column = dimension.column
+        if not any(column in record for record in records):
+            continue
         if column in overrides["dimension_deferrals"]:
             continue
         items = []
@@ -112,7 +117,17 @@ def build_review_queue(
                     "question": dimension.question,
                     "allowed_values": list(dimension.allowed_values),
                     "code": record.get(column, ""),
-                    "evidence": record.get(f"{column}_evidence", ""),
+                    "evidence": record.get(
+                        f"{column}_evidence",
+                        " | ".join(
+                            value
+                            for value in (
+                                record.get("ai_role_function_evidence", ""),
+                                record.get("ai_type_form_evidence", ""),
+                            )
+                            if value
+                        ),
+                    ),
                     "evidence_type": record.get(f"{column}_evidence_type", ""),
                     "confidence": record.get(f"{column}_confidence"),
                 }
@@ -159,7 +174,9 @@ def curated_frame(
     rows = []
     for record in records:
         row = dict(record)
-        for dimension in SPECIFICATION_DIMENSIONS:
+        for dimension in CURATABLE_SPECIFICATION_FIELDS:
+            if dimension.column not in record:
+                continue
             code, status = curation_status(record, dimension.column, overrides, threshold)
             row[dimension.column] = code
             row[f"{dimension.column}_curation"] = status
@@ -175,7 +192,9 @@ def status_report(
     """Per-dimension counts of each curation status."""
 
     rows = []
-    for dimension in SPECIFICATION_DIMENSIONS:
+    for dimension in CURATABLE_SPECIFICATION_FIELDS:
+        if not any(dimension.column in record for record in records):
+            continue
         counts = {
             AUTO_ACCEPTED: 0,
             HUMAN_ACCEPTED: 0,

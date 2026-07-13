@@ -18,6 +18,11 @@ Their role is now reference and migration material. New implementation should ha
 
 ETV_V2 represents each paper as a query-aware, topic-aware, and specification-coded node in a knowledge graph. The platform should let a researcher inspect how AI is specified across journals, authors, topics, search-query subsets, VOS clusters, years, and individual papers, then identify convergence, divergence, construct contrast, and recurring specification failures. The July 2026 source searches are recorded as Query 1 = 29,294 records, Query 2 = 818 records, Query 3 = 1,097 records, and Query 4 = 1,509 records before merge and deduplication.
 
+Type/form uses two separate paper-level columns. `ai_method_or_phenomenon`
+identifies whether AI is the phenomenon studied, a research method, both, or
+unclear; `ai_type_form` identifies the technical form. Both are preserved in
+combined and curated datasets.
+
 This is not the old SKOS ontology pipeline. It is also not only the old ESD dashboard. It is a theory-elaboration evidence system built from bibliometric data.
 
 ## Clean Structure
@@ -108,13 +113,20 @@ Run the contract tests with:
 pytest
 ```
 
-## Next Refactor Step
+## Current Status and Next Step
 
-The next practical move is to migrate one vertical slice:
+Corpus construction and full Mini/Nano coding are complete. Claude and Gemini
+completed the frozen proprietary validation target, probability-sample IRR is
+built, and the canonical full study dataset is
+`data/processed/analysis/primary_analysis_dataset.csv` (22,345 papers).
 
-1. Load Query 1-4 Scopus files.
-2. Deduplicate them into a master CSV with `in_query_1` to `in_query_4`, `query_count`, and `query_sources`.
-3. Add topic/keyphrase columns.
-4. Add specification columns.
-5. Build a small graph export from those fields.
-6. Point the visualization at the new graph contract.
+The next executable stage is five-scope topic optimization:
+
+```bash
+python scripts/run_topics.py --optimize-only
+```
+
+Review and explicitly approve its recommendations before running
+`python scripts/run_topics.py --use-optimized`. Approved topics are then joined
+to the canonical dataset for Stage 4 contrasts, after which the graph/app are
+run and verified. `docs/RUNBOOK.md` is the authoritative execution order.

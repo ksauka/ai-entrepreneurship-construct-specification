@@ -115,3 +115,29 @@ def test_unreviewed_below_threshold_is_marked():
     record = make_record(ai_type_form_confidence=0.4)
     frame = curated_frame([record], empty_overrides())
     assert frame.iloc[0]["ai_type_form_curation"] == LLM_UNREVIEWED
+
+
+def test_study_status_is_preserved_and_human_curatable():
+    record = make_record(
+        ai_method_or_phenomenon="phenomenon",
+        ai_role_function_evidence="AI adoption changes venture decisions.",
+    )
+
+    queue = build_review_queue([record])
+    status_item = next(
+        item for item in queue if item["column"] == "ai_method_or_phenomenon"
+    )
+    assert status_item["code"] == "phenomenon"
+    assert status_item["allowed_values"] == ["method", "phenomenon", "both", "unclear"]
+
+    overrides = empty_overrides()
+    record_decision(
+        overrides,
+        "eid:1",
+        "ai_method_or_phenomenon",
+        "override",
+        code="both",
+    )
+    row = curated_frame([record], overrides).iloc[0]
+    assert row["ai_method_or_phenomenon"] == "both"
+    assert row["ai_method_or_phenomenon_curation"] == HUMAN_OVERRIDDEN

@@ -16,6 +16,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "interim" / "human_validation"
 DIMENSIONS = (
+    "ai_method_or_phenomenon",
     "ai_role_function",
     "ai_type_form",
     "ai_mechanism",
