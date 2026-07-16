@@ -75,6 +75,11 @@ def convergence_by(
             "paper_count": conv.paper_count,
             "overall_specification_clarity_score": conv.overall_specification_clarity_score,
             "fragmentation_score": conv.fragmentation_score,
+            # Public-facing aliases avoid presenting category concentration as
+            # substantive specification quality. The older names are retained
+            # for backward compatibility with exported analyses.
+            "mean_concentration_score": conv.overall_specification_clarity_score,
+            "code_diversity_score": conv.fragmentation_score,
         }
         for column, score in conv.dimension_scores.items():
             row[f"{column}_convergence_score"] = score
@@ -87,6 +92,47 @@ def convergence_by(
     return result
 
 
+def dimension_profile(frame: pd.DataFrame, column: str) -> dict:
+    """Return a transparent categorical distribution behind one score."""
+
+    if column not in frame.columns:
+        return {
+            "column": column,
+            "coded_papers": 0,
+            "category_count": 0,
+            "dominant_value": None,
+            "dominant_count": 0,
+            "dominant_share": 0.0,
+            "normalized_entropy": 0.0,
+            "concentration_score": 0.0,
+            "dispersion_score": 0.0,
+            "categories": [],
+        }
+    values = frame[column].fillna("").astype(str).str.strip()
+    clean = values[values.ne("")]
+    metric = summarize_distribution(clean.tolist())
+    counts = clean.value_counts()
+    return {
+        "column": column,
+        "coded_papers": metric.total,
+        "category_count": metric.unique_values,
+        "dominant_value": metric.dominant_value,
+        "dominant_count": int(counts.iloc[0]) if not counts.empty else 0,
+        "dominant_share": round(metric.dominant_share, 6),
+        "normalized_entropy": round(metric.entropy, 6),
+        "concentration_score": round(metric.convergence_score, 6),
+        "dispersion_score": round(1.0 - metric.convergence_score, 6),
+        "categories": [
+            {
+                "value": str(value),
+                "count": int(count),
+                "share": round(int(count) / metric.total, 6) if metric.total else 0.0,
+            }
+            for value, count in counts.items()
+        ],
+    }
+
+
 def construct_contrast(
     frame: pd.DataFrame, shared_column: str, contrast_column: str
 ) -> pd.DataFrame:
@@ -95,7 +141,7 @@ def construct_contrast(
     Returns one row per shared value that shows >1 distinct contrast value,
     with counts and example paper_ids per contrast value for evidence panels.
     A high contrast_value_count means the same, e.g., AI type is being given
-    many different roles/mechanisms — a construct contrast hotspot.
+    many different roles/mechanisms: a construct contrast hotspot.
     """
 
     for column in (shared_column, contrast_column):

@@ -17,6 +17,30 @@
     "construct_clarity_score_primary": false,
     "entropy_interpretation": "category_concentration_only"
   },
+  "topic_modeling": {
+    "amendment_status": "exploratory_post_optimization_2026-07-15",
+    "selection_status": "human_approved_2026-07-15",
+    "primary_model_scope": "global_full_corpus",
+    "native_query_models_role": "sensitivity_only",
+    "minimum_topics_for_automatic_recommendation": 5,
+    "native_candidate_grid": "requested grid supplemented by approximately 2% and 3% of each query scope, clamped to 8-30 papers per minimum cluster",
+    "candidate_audit": "top terms, topic sizes, and three centroid-nearest representative papers per topic",
+    "human_parameter_approval_required": true,
+    "approved_min_topic_sizes": {
+      "full_corpus": 50,
+      "query_1": 50,
+      "query_2": 8,
+      "query_3": 18,
+      "query_4": 20
+    },
+    "approved_topic_counts_from_grid": {
+      "full_corpus": 53,
+      "query_1": 50,
+      "query_2": 13,
+      "query_3": 6,
+      "query_4": 8
+    }
+  },
   "primary_scopes": ["full_corpus"],
   "sensitivity_scopes": ["strict_ai_ent", "query_1", "query_2", "query_3", "query_4"],
   "manifests": {

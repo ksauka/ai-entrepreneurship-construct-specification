@@ -68,21 +68,22 @@ Stage 3     - Serve analytics and visualization
 
 ## Core Knowledge Graph
 
-The MVP keeps the existing workable graph path:
+The graph is built from the checksum-verified primary analysis dataset and uses
+one database for every analytical scope. Query membership flags filter the same
+publication nodes into `full_corpus`, `query_1` to `query_4`, and the optional
+`strict_ai_ent` view. The locked core paths are:
 
 ```text
 (:Author)-[:WROTE]->(:Publication)
-(:Publication)-[:HAS_TOPIC]->(:Topic)
-```
-
-It extends that path into the target ETV_V2 graph:
-
-```text
+(:Author)-[:CO_AUTHORED_WITH]->(:Author)
+(:Author)-[:AFFILIATED_WITH]->(:Institution)
 (:Publication)-[:CAPTURED_BY]->(:SearchQuery)
 (:Publication)-[:PUBLISHED_IN]->(:Journal)
 (:Publication)-[:PUBLISHED_IN_YEAR]->(:Year)
 (:Publication)-[:HAS_TOPIC]->(:Topic)
-(:Publication)-[:IN_VOS_CLUSTER]->(:VOSCluster)
+(:Publication)-[:HAS_KEYWORD]->(:Keyword)
+(:Publication)-[:REFERENCES]->(:Reference)
+(:Publication)-[:CITES]->(:Publication)
 (:Publication)-[:HAS_SPECIFICATION]->(:SpecificationProfile)
 
 (:SpecificationProfile)-[:SPECIFIES_ROLE]->(:AIRole)
@@ -95,7 +96,20 @@ It extends that path into the target ETV_V2 graph:
 (:SpecificationProfile)-[:HAS_SPECIFICATION_PROBLEM]->(:SpecificationProblem)
 ```
 
-BERTopic topics, KeyBERT phrases, and extracted keywords can be stored as `Topic` nodes with relationship metadata. AI specification values must stay in the `SpecificationProfile` layer because they are theoretical coding variables, not keyword outputs.
+BERTopic assignments use `Topic`. Author, index, and extracted keywords use the
+separate `Keyword` label. AI specification values stay below
+`SpecificationProfile` because they are theoretical coding variables, not topic
+or keyword outputs. The contract contains no `VOSCluster` or SKOS nodes.
+
+The `/knowledge-graph` interface starts from a bounded scoped seed and expands
+lazily. Single-click focuses on direct neighbors; double-click expands one hop.
+Node colors come only from the frontend `LABEL_COLOURS` dictionary. When Neo4j
+is unavailable, the page shows a bounded dataframe seed rather than failing.
+
+Neo4j loading uses administrative credentials, but the web application accepts
+only separate `NEO4J_APP_USER` credentials. A genuine database-enforced reader
+role requires Neo4j Enterprise; Community Edition has no roles. Exact setup,
+load, verification, and fallback commands are in `docs/RUNBOOK.md`.
 
 ## Current Contracts
 
@@ -120,13 +134,94 @@ completed the frozen proprietary validation target, probability-sample IRR is
 built, and the canonical full study dataset is
 `data/processed/analysis/primary_analysis_dataset.csv` (22,345 papers).
 
-The next executable stage is five-scope topic optimization:
+Five-scope topic optimization and final training are complete. Stage 4 uses the
+53-topic Full Corpus model and the independently fitted 50-, 13-, 6-, and
+8-topic Query 1-4 models. The next gate is researcher interpretation of all 130
+scope-topic labels through the authenticated `/topic-review` page. Topic names
+can be inspected, renamed, revised, and approved in the platform using their top
+terms and centroid-nearest papers. `docs/RUNBOOK.md` is the authoritative
+execution order.
+
+Saved labels update the Topic nodes in the existing Knowledge Graph without
+changing the stable `scope:topic_id` identity. Select the same scope in the
+Knowledge Graph and enable Topic nodes to inspect their connected papers. The
+scope-specific figure axes also use the latest saved labels. The review page
+downloads reviewed topic tables, figures, graph files, or a complete
+checksummed release for the selected scope.
+
+## Dashboard and Supervisor Sharing
+
+Run the local dashboard through the environment-aware launcher:
 
 ```bash
-python scripts/run_topics.py --optimize-only
+bash scripts/serve_dashboard.sh
 ```
 
-Review and explicitly approve its recommendations before running
-`python scripts/run_topics.py --use-optimized`. Approved topics are then joined
-to the canonical dataset for Stage 4 contrasts, after which the graph/app are
-run and verified. `docs/RUNBOOK.md` is the authoritative execution order.
+Open `http://127.0.0.1:8321`. The launcher binds to localhost by default and
+does not expose the application publicly. The standalone observed-composition
+view is available at `http://127.0.0.1:8321/composition`; it recalculates every
+panel from the active dataset after applying the selected dataset scope and
+study-status filter.
+
+The methodological topic-review interface is available at
+`http://127.0.0.1:8321/topic-review`. It presents the data-specific figures,
+terms, representative papers and auditable label decisions without requiring
+the researcher to edit repository files. Label writes require dashboard
+authentication. Derived outputs are regenerated only after all 130 labels are
+approved.
+
+Deployment templates under `deploy/` mirror the Apartment Finder pattern:
+
+- `etv-dashboard.service` keeps Uvicorn running as a user service.
+- `etv-dashboard-tunnel-quick.service` creates a temporary public
+  `trycloudflare.com` address that can be copied and shared directly. This is
+  the same account-free design used by Apartment Finder: no domain, account or
+  tunnel token is required. The dashboard applies HTTP Basic authentication to
+  every page, asset and API endpoint before tunnel traffic is accepted. The
+  random URL changes whenever the tunnel is recreated.
+
+Create credentials outside the repository before installing the services:
+
+```bash
+mkdir -p ~/.config/etv-dashboard
+chmod 700 ~/.config/etv-dashboard
+
+cat > ~/.config/etv-dashboard/auth.env <<'EOF'
+ETV_DASHBOARD_USERNAME=supervisor
+ETV_DASHBOARD_PASSWORD=replace-with-a-long-random-password
+EOF
+
+chmod 600 ~/.config/etv-dashboard/auth.env
+```
+
+Install and start the account-free services with:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/etv-dashboard.service ~/.config/systemd/user/
+cp deploy/etv-dashboard-tunnel-quick.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now etv-dashboard.service
+systemctl --user enable --now etv-dashboard-tunnel-quick.service
+```
+
+Open the generated URL and enter the configured username and password in the
+browser prompt. Share the link and password through separate channels. Quick
+Tunnels are free and account-free but are intended for temporary demonstration
+and development use; they provide no uptime guarantee.
+
+Print the shareable URL with:
+
+```bash
+bash scripts/dashboard_url.sh
+```
+
+The helper waits up to 30 seconds and reports only the URL created during the
+current WSL boot, preventing an obsolete URL from an earlier session from being
+shared. After the services have been enabled once, systemd starts the dashboard
+and creates a new Quick Tunnel whenever the WSL user-service manager starts.
+The site remains available only while the host, WSL environment, dashboard
+service, network connection, and tunnel are running. Laptop sleep, shutdown, or
+WSL termination makes the local deployment unavailable; use a named tunnel on
+a continuously running workbench or cloud VM when a permanent URL and persistent
+availability are required.

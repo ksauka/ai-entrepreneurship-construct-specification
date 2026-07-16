@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Observed Construct Composition</title>
+<link rel="stylesheet" href="/static/esd.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/citation.js?v=scopus-first-20260716"></script>
+</head>
+<body>
+<div class="container composition-container">
+  <header class="app-header">
+    <h1>Observed construct composition</h1>
+    <p>What the retrieved literature studies among papers where each construct dimension is observable.</p>
+    <nav class="nav-links">
+      <a class="nav-link" href="/">Analytics Dashboard</a>
+      <a class="nav-link active" href="/composition">Observed Composition</a>
+      <a class="nav-link" href="/topic-review">Topic Review</a>
+      <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
+      <a class="nav-link" href="/assistant">Assistant</a>
+    </nav>
+    <div class="toolbar">
+      <label>Dataset scope <select id="scope"></select></label>
+      <label>Coding model <select id="codingModel"></select></label>
+      <label>Study status
+        <select id="studyStatus">
+          <option value="all">All papers</option>
+          <option value="phenomenon">Phenomenon</option>
+          <option value="method">Method</option>
+          <option value="both">Both</option>
+        </select>
+      </label>
+      <label>Distribution
+        <select id="distributionView">
+          <option value="compare">Compare full and observed</option>
+          <option value="full">Full only</option>
+          <option value="observed">Observed only</option>
+        </select>
+      </label>
+      <span id="status" class="status-pill warn">loading</span>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>Research artifacts <span class="sub" id="artifactContext"></span></h2>
+    <div class="artifact-download-grid">
+      <button class="btn btn-outline" id="compositionReport" type="button">Generate filtered report</button>
+      <button class="btn btn-outline" type="button" data-composition-download="composition">Download composition data</button>
+      <button class="btn btn-outline" type="button" data-composition-download="irr">Download IRR tables</button>
+      <button class="btn" type="button" data-composition-download="release">Download complete release</button>
+    </div>
+  </section>
+
+  <div class="card composition-summary">
+    <div class="stat-grid">
+      <div class="stat-tile"><div class="n" id="filteredPapers">–</div><div class="l">Papers after filter</div></div>
+      <div class="stat-tile"><div class="n" id="modelPapers">–</div><div class="l">Model-coded papers</div></div>
+      <div class="stat-tile"><div class="n" id="scopePapers">–</div><div class="l">Papers in scope</div></div>
+      <div class="stat-tile"><div class="n" id="modelCoverage">–</div><div class="l">Model coverage</div></div>
+    </div>
+  </div>
+
+  <main class="composition-grid" id="compositionGrid"></main>
+
+  <section class="card">
+    <h2>Model inter-rater reliability <span class="sub">eight dimensions; six core</span></h2>
+    <div class="toolbar"><span id="irrStatus" class="status-pill warn">loading</span></div>
+    <p class="chart-note">Each cell compares a model pair on its exact common-paper intersection in the selected dataset scope. The study-status filter is not applied because study status is itself one of the rated dimensions.</p>
+    <div class="grid-2 irr-matrix-grid">
+      <div class="irr-matrix-card">
+        <h3>Mean exact agreement</h3>
+        <div class="irr-matrix-wrap" id="irrAgreementMatrix"></div>
+      </div>
+      <div class="irr-matrix-card">
+        <h3>Mean nominal Krippendorff alpha</h3>
+        <div class="irr-matrix-wrap" id="irrAlphaMatrix"></div>
+      </div>
+    </div>
+    <p class="chart-note">Matrix cells are arithmetic means across the six core dimensions and provide orientation only. The table reports all eight dimensions and identifies the two exploratory fields.</p>
+    <div class="topic-review-table-wrap">
+      <table class="composition-table">
+        <thead><tr><th>Model pair</th><th>Common papers</th><th>Dimension</th><th>Use</th><th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff alpha</th></tr></thead>
+        <tbody id="irrRows"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<aside id="panel" class="side-panel">
+  <span class="close" onclick="closePanel()">close</span>
+  <div id="panelBody"></div>
+</aside>
+
+<script>
+const api = async path => {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  return response.json();
+};
+const el = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>"]/g, character => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;",
+}[character]));
+const params = new URLSearchParams(window.location.search);
+let scope = params.get("scope") || "full_corpus";
+let codingModel = params.get("model") || "";
+let studyStatus = ["all", "phenomenon", "method", "both"].includes(params.get("study_status"))
+  ? params.get("study_status") : "all";
+let distributionView = ["compare", "full", "observed"].includes(params.get("distribution"))
+  ? params.get("distribution") : "compare";
+const EVIDENCE_LIMITS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 50000];
+const requestedEvidenceLimit = Number.parseInt(params.get("evidence_limit"), 10);
+let evidenceLimit = EVIDENCE_LIMITS.includes(requestedEvidenceLimit)
+  ? requestedEvidenceLimit : 100;
+let activeEvidence = null;
+let charts = [];
+
+async function init() {
+  const [health, scopes, models] = await Promise.all([
+    api("/api/health"),
+    api("/api/scopes"),
+    api("/api/specification/models"),
+  ]);
+  if (!scopes.some(item => item.id === scope)) scope = scopes[0]?.id || "full_corpus";
+  if (!models.some(item => item.id === codingModel)) codingModel = models[0]?.id || "";
+  el("scope").innerHTML = scopes.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${item.papers.toLocaleString()})</option>`
+  ).join("");
+  el("codingModel").innerHTML = models.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${(item.coverage_share * 100).toFixed(2)}% coverage)</option>`
+  ).join("");
+  el("scope").value = scope;
+  el("codingModel").value = codingModel;
+  el("studyStatus").value = studyStatus;
+  el("distributionView").value = distributionView;
+  el("status").className = "status-pill " + (health.has_specifications ? "ok" : "warn");
+  el("status").textContent = `${health.papers_loaded.toLocaleString()} papers · live dataset`;
+  el("scope").onchange = event => {
+    scope = event.target.value;
+    updateLocation();
+    Promise.all([render(), renderIrr()]);
+  };
+  el("codingModel").onchange = event => {
+    codingModel = event.target.value;
+    updateLocation();
+    render();
+  };
+  el("studyStatus").onchange = event => {
+    studyStatus = event.target.value;
+    updateLocation();
+    render();
+  };
+  el("distributionView").onchange = event => {
+    distributionView = event.target.value;
+    updateLocation();
+    render();
+  };
+  el("compositionReport").onclick = openCompositionReport;
+  document.querySelectorAll("[data-composition-download]").forEach(button => {
+    button.onclick = () => downloadCompositionBundle(button.dataset.compositionDownload);
+  });
+  updateLocation();
+  await Promise.all([render(), renderIrr()]);
+}
+
+function updateLocation() {
+  const query = new URLSearchParams({
+    scope,
+    model: codingModel,
+    study_status: studyStatus,
+    distribution: distributionView,
+    evidence_limit: String(evidenceLimit),
+  });
+  window.history.replaceState({}, "", `/composition?${query}`);
+}
+
+async function render() {
+  el("status").textContent = "recalculating from dataset…";
+  const query = new URLSearchParams({study_status: studyStatus, model: codingModel});
+  const data = await api(`/api/scope/${encodeURIComponent(scope)}/composition?${query}`);
+  el("filteredPapers").textContent = data.filtered_papers.toLocaleString();
+  el("modelPapers").textContent = data.scope_papers.toLocaleString();
+  el("scopePapers").textContent = data.corpus_scope_papers.toLocaleString();
+  el("modelCoverage").textContent = `${(data.model_coverage_share * 100).toFixed(2)}%`;
+  const statusLabel = studyStatus === "all" ? "all papers" : studyStatus;
+  const distributionLabel = el("distributionView").selectedOptions[0].textContent;
+  el("artifactContext").textContent = `${data.model_label}: ${statusLabel}: ${distributionLabel}`;
+  updateStatusOptions(data);
+  charts.forEach(chart => chart.destroy());
+  charts = [];
+  el("compositionGrid").innerHTML = data.panels.map((panel, index) => panelMarkup(panel, index)).join("");
+  data.panels.forEach((panel, index) => renderPanelChart(panel, index));
+  wireCategoryRows();
+  el("status").className = "status-pill ok";
+  el("status").textContent = `${data.model_label} · ${data.filtered_papers.toLocaleString()} filtered papers · calculated live`;
+}
+
+async function renderIrr() {
+  el("irrStatus").className = "status-pill warn";
+  el("irrStatus").textContent = "calculating";
+  const data = await api(`/api/scope/${encodeURIComponent(scope)}/composition/irr/matrix`);
+  el("irrAgreementMatrix").innerHTML = irrMatrixMarkup(data, "mean_percent_agreement", true);
+  el("irrAlphaMatrix").innerHTML = irrMatrixMarkup(data, "mean_krippendorff_alpha", false);
+  el("irrRows").innerHTML = data.pairs.flatMap(pair => pair.dimensions.map(item =>
+    `<tr><td>${esc(pair.left_label)} / ${esc(pair.right_label)}</td>` +
+    `<td>${pair.intersection_papers.toLocaleString()}</td>` +
+    `<td>${esc(item.label)}</td><td><span class="pill">${esc(item.classification)}</span></td>` +
+    `<td>${item.comparable_papers.toLocaleString()}</td>` +
+    `<td>${item.percent_agreement === null ? "Not estimable" : `${(item.percent_agreement * 100).toFixed(2)}%`}</td>` +
+    `<td>${item.krippendorff_alpha === null ? "Not estimable" : item.krippendorff_alpha.toFixed(2)}</td></tr>`
+  )).join("");
+  el("irrStatus").className = "status-pill ok";
+  el("irrStatus").textContent = `${data.models.length.toLocaleString()} models · ${data.pairs.length.toLocaleString()} pairs`;
+}
+
+function irrMatrixMarkup(data, metric, percent) {
+  const pairLookup = new Map();
+  data.pairs.forEach(pair => {
+    pairLookup.set([pair.left_model, pair.right_model].sort().join("::"), pair);
+  });
+  const headings = data.models.map(item => `<th>${esc(item.label)}</th>`).join("");
+  const rows = data.models.map(left => {
+    const cells = data.models.map(right => {
+      const diagonal = left.id === right.id;
+      const pair = diagonal ? null : pairLookup.get([left.id, right.id].sort().join("::"));
+      const value = diagonal ? 1 : pair?.[metric];
+      const displayed = value === null || value === undefined
+        ? "N/A" : (percent ? `${(value * 100).toFixed(2)}%` : value.toFixed(2));
+      const background = value === null || value === undefined
+        ? "#eef1f4" : irrCellColour(value, metric);
+      const title = diagonal
+        ? `${left.label}: self-comparison`
+        : `${left.label} / ${right.label}: ${pair?.intersection_papers?.toLocaleString() || 0} common papers`;
+      return `<td class="irr-heat-cell" style="background:${background}" title="${esc(title)}">${displayed}</td>`;
+    }).join("");
+    return `<tr><th>${esc(left.label)}</th>${cells}</tr>`;
+  }).join("");
+  return `<table class="irr-matrix"><thead><tr><th>Model</th>${headings}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function irrCellColour(value, metric) {
+  if (metric === "mean_krippendorff_alpha" && value < 0) {
+    const strength = Math.min(1, Math.abs(value));
+    return `rgba(182,75,75,${(0.18 + strength * 0.68).toFixed(2)})`;
+  }
+  const bounded = Math.max(0, Math.min(1, value));
+  return `rgba(47,158,114,${(0.12 + bounded * 0.76).toFixed(2)})`;
+}
+
+function compositionArtifactQuery() {
+  return new URLSearchParams({
+    model: codingModel,
+    study_status: studyStatus,
+    distribution: distributionView,
+  });
+}
+
+function openCompositionReport() {
+  window.open(`/api/scope/${encodeURIComponent(scope)}/composition/report?${compositionArtifactQuery()}`, "_blank");
+}
+
+function downloadCompositionBundle(bundle) {
+  window.location.assign(
+    `/api/scope/${encodeURIComponent(scope)}/composition/download/${encodeURIComponent(bundle)}?${compositionArtifactQuery()}`
+  );
+}
+
+function updateStatusOptions(data) {
+  const counts = new Map(data.status_options.map(item => [item.value, item.papers]));
+  [...el("studyStatus").options].forEach(option => {
+    const label = option.value === "all" ? "All papers" : option.value[0].toUpperCase() + option.value.slice(1);
+    const count = option.value === "all" ? data.scope_papers : (counts.get(option.value) || 0);
+    option.textContent = `${label} (${count.toLocaleString()})`;
+  });
+  el("studyStatus").value = studyStatus;
+}
+
+function panelMarkup(panel, index) {
+  const observedPercent = panel.observed_share * 100;
+  const tableCategories = distributionView === "observed"
+    ? panel.comparison_categories.filter(category => category.is_observed)
+    : panel.comparison_categories;
+  const chartCategories = panelChartCategories(panel);
+  let denominator;
+  let heading;
+  let rows;
+  if (distributionView === "full") {
+    denominator = `Full n = ${panel.full_n.toLocaleString()}`;
+    heading = "<tr><th>Category</th><th>Papers</th><th>Share of full</th></tr>";
+    rows = tableCategories.map(category =>
+      categoryRow(panel, category, category.full_count, category.full_share, "full")
+    ).join("");
+  } else if (distributionView === "observed") {
+    denominator = `Observed n = ${panel.observed_n.toLocaleString()} (${observedPercent.toFixed(2)}% of full)`;
+    heading = "<tr><th>Observed category</th><th>Papers</th><th>Share of observed</th></tr>";
+    rows = tableCategories.map(category =>
+      categoryRow(panel, category, category.observed_count, category.observed_share, "observed")
+    ).join("");
+  } else {
+    denominator = `Full n = ${panel.full_n.toLocaleString()}; observed n = ${panel.observed_n.toLocaleString()} ` +
+      `(${observedPercent.toFixed(2)}% observable)`;
+    heading = "<tr><th>Category</th><th>Full papers</th><th>Full share</th><th>Observed papers</th><th>Observed share</th></tr>";
+    rows = tableCategories.map(category =>
+      `<tr class="composition-category" data-column="${esc(panel.column)}" data-value="${esc(category.raw_value)}" data-count="${category.full_count}">
+        <td><button class="category-link" type="button">${esc(category.value)}</button></td>
+        <td>${category.full_count.toLocaleString()}</td>
+        <td>${(category.full_share * 100).toFixed(2)}%</td>
+        <td>${category.is_observed ? category.observed_count.toLocaleString() : "Excluded"}</td>
+        <td>${category.observed_share === null ? "Excluded" : `${(category.observed_share * 100).toFixed(2)}%`}</td>
+      </tr>`
+    ).join("");
+  }
+  return `<section class="card composition-panel">
+    <h2>${esc(panel.label)}</h2>
+    <p class="panel-denominator">${denominator}</p>
+    <div class="composition-chart" style="height:${Math.max(280, chartCategories.length * 48 + 110)}px">
+      <canvas id="compositionChart${index}"></canvas>
+    </div>
+    <div class="topic-review-table-wrap"><table class="composition-table composition-comparison-table"><tbody>
+      ${heading}${rows}
+    </tbody></table></div>
+  </section>`;
+}
+
+function categoryRow(panel, category, count, share, distribution) {
+  return `<tr class="composition-category" data-column="${esc(panel.column)}" data-value="${esc(category.raw_value)}" data-count="${count}" data-distribution="${distribution}">
+    <td><button class="category-link" type="button">${esc(category.value)}</button></td>
+    <td>${count.toLocaleString()}</td>
+    <td>${(share * 100).toFixed(2)}%</td>
+  </tr>`;
+}
+
+function panelChartCategories(panel) {
+  const categories = panel.chart_comparison_categories || panel.comparison_categories;
+  return distributionView === "observed"
+    ? categories.filter(category => category.is_observed)
+    : categories;
+}
+
+function renderPanelChart(panel, index) {
+  const context = el(`compositionChart${index}`);
+  const chartCategories = panelChartCategories(panel);
+  if (!context || !chartCategories.length) return;
+  const datasets = [];
+  if (distributionView !== "observed") {
+    datasets.push({
+      label: `Full distribution (n = ${panel.full_n.toLocaleString()})`,
+      data: chartCategories.map(item => Number((item.full_share * 100).toFixed(2))),
+      backgroundColor: "#9aa9b8",
+      borderColor: "#7d8c9b",
+      borderWidth: 1,
+    });
+  }
+  if (distributionView !== "full") {
+    datasets.push({
+      label: `Observed distribution (n = ${panel.observed_n.toLocaleString()})`,
+      data: chartCategories.map(item => item.observed_share === null ? null : Number((item.observed_share * 100).toFixed(2))),
+      backgroundColor: "#327bd3",
+      borderColor: "#2569b8",
+      borderWidth: 1,
+    });
+  }
+  const values = datasets.flatMap(dataset => dataset.data.filter(value => value !== null));
+  const maximum = Math.min(100, Math.max(...values) * 1.16);
+  const chart = new Chart(context, {
+    type: "bar",
+    data: {
+      labels: chartCategories.map(item => item.value),
+      datasets,
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display: distributionView === "compare", position: "bottom"},
+        tooltip: {callbacks: {label: item => `${item.dataset.label}: ${item.raw.toFixed(2)}%`}},
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          suggestedMax: maximum,
+          max: maximum,
+          ticks: {callback: value => `${Number(value).toFixed(2)}%`},
+          title: {display: true, text: distributionView === "full" ? "% of full coded papers" :
+            (distributionView === "observed" ? "% among observed codes" : "% of corresponding denominator")},
+        },
+        y: {ticks: {autoSkip: false}},
+      },
+      onClick: (_event, elements) => {
+        if (!elements.length) return;
+        const category = chartCategories[elements[0].index];
+        const count = distributionView === "observed" ? category.observed_count : category.full_count;
+        showEvidence(panel.column, category.raw_value, panel.label, count);
+      },
+    },
+  });
+  charts.push(chart);
+}
+
+function wireCategoryRows() {
+  document.querySelectorAll(".composition-category").forEach(row => {
+    row.onclick = () => showEvidence(
+      row.dataset.column,
+      row.dataset.value,
+      row.closest(".composition-panel").querySelector("h2").childNodes[0].textContent.trim(),
+      Number(row.dataset.count),
+    );
+  });
+}
+
+async function showEvidence(column, value, panelLabel, count) {
+  activeEvidence = {column, value, panelLabel, count};
+  const displayValue = value || "Missing value";
+  const query = new URLSearchParams({
+    study_status: studyStatus,
+    model: codingModel,
+    column,
+    value,
+    limit: String(evidenceLimit),
+  });
+  el("panel").classList.add("open");
+  el("panelBody").innerHTML = `<h2>${esc(panelLabel)}: ${esc(displayValue)}</h2><p class="muted">Loading evidence papers…</p>`;
+  const papers = await api(`/api/scope/${encodeURIComponent(scope)}/composition/evidence?${query}`);
+  const filterLabel = studyStatus === "all" ? "all study statuses" : studyStatus;
+  const showingAll = papers.length >= count;
+  const limitOptions = EVIDENCE_LIMITS.map(limit =>
+    `<option value="${limit}" ${limit === evidenceLimit ? "selected" : ""}>` +
+    `${limit === 50000 ? "All" : limit.toLocaleString()}</option>`
+  ).join("");
+  const displaySummary = showingAll
+    ? `Showing all ${count.toLocaleString()} supporting papers under ${esc(filterLabel)}.`
+    : `Showing ${papers.length.toLocaleString()} of ${count.toLocaleString()} supporting papers under ${esc(filterLabel)}.`;
+  el("panelBody").innerHTML =
+    `<h2>${esc(panelLabel)}: ${esc(displayValue)}</h2>` +
+    `<p class="chart-note">${displaySummary}</p>` +
+    `<div class="evidence-controls"><label for="compositionEvidenceLimit">Papers displayed</label>` +
+    `<select id="compositionEvidenceLimit">${limitOptions}</select></div>` +
+    papers.map(paperEvidenceItem).join("");
+  el("compositionEvidenceLimit").onchange = event => {
+    evidenceLimit = Number.parseInt(event.target.value, 10);
+    updateLocation();
+    showEvidence(
+      activeEvidence.column,
+      activeEvidence.value,
+      activeEvidence.panelLabel,
+      activeEvidence.count,
+    );
+  };
+}
+
+function closePanel() { el("panel").classList.remove("open"); }
+init().catch(error => {
+  el("status").className = "status-pill bad";
+  el("status").textContent = error.message;
+});
+</script>
+</body>
+</html>

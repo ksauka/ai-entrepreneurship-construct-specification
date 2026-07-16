@@ -20,6 +20,7 @@ dependencies = [
   "pandas>=2.0",
   "pydantic>=2.0",
   "fastapi>=0.100",
+  "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -48,4 +49,4 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [".", "src"]

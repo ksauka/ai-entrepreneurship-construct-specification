@@ -1,0 +1,18 @@
+[Unit]
+Description=ETV_V2 research analytics dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/ETV_V2
+Environment=ETV_DASHBOARD_REQUIRE_AUTH=1
+EnvironmentFile=%h/.config/etv-dashboard/auth.env
+ExecStart=%h/projects/ETV_V2/scripts/serve_dashboard.sh
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

@@ -91,6 +91,17 @@ def esc(text: object) -> str:
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def markdown_2dp(frame: pd.DataFrame) -> str:
+    """Render floating-point report values consistently to two decimals."""
+
+    displayed = frame.copy()
+    for column in displayed.select_dtypes(include=["floating"]).columns:
+        displayed[column] = displayed[column].map(
+            lambda value: "—" if pd.isna(value) else f"{value:.2f}"
+        )
+    return displayed.to_markdown(index=False, disable_numparse=True)
+
+
 def bar_svg(rows: list[tuple[str, float]], title: str, path: Path, *, maximum: float = 1.0) -> None:
     width, left, right, top, row_h = 980, 300, 60, 75, 28
     height = top + len(rows) * row_h + 55
@@ -104,7 +115,7 @@ def bar_svg(rows: list[tuple[str, float]], title: str, path: Path, *, maximum: f
         parts += [f'<text x="{left-10}" y="{y+17}" text-anchor="end" font-family="sans-serif" font-size="12">{esc(label)}</text>',
                   f'<rect x="{left}" y="{y+3}" width="{plot_w}" height="18" fill="#eef2f7"/>',
                   f'<rect x="{left}" y="{y+3}" width="{bar_w}" height="18" fill="#3973ac"/>',
-                  f'<text x="{left+bar_w+7}" y="{y+17}" font-family="sans-serif" font-size="12">{value:.3f}</text>']
+                  f'<text x="{left+bar_w+7}" y="{y+17}" font-family="sans-serif" font-size="12">{value:.2f}</text>']
     parts.append('</svg>')
     path.write_text("\n".join(parts), encoding="utf-8")
 
@@ -129,7 +140,7 @@ def heatmap_svg(frame: pd.DataFrame, value: str, title: str, path: Path) -> None
             blue = int(245 - 150 * intensity)
             fill = f'rgb({blue},{blue+5},{245})'
             x, y = left + col * size, top + row * size
-            label = "—" if pd.isna(metric) else f"{metric:.3f}"
+            label = "—" if pd.isna(metric) else f"{metric:.2f}"
             parts += [f'<rect x="{x}" y="{y}" width="{size}" height="{size}" fill="{fill}" stroke="white"/>',
                       f'<text x="{x+size/2}" y="{y+size/2+5}" text-anchor="middle" font-family="sans-serif" font-size="15">{label}</text>']
     parts.append('</svg>')
@@ -321,22 +332,48 @@ def main() -> None:
                 rows.append((f"{category} · {model}", float(match.weighted_prevalence.iloc[0]) if len(match) else 0.0))
         bar_svg(rows, f"Weighted distribution: {dimension}", FIGURES / f"distribution_{dimension}.svg")
 
+    generated_at = datetime.now().isoformat()
+    local_snapshot = {
+        name: {
+            "all_successful_records": int(
+                coverage.loc[coverage.model == name, "all_successful_records"].iloc[0]
+            ),
+            "probability_successful": int(
+                coverage.loc[coverage.model == name, "probability_successful"].iloc[0]
+            ),
+            "probability_target": int(
+                coverage.loc[coverage.model == name, "probability_target"].iloc[0]
+            ),
+        }
+        for name in LOCAL_CACHE_MODELS
+    }
     manifest = {
-        "generated_at": datetime.now().isoformat(), "analysis_seed": SEED,
+        "generated_at": generated_at, "analysis_seed": SEED,
         "bootstrap_repetitions": REPETITIONS, "probability_sample": str(PROBABILITY_SAMPLE.relative_to(PROJECT_ROOT)),
         "probability_sample_sha256": sha256(PROBABILITY_SAMPLE), "human_anchor_n": len(human),
         "inputs": {name: {"path": str(path.relative_to(PROJECT_ROOT)), "sha256": sha256(path)} for name, path in MODEL_FILES.items()},
         "local_cache_inputs": {name: str(path.relative_to(PROJECT_ROOT)) for name, path in LOCAL_CACHE_MODELS.items()},
+        "local_cache_snapshot": local_snapshot,
         "git_revision": subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, capture_output=True, text=True).stdout.strip(),
         "python": platform.python_version(), "pandas": pd.__version__, "numpy": np.__version__,
         "notes": ["Agreement is diagnostic; no model is a gold standard.",
                   "Exact evidence matching is conservative and does not detect paraphrases.",
+                  "Llama and Gemma cache counts are point-in-time partial snapshots and may increase after this analysis.",
                   "Human coding fields were empty at generation time; human-model IRR is pending."],
     }
     (OUTPUT / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     best = pair_macro.sort_values("percent_agreement", ascending=False).iloc[0]
-    summary = f"""# Model-validation analysis\n\nGenerated {manifest['generated_at']}. All outputs are non-mutating and use the frozen 2,235-paper probability sample unless labelled full Mini-Nano.\n\n## Coverage\n\n{coverage.to_markdown(index=False)}\n\n## Pairwise macro agreement\n\n{pair_macro.sort_values('percent_agreement', ascending=False).to_markdown(index=False)}\n\nThe strongest representative pair is **{best.left_model}-{best.right_model}** with mean exact agreement **{best.percent_agreement:.3f}**. Agreement is not accuracy; blinded human coding remains the accuracy anchor.\n\n## Supplementary local-model intersections\n\n{local_macro.sort_values('percent_agreement', ascending=False).to_markdown(index=False)}\n\nLocal estimates are supplementary because successful local records cover only part of the probability sample and their non-response may be selective.\n\n## Four-model agreement\n\n{multirater.to_markdown(index=False)}\n\n## Interpretation controls\n\n- Mini remains the primary full-corpus rater; Nano is a full-corpus sensitivity baseline.\n- Claude and Gemini validate Mini on a model-independent probability sample.\n- Llama and Gemma comparisons are separately labelled supplementary intersections.\n- Binary fields with high raw agreement but low alpha are prevalence-sensitive and require both statistics.\n- Exact evidence grounding is a conservative lexical diagnostic, not a hallucination rate.\n- Human-model IRR will be added only after blinded human fields are completed.\n"""
+    summary = f"""# Model-validation analysis\n\nGenerated {manifest['generated_at']}. All outputs are non-mutating and use the frozen 2,235-paper probability sample unless labelled full Mini-Nano.\n\n## Coverage\n\n{markdown_2dp(coverage)}\n\n## Pairwise macro agreement\n\n{markdown_2dp(pair_macro.sort_values('percent_agreement', ascending=False))}\n\nThe strongest representative pair is **{best.left_model}-{best.right_model}** with mean exact agreement **{best.percent_agreement:.2f}**. Agreement is not accuracy; blinded human coding remains the accuracy anchor.\n\n## Supplementary local-model intersections\n\n{markdown_2dp(local_macro.sort_values('percent_agreement', ascending=False))}\n\nLocal estimates are supplementary because successful local records cover only part of the probability sample and their non-response may be selective.\n\n## Four-model agreement\n\n{markdown_2dp(multirater)}\n\n## Interpretation controls\n\n- Mini remains the primary full-corpus rater; Nano is a full-corpus sensitivity baseline.\n- Claude and Gemini validate Mini on a model-independent probability sample.\n- Llama and Gemma comparisons are separately labelled supplementary intersections.\n- Binary fields with high raw agreement but low alpha are prevalence-sensitive and require both statistics.\n- Exact evidence grounding is a conservative lexical diagnostic, not a hallucination rate.\n- Human-model IRR will be added only after blinded human fields are completed.\n"""
+    summary = summary.replace(
+        "\n\n## Coverage",
+        (
+            "\n\nLlama and Gemma rows are point-in-time supplementary cache "
+            "snapshots. Their coverage is incomplete and must be regenerated "
+            "before later reporting of local-model results.\n\n## Coverage"
+        ),
+        1,
+    )
     SUMMARY.parent.mkdir(parents=True, exist_ok=True)
     SUMMARY.write_text(summary, encoding="utf-8")
     print(f"Analysis tables -> {OUTPUT}")

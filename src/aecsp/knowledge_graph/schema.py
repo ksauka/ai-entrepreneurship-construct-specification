@@ -32,7 +32,11 @@ NODE_SPECS: tuple[NodeSpec, ...] = (
     NodeSpec("Institution", "name", "Author affiliation institution."),
     NodeSpec("Keyword", "term", "Author, index, or KeyBERT keyword (separate from Topic)."),
     NodeSpec("Reference", "doi", "Cited work outside the corpus, keyed by DOI."),
-    NodeSpec("Topic", "label", "BERTopic topic."),
+    NodeSpec(
+        "Topic",
+        "uid",
+        "Scope-specific BERTopic topic keyed independently of its editable label.",
+    ),
     NodeSpec("SpecificationProfile", "id", "Paper-level construct specification profile."),
     NodeSpec("AIRole", "name", "Role or function assigned to AI."),
     NodeSpec("AIType", "name", "Form or type of AI named in the paper."),
@@ -101,7 +105,3 @@ RELATIONSHIP_SPECS: tuple[RelationshipSpec, ...] = (
         "Diagnosed specification issue.",
     ),
 )
-
-
-CONVERGENCE_EDGE = "CONVERGES_WITH"
-CONTRAST_EDGE = "CONTRASTS_WITH"

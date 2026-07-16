@@ -8,8 +8,6 @@ from aecsp.knowledge_graph.records import (
     NodeRef,
 )
 from aecsp.knowledge_graph.schema import (
-    CONTRAST_EDGE,
-    CONVERGENCE_EDGE,
     NODE_SPECS,
     RELATIONSHIP_SPECS,
     NodeSpec,
@@ -17,8 +15,6 @@ from aecsp.knowledge_graph.schema import (
 )
 
 __all__ = [
-    "CONTRAST_EDGE",
-    "CONVERGENCE_EDGE",
     "NODE_SPECS",
     "RELATIONSHIP_SPECS",
     "GraphBuildError",

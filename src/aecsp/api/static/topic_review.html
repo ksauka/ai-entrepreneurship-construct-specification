@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Topic Interpretation Review</title>
+<link rel="stylesheet" href="/static/esd.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/citation.js?v=scopus-first-20260716"></script>
+</head>
+<body>
+<div class="container topic-review-container">
+  <header class="app-header">
+    <h1>Topic interpretation review</h1>
+    <p>Inspect, rename, and approve topic interpretations using the terms and representative papers from each data-specific model.</p>
+    <p id="scopeProgress" class="metric-definition"></p>
+    <nav class="nav-links">
+      <a class="nav-link" href="/">Analytics Dashboard</a>
+      <a class="nav-link" href="/composition">Observed Composition</a>
+      <a class="nav-link active" href="/topic-review">Topic Review</a>
+      <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
+      <a class="nav-link" href="/assistant">Assistant</a>
+    </nav>
+    <div class="topic-review-toolbar">
+      <label>Topic model scope
+        <select id="reviewScope"></select>
+      </label>
+      <label>Review status
+        <select id="reviewStatusFilter">
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="revise">Revise</option>
+          <option value="approved">Approved</option>
+        </select>
+      </label>
+      <label>Reviewer name
+        <input id="reviewerName" type="text" maxlength="160" placeholder="Required for the audit trail" />
+      </label>
+    </div>
+    <div class="toolbar">
+      <span id="reviewStatus" class="status-pill warn">loading</span>
+      <button id="refreshReview" class="btn btn-outline" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>Research artifacts <span class="sub" id="releaseIdentifier"></span></h2>
+    <div class="artifact-download-grid">
+      <button class="btn btn-outline" type="button" data-topic-download="topics">Download reviewed topics</button>
+      <button class="btn btn-outline" type="button" data-topic-download="figures">Download topic prevalence</button>
+      <button class="btn btn-outline" type="button" data-topic-download="graph">Download graph files</button>
+      <button class="btn" type="button" data-topic-download="release">Download complete release</button>
+      <button id="finalizeTopics" class="btn" type="button" hidden>Apply approved labels and rebuild outputs</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Topic prevalence <span class="sub" id="prevalenceScopeLabel"></span></h2>
+    <p id="topicPrevalenceSummary" class="panel-denominator"></p>
+    <div id="topicPrevalenceChartWrap" class="composition-chart topic-prevalence-chart">
+      <canvas id="topicPrevalenceChart"></canvas>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Topic label humanization <span class="sub" id="topicTableSummary"></span></h2>
+    <p class="chart-note">Review each topic's keywords and supporting papers, then decide and enter a humanized label that accurately represents the topic. A topic ID is unique only within its selected scope.</p>
+    <div class="topic-review-table-wrap">
+      <table class="topic-review-table">
+        <thead><tr>
+          <th>Topic</th><th>Automatic label</th><th>Evidence</th><th>Approved label</th>
+          <th>Status</th><th>Reviewer notes</th><th>Action</th>
+        </tr></thead>
+        <tbody id="topicReviewRows"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<aside id="topicEvidencePanel" class="side-panel">
+  <span class="close" onclick="closeEvidencePanel()">close</span>
+  <div id="topicEvidenceBody"></div>
+</aside>
+
+<script>
+const el = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>\"]/g, character => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;",
+}[character]));
+const topicScopeIds = ["full_corpus", "query_1", "query_2", "query_3", "query_4"];
+let scopeLabels = {};
+let scopePaperCounts = {};
+const params = new URLSearchParams(window.location.search);
+let scope = topicScopeIds.includes(params.get("scope")) ? params.get("scope") : "full_corpus";
+let statusFilter = ["all", "pending", "approved", "revise"].includes(params.get("status"))
+  ? params.get("status") : "all";
+let summary = null;
+let topics = [];
+let prevalenceTopics = [];
+let topicPrevalenceChart = null;
+
+async function api(path, options = {}) {
+  const response = await fetch(path, options);
+  const contentType = response.headers.get("content-type") || "";
+  const body = contentType.includes("application/json") ? await response.json() : await response.text();
+  if (!response.ok) {
+    const detail = body?.detail ?? body;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return body;
+}
+
+function updateLocation() {
+  const query = new URLSearchParams({scope, status: statusFilter});
+  window.history.replaceState({}, "", `/topic-review?${query}`);
+}
+
+async function init() {
+  const availableScopes = (await api("/api/scopes")).filter(item => topicScopeIds.includes(item.id));
+  scopeLabels = Object.fromEntries(availableScopes.map(item => [item.id, item.label]));
+  scopePaperCounts = Object.fromEntries(availableScopes.map(item => [item.id, Number(item.papers)]));
+  el("reviewScope").innerHTML = availableScopes.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${Number(item.papers).toLocaleString()})</option>`
+  ).join("");
+  if (!scopeLabels[scope]) scope = "full_corpus";
+  el("reviewScope").value = scope;
+  el("reviewStatusFilter").value = statusFilter;
+  el("reviewerName").value = localStorage.getItem("etvTopicReviewer") || "";
+  el("reviewScope").onchange = event => {
+    scope = event.target.value;
+    updateLocation();
+    renderAll();
+  };
+  el("reviewStatusFilter").onchange = event => {
+    statusFilter = event.target.value;
+    updateLocation();
+    loadTopics();
+  };
+  el("reviewerName").onchange = event => {
+    localStorage.setItem("etvTopicReviewer", event.target.value.trim());
+  };
+  el("refreshReview").onclick = renderAll;
+  el("finalizeTopics").onclick = finalizeReview;
+  document.querySelectorAll("[data-topic-download]").forEach(button => {
+    button.onclick = () => downloadTopicBundle(button.dataset.topicDownload);
+  });
+  await renderAll();
+}
+
+async function renderAll() {
+  setStatus("Loading review data", "warn");
+  summary = await api("/api/topic-review");
+  renderSummary();
+  await Promise.all([loadTopicPrevalence(), loadTopics()]);
+  setStatus(`${summary.approved.toLocaleString()} of ${summary.total_topics.toLocaleString()} approved`, summary.complete ? "ok" : "warn");
+}
+
+function renderSummary() {
+  el("releaseIdentifier").textContent = summary.release_id;
+  el("scopeProgress").textContent = summary.scopes.map(item =>
+    `${scopeLabels[item.scope] || item.scope}: ${item.approved}/${item.topics} approved`
+  ).join(" | ");
+  el("finalizeTopics").disabled = !summary.complete || summary.outputs_current;
+  el("finalizeTopics").hidden = !summary.complete || summary.outputs_current;
+}
+
+function downloadTopicBundle(bundle) {
+  window.location.assign(
+    `/api/topic-review/download/${encodeURIComponent(bundle)}?scope=${encodeURIComponent(scope)}`
+  );
+}
+
+async function loadTopicPrevalence() {
+  const query = new URLSearchParams({scope, status: "all", q: ""});
+  prevalenceTopics = await api(`/api/topic-review/topics?${query}`);
+  renderTopicPrevalence();
+}
+
+function renderTopicPrevalence() {
+  const ranked = [...prevalenceTopics].sort((a, b) =>
+    b.final_assigned_papers - a.final_assigned_papers || a.topic_id - b.topic_id
+  );
+  const assignedPapers = ranked.reduce((total, topic) => total + topic.final_assigned_papers, 0);
+  const scopePapers = scopePaperCounts[scope] || assignedPapers;
+  const unassignedPapers = Math.max(0, scopePapers - assignedPapers);
+  el("prevalenceScopeLabel").textContent = scopeLabels[scope];
+  el("topicPrevalenceSummary").textContent =
+    `${assignedPapers.toLocaleString()} of ${scopePapers.toLocaleString()} papers assigned across ` +
+    `${ranked.length.toLocaleString()} topics; ${unassignedPapers.toLocaleString()} unassigned`;
+  el("topicPrevalenceChartWrap").style.height = `${Math.max(420, ranked.length * 34 + 90)}px`;
+
+  if (topicPrevalenceChart) topicPrevalenceChart.destroy();
+  topicPrevalenceChart = new Chart(el("topicPrevalenceChart"), {
+    type: "bar",
+    data: {
+      labels: ranked.map(topic => `T${topic.topic_id}: ${topic.display_label}`),
+      datasets: [{
+        data: ranked.map(topic => topic.final_assigned_papers),
+        backgroundColor: "#327bd3",
+        borderColor: "#2569b8",
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display: false},
+        tooltip: {callbacks: {label: item => {
+          const papers = Number(item.raw || 0);
+          const assignedShare = assignedPapers ? papers / assignedPapers * 100 : 0;
+          const scopeShare = scopePapers ? papers / scopePapers * 100 : 0;
+          return `${papers.toLocaleString()} papers (${assignedShare.toFixed(2)}% of assigned; ` +
+            `${scopeShare.toFixed(2)}% of scope)`;
+        }}},
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          title: {display: true, text: "Papers assigned to topic"},
+          ticks: {precision: 0},
+        },
+        y: {ticks: {autoSkip: false}},
+      },
+      onClick: (_event, elements) => {
+        if (elements.length) showEvidence(ranked[elements[0].index].topic_id);
+      },
+    },
+  });
+
+}
+
+async function loadTopics() {
+  const query = new URLSearchParams({
+    scope,
+    status: statusFilter,
+    q: "",
+  });
+  topics = await api(`/api/topic-review/topics?${query}`);
+  el("topicTableSummary").textContent = `${topics.length.toLocaleString()} displayed in ${scopeLabels[scope]}`;
+  el("topicReviewRows").innerHTML = topics.map(topicRow).join("");
+  document.querySelectorAll("[data-evidence-topic]").forEach(button => {
+    button.onclick = () => showEvidence(Number(button.dataset.evidenceTopic));
+  });
+  document.querySelectorAll("[data-save-topic]").forEach(button => {
+    button.onclick = () => saveTopic(Number(button.dataset.saveTopic));
+  });
+}
+
+function topicRow(topic) {
+  const rowClass = topic.review_status === "approved" ? "topic-row-approved"
+    : topic.review_status === "revise" ? "topic-row-revise" : "";
+  return `<tr class="${rowClass}" id="topic-row-${topic.topic_id}">
+    <td>T${topic.topic_id}<br><span class="muted">n = ${topic.final_assigned_papers.toLocaleString()}</span></td>
+    <td>${esc(topic.automatic_label)}</td>
+    <td><button class="btn btn-outline btn-compact" type="button" data-evidence-topic="${topic.topic_id}">Terms and papers</button></td>
+    <td><input class="topic-label-input" maxlength="180" value="${esc(topic.approved_label)}" aria-label="Approved label for topic ${topic.topic_id}" /></td>
+    <td><select class="topic-status-select" aria-label="Review status for topic ${topic.topic_id}">
+      ${["pending", "revise", "approved"].map(status =>
+        `<option value="${status}" ${topic.review_status === status ? "selected" : ""}>${status}</option>`
+      ).join("")}
+    </select></td>
+    <td><textarea class="topic-notes-input" maxlength="2000" aria-label="Reviewer notes for topic ${topic.topic_id}">${esc(topic.reviewer_notes)}</textarea></td>
+    <td><button class="btn btn-compact" type="button" data-save-topic="${topic.topic_id}">Save decision</button>
+      <span class="topic-save-state muted">${topic.last_updated_at ? `Saved by ${esc(topic.last_reviewer)}` : "Not yet reviewed"}</span>
+    </td>
+  </tr>`;
+}
+
+async function saveTopic(topicId) {
+  const reviewer = el("reviewerName").value.trim();
+  if (!reviewer) {
+    setStatus("Enter the reviewer name before saving", "bad");
+    el("reviewerName").focus();
+    return;
+  }
+  localStorage.setItem("etvTopicReviewer", reviewer);
+  const row = el(`topic-row-${topicId}`);
+  const button = row.querySelector("[data-save-topic]");
+  const state = row.querySelector(".topic-save-state");
+  button.disabled = true;
+  state.textContent = "Saving";
+  try {
+    const result = await api(`/api/topic-review/${encodeURIComponent(scope)}/${topicId}`, {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        approved_label: row.querySelector(".topic-label-input").value,
+        review_status: row.querySelector(".topic-status-select").value,
+        reviewer_notes: row.querySelector(".topic-notes-input").value,
+        reviewer,
+      }),
+    });
+    summary = result.summary;
+    renderSummary();
+    await loadTopicPrevalence();
+    state.textContent = `Saved by ${result.topic.last_reviewer}`;
+    row.className = result.topic.review_status === "approved" ? "topic-row-approved"
+      : result.topic.review_status === "revise" ? "topic-row-revise" : "";
+    setStatus(`Saved ${scopeLabels[scope]} topic ${topicId}`, "ok");
+  } catch (error) {
+    state.textContent = error.message;
+    setStatus(error.message, "bad");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function showEvidence(topicId) {
+  const topic = prevalenceTopics.find(item => item.topic_id === topicId)
+    || topics.find(item => item.topic_id === topicId);
+  if (!topic) return;
+  const terms = String(topic.top_terms || "").split(";").map(item => item.trim()).filter(Boolean);
+  const representatives = [1, 2, 3].map(rank => ({
+    rank,
+    paper_id: topic[`representative_${rank}_paper_id`],
+    title: topic[`representative_${rank}_title`],
+    similarity: topic[`representative_${rank}_centroid_similarity`],
+  })).filter(item => item.paper_id || item.title);
+  const representativePapers = await Promise.all(representatives.map(async item => {
+    if (!item.paper_id) return {...item, paper: {Title: item.title}};
+    try {
+      const paper = await api(`/api/paper/${encodeURIComponent(item.paper_id)}`);
+      return {...item, paper};
+    } catch (_) {
+      return {...item, paper: {paper_id: item.paper_id, Title: item.title}};
+    }
+  }));
+  el("topicEvidenceBody").innerHTML = `<h2>${esc(scopeLabels[scope])} T${topic.topic_id}: ${esc(topic.display_label)}</h2>
+    <p class="metric-definition">Fitted papers: ${topic.fitted_papers.toLocaleString()} | Final assigned papers: ${topic.final_assigned_papers.toLocaleString()}</p>
+    <h3>Top terms</h3>
+    <div class="topic-term-list">${terms.map(term => `<span class="pill">${esc(term)}</span>`).join("")}</div>
+    <h3>Centroid-nearest representative papers</h3>
+    ${representativePapers.map(item => `<div class="ev-item">
+      <div class="t">${paperEvidenceLink(item.paper, item.title, `${item.rank}. `)}</div>
+      <div class="m">${esc(item.paper_id)} | Centroid similarity: ${Number(item.similarity || 0).toFixed(4)}</div>
+    </div>`).join("")}
+    <h3>Fitted papers</h3>
+    <div class="topic-evidence-controls">
+      <label>Papers displayed
+        <select id="fittedPaperLimit">
+          <option value="25">25</option>
+          <option value="100" selected>100</option>
+          <option value="500">500</option>
+          <option value="50000">All</option>
+        </select>
+      </label>
+      <span id="fittedPaperStatus" class="muted">Loading fitted papers</span>
+    </div>
+    <div id="fittedPaperList"></div>`;
+  el("topicEvidencePanel").classList.add("open");
+  el("fittedPaperLimit").onchange = () => loadFittedPapers(topicId);
+  await loadFittedPapers(topicId);
+}
+
+async function loadFittedPapers(topicId) {
+  const limit = Number(el("fittedPaperLimit")?.value || 100);
+  el("fittedPaperStatus").textContent = "Loading fitted papers";
+  try {
+    const query = new URLSearchParams({scope, topic_id: String(topicId), limit: String(limit)});
+    const result = await api(`/api/topic-review/fitted-papers?${query}`);
+    el("fittedPaperStatus").textContent =
+      `Showing ${result.returned.toLocaleString()} of ${result.total.toLocaleString()} fitted papers`;
+    el("fittedPaperList").innerHTML = result.papers.length
+      ? result.papers.map((paper, index) => fittedPaperItem(paper, index + 1)).join("")
+      : '<p class="muted">No fitted papers were found for this topic.</p>';
+  } catch (error) {
+    el("fittedPaperStatus").textContent = error.message;
+    el("fittedPaperList").innerHTML = "";
+  }
+}
+
+function fittedPaperItem(paper, rank) {
+  const metadata = [
+    paper.Authors,
+    paper["Source title"],
+    paper.Year,
+    paper.DOI ? `DOI: ${paper.DOI}` : "",
+    paper.topic_probability == null
+      ? ""
+      : `Topic probability: ${Number(paper.topic_probability).toFixed(4)}`,
+  ].filter(Boolean);
+  return `<div class="ev-item">
+    <div class="t">${paperEvidenceLink(paper, paper.Title, `${rank}. `)}</div>
+    <div class="m">${metadata.map(esc).join(" | ")}</div>
+    <div class="m">${esc(paper.paper_id)}</div>
+  </div>`;
+}
+
+function paperEvidenceLink(paper, title, prefix = "") {
+  const label = `${prefix}${title || "Untitled paper"}`;
+  const url = paperHref(paper);
+  if (!url) return esc(label);
+  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+}
+
+function closeEvidencePanel() { el("topicEvidencePanel").classList.remove("open"); }
+
+async function finalizeReview() {
+  if (!summary.complete || summary.outputs_current) return;
+  const accepted = window.confirm(
+    "Apply all 130 approved labels and regenerate Stage 4 figures and graph CSV exports? Topic assignments will not change."
+  );
+  if (!accepted) return;
+  el("finalizeTopics").disabled = true;
+  setStatus("Regenerating approved outputs", "warn");
+  try {
+    const result = await api("/api/topic-review/finalize", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({confirmation: "APPLY ALL 130 APPROVED LABELS"}),
+    });
+    summary = result.summary;
+    renderSummary();
+    await loadTopicPrevalence();
+    setStatus("Approved labels applied successfully", "ok");
+  } catch (error) {
+    setStatus(error.message, "bad");
+  }
+}
+
+function setStatus(message, kind) {
+  el("reviewStatus").className = `status-pill ${kind}`;
+  el("reviewStatus").textContent = message;
+}
+
+init().catch(error => setStatus(error.message, "bad"));
+</script>
+</body>
+</html>

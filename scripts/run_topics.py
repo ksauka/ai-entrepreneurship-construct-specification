@@ -30,6 +30,8 @@ from aecsp.topics.pipeline import extraction, optimization, phrase_detection, tr
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 TOPICS_DIR = PROCESSED_DIR / "topics"
+TOPIC_RECOMMENDATIONS_PATH = TOPICS_DIR / "optimization" / "recommendations.json"
+TOPIC_APPROVAL_PATH = TOPICS_DIR / "optimization" / "topic_selection_review.json"
 CONFIG_PATH = PROJECT_ROOT / "configs" / "ai_keyword_config.yaml"
 TOPIC_INTERIM_DIR = PROJECT_ROOT / "data" / "interim" / "topics"
 CHECKPOINT_VERSION = 1
@@ -113,6 +115,69 @@ def load_seed_terms() -> tuple[list[str], list[str]]:
         config.get("ai_seed_terms_expanded", []),
         config.get("entrepreneurship_seed_terms", []),
     )
+
+
+def load_approved_topic_selections(
+    recommendations_path: Path = TOPIC_RECOMMENDATIONS_PATH,
+    approval_path: Path = TOPIC_APPROVAL_PATH,
+) -> tuple[dict[str, dict], dict]:
+    """Load human-approved grid choices and validate them against the grid.
+
+    The optimization output is deliberately advisory. Final training must use
+    the separately recorded approval artifact so a fresh optimization run
+    cannot silently turn an automatic recommendation into a final parameter.
+    """
+
+    if not recommendations_path.exists():
+        raise ValueError("a completed --optimize-only run is required")
+    if not approval_path.exists():
+        raise ValueError(
+            "explicit topic approval is missing; review the grid graphs and "
+            "candidate evidence, then create topic_selection_review.json"
+        )
+
+    recommendations_payload = json.loads(
+        recommendations_path.read_text(encoding="utf-8")
+    )
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    if approval_payload.get("approval_status") != "approved":
+        raise ValueError("topic selections are not marked approved")
+
+    recommendations = recommendations_payload.get("scopes", {})
+    approvals = approval_payload.get("scopes", {})
+    expected_scopes = {"full_corpus", *(query.id for query in SEARCH_QUERIES)}
+    missing = sorted(expected_scopes - approvals.keys())
+    if missing:
+        raise ValueError(f"topic approval is missing scope(s): {', '.join(missing)}")
+
+    selected: dict[str, dict] = {}
+    for scope_id in sorted(expected_scopes):
+        if scope_id not in recommendations:
+            raise ValueError(f"optimization recommendations are missing {scope_id}")
+        approval = approvals[scope_id]
+        approved_size = int(approval["selected_min_topic_size"])
+        candidates = {
+            int(value)
+            for value in recommendations[scope_id].get(
+                "candidate_min_topic_sizes", []
+            )
+        }
+        if approved_size not in candidates:
+            raise ValueError(
+                f"approved min_topic_size={approved_size} for {scope_id} "
+                f"was not in the tested grid {sorted(candidates)}"
+            )
+        selected[scope_id] = {
+            **recommendations[scope_id],
+            "automatic_recommended_min_topic_size": recommendations[scope_id][
+                "recommended_min_topic_size"
+            ],
+            "recommended_min_topic_size": approved_size,
+            "approved_topic_count": int(approval["selected_topic_count"]),
+            "selection_status": approval.get("decision", "human_approved"),
+        }
+
+    return selected, approval_payload
 
 
 def run_topic_model(
@@ -222,6 +287,7 @@ def run_grid_searches(
     embeddings,
     df_work,
     original_idx,
+    doc_index_df,
     sent_model,
     min_topic_sizes,
     target_topic_range,
@@ -233,12 +299,22 @@ def run_grid_searches(
     scope_progress = ProgressReporter("Topic optimization scopes", 5, every=1)
     scopes_done = 0
 
-    def optimize_scope(scope_id, docs, scope_embeddings):
+    def optimize_scope(scope_id, docs, scope_embeddings, scope_doc_index):
         nonlocal scopes_done
 
         eligible_sizes = [size for size in min_topic_sizes if size < len(docs)]
+        if scope_id not in {"full_corpus", "query_1"}:
+            eligible_sizes = optimization.native_grid_min_topic_sizes(
+                len(docs), eligible_sizes
+            )
         if not eligible_sizes:
             raise ValueError(f"no min_topic_size is smaller than {scope_id} ({len(docs)} papers)")
+        logger.info(
+            "%s candidate grid: %s; recommendation floor: %d topics",
+            scope_id,
+            eligible_sizes,
+            optimization.MIN_TOPICS_FOR_RECOMMENDATION,
+        )
         recommended, payload = optimization.optimize_topic_count_grid_search(
             documents=docs,
             embeddings=scope_embeddings,
@@ -247,9 +323,15 @@ def run_grid_searches(
             target_topic_range=target_topic_range,
             plot_metrics=True,
             out_dir=root / scope_id,
+            document_metadata=scope_doc_index[["paper_id", "Title"]].to_dict("records"),
+            min_topics_for_recommendation=optimization.MIN_TOPICS_FOR_RECOMMENDATION,
         )
         recommendations[scope_id] = {
             "papers": len(docs),
+            "candidate_min_topic_sizes": eligible_sizes,
+            "minimum_topics_for_recommendation": (
+                optimization.MIN_TOPICS_FOR_RECOMMENDATION
+            ),
             "recommended_min_topic_size": recommended,
             "recommended_topic_count": payload["recommended"]["n_topics"],
             "selection_status": payload["selection_status"],
@@ -257,7 +339,7 @@ def run_grid_searches(
         scopes_done += 1
         scope_progress.update(scopes_done, detail=scope_id)
 
-    optimize_scope("full_corpus", phrase_documents, embeddings)
+    optimize_scope("full_corpus", phrase_documents, embeddings, doc_index_df)
     for query in SEARCH_QUERIES:
         flags = pd.to_numeric(df_work[query.one_hot_column], errors="coerce").fillna(0).astype(int)
         local_indices = [i for i, orig in enumerate(original_idx) if flags.iloc[orig] == 1]
@@ -265,6 +347,7 @@ def run_grid_searches(
             query.id,
             [phrase_documents[i] for i in local_indices],
             embeddings[local_indices],
+            doc_index_df.iloc[local_indices].reset_index(drop=True),
         )
 
     root.mkdir(parents=True, exist_ok=True)
@@ -407,7 +490,7 @@ def main() -> None:
     parser.add_argument(
         "--use-optimized",
         action="store_true",
-        help="Use reviewed recommendations.json values for final global and native models.",
+        help="Use the separately approved global and native grid-search values.",
     )
     parser.add_argument(
         "--refresh-checkpoint",
@@ -419,11 +502,11 @@ def main() -> None:
     nr_topics = args.nr_topics if args.nr_topics == "auto" else int(args.nr_topics)
 
     recommendations = None
-    recommendations_path = TOPICS_DIR / "optimization" / "recommendations.json"
     if args.use_optimized:
-        if not recommendations_path.exists():
-            parser.error("--use-optimized requires a completed --optimize-only run")
-        recommendations = json.loads(recommendations_path.read_text(encoding="utf-8"))["scopes"]
+        try:
+            recommendations, approval_payload = load_approved_topic_selections()
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            parser.error(f"--use-optimized: {error}")
         args.global_min_topic_size = recommendations["full_corpus"]["recommended_min_topic_size"]
     elif not args.optimize_only and args.global_min_topic_size is None:
         parser.error(
@@ -433,6 +516,8 @@ def main() -> None:
 
     started = time.time()
     report: dict = {"timestamp": datetime.now().isoformat(), "parameters": vars(args)}
+    if args.use_optimized:
+        report["topic_selection_approval"] = approval_payload
 
     logger.info("Loading master corpus...")
     master_path = PROCESSED_DIR / "master_corpus.csv"
@@ -488,6 +573,7 @@ def main() -> None:
             embeddings,
             df_work,
             original_idx,
+            doc_index_df,
             sent_model,
             args.grid_min_topic_sizes,
             args.target_topic_range,

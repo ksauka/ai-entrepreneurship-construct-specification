@@ -6,6 +6,7 @@ import pytest
 from aecsp.analytics.convergence import (
     construct_contrast,
     convergence_by,
+    dimension_profile,
     group_convergence,
 )
 
@@ -39,6 +40,17 @@ def test_unanimous_dimension_converges_fully():
     assert conv.dominant_values["ai_role_function"] == "AI as tool"
 
 
+def test_dimension_profile_exposes_complete_distribution(coded):
+    profile = dimension_profile(coded, "ai_role_function")
+    assert profile["coded_papers"] == 4
+    assert profile["category_count"] == 2
+    assert profile["dominant_value"] == "AI as tool"
+    assert profile["dominant_count"] == 3
+    assert profile["dominant_share"] == 0.75
+    assert sum(item["count"] for item in profile["categories"]) == 4
+    assert round(profile["concentration_score"] + profile["dispersion_score"], 6) == 1.0
+
+
 def test_convergence_by_journal_ranks_fragmentation(coded):
     result = convergence_by(coded, "journal")
     assert set(result["journal"]) == {"A", "B"}
@@ -47,6 +59,7 @@ def test_convergence_by_journal_ranks_fragmentation(coded):
     # Journal A agrees on role (score 1.0); Journal B is split (score 0.0).
     assert a["ai_role_function_convergence_score"] == 1.0
     assert b["ai_role_function_convergence_score"] == 0.0
+    assert b["code_diversity_score"] == b["fragmentation_score"]
 
 
 def test_construct_contrast_same_type_different_role(coded):

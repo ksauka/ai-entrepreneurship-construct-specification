@@ -10,7 +10,7 @@ import logging
 import os
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Dict, Tuple, Optional
+from typing import TYPE_CHECKING, Any, List, Dict, Tuple, Optional
 
 import numpy as np
 
@@ -21,6 +21,133 @@ if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
+
+MIN_TOPICS_FOR_RECOMMENDATION = 5
+REPRESENTATIVE_PAPERS_PER_TOPIC = 3
+
+
+def native_grid_min_topic_sizes(
+    n_documents: int,
+    requested_sizes: List[int],
+) -> List[int]:
+    """Supplement the common grid with sizes suitable for a small scope.
+
+    The shared 20-100 grid is useful for the full corpus but can be too coarse
+    for query views containing fewer than 1,000 papers. Add approximately 2%
+    and 3% of the scope, clamped to the established 8-30 operational range,
+    while retaining every explicitly requested candidate.
+    """
+
+    if n_documents < 2:
+        raise ValueError("n_documents must be at least 2")
+    if not requested_sizes or any(size < 2 for size in requested_sizes):
+        raise ValueError("requested_sizes must contain integers >= 2")
+
+    two_percent = min(30, max(8, n_documents // 50))
+    three_percent = min(30, max(8, round(two_percent * 1.5)))
+    return sorted(
+        size
+        for size in {*requested_sizes, two_percent, three_percent}
+        if size < n_documents
+    )
+
+
+def _candidate_audit_frames(
+    *,
+    min_topic_size: int,
+    model: Any,
+    topics: List[int],
+    embeddings: np.ndarray,
+    document_metadata: Optional[List[Dict[str, Any]]],
+    representatives_per_topic: int,
+):
+    """Build topic and representative-paper tables for human review."""
+
+    import pandas as pd
+
+    labels = np.asarray(topics)
+    topic_rows: list[dict[str, Any]] = []
+    representative_rows: list[dict[str, Any]] = []
+    metadata = document_metadata or [
+        {"paper_id": str(index), "Title": ""}
+        for index in range(len(topics))
+    ]
+
+    for topic_id in sorted(int(value) for value in set(labels) if value != -1):
+        member_indices = np.flatnonzero(labels == topic_id)
+        words = model.get_topic(topic_id) or []
+        top_terms = [str(word) for word, _ in words[:10]]
+        topic_label = " | ".join(top_terms[:4]) or f"topic {topic_id}"
+        topic_rows.append(
+            {
+                "min_topic_size": min_topic_size,
+                "topic_id": topic_id,
+                "paper_count": int(len(member_indices)),
+                "topic_label": topic_label,
+                "top_terms": "; ".join(top_terms),
+            }
+        )
+
+        member_embeddings = np.asarray(embeddings)[member_indices]
+        centroid = member_embeddings.mean(axis=0)
+        centroid_norm = float(np.linalg.norm(centroid))
+        member_norms = np.linalg.norm(member_embeddings, axis=1)
+        denominators = member_norms * centroid_norm
+        similarities = np.divide(
+            member_embeddings @ centroid,
+            denominators,
+            out=np.zeros(len(member_indices), dtype=float),
+            where=denominators > 0,
+        )
+        order = np.argsort(-similarities, kind="stable")[:representatives_per_topic]
+        for rank, local_position in enumerate(order, start=1):
+            document_index = int(member_indices[int(local_position)])
+            record = metadata[document_index]
+            representative_rows.append(
+                {
+                    "min_topic_size": min_topic_size,
+                    "topic_id": topic_id,
+                    "topic_label": topic_label,
+                    "representative_rank": rank,
+                    "paper_id": record.get("paper_id", ""),
+                    "title": record.get("Title", record.get("title", "")),
+                    "similarity_to_topic_centroid": round(
+                        float(similarities[int(local_position)]), 6
+                    ),
+                }
+            )
+
+    return pd.DataFrame(topic_rows), pd.DataFrame(representative_rows)
+
+
+def _write_candidate_audit(
+    *,
+    out_dir: Path,
+    min_topic_size: int,
+    model: Any,
+    topics: List[int],
+    embeddings: np.ndarray,
+    document_metadata: Optional[List[Dict[str, Any]]],
+    representatives_per_topic: int,
+) -> None:
+    """Persist the evidence needed to review one grid candidate."""
+
+    candidate_dir = out_dir / "candidates" / f"min_topic_size_{min_topic_size}"
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+    topic_frame, representative_frame = _candidate_audit_frames(
+        min_topic_size=min_topic_size,
+        model=model,
+        topics=topics,
+        embeddings=embeddings,
+        document_metadata=document_metadata,
+        representatives_per_topic=representatives_per_topic,
+    )
+    topic_frame.to_csv(candidate_dir / "topics.csv", index=False, encoding="utf-8-sig")
+    representative_frame.to_csv(
+        candidate_dir / "representative_papers.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
 
 
 def optimize_topic_count_hierarchical(
@@ -158,7 +285,10 @@ def optimize_topic_count_grid_search(
     target_topic_range: Optional[Tuple[int, int]] = None,
     plot_metrics: bool = True,
     out_dir: Optional[Path] = None,
-    custom_tokenizer: Optional[callable] = None
+    custom_tokenizer: Optional[callable] = None,
+    document_metadata: Optional[List[Dict[str, Any]]] = None,
+    min_topics_for_recommendation: int = MIN_TOPICS_FOR_RECOMMENDATION,
+    representatives_per_topic: int = REPRESENTATIVE_PAPERS_PER_TOPIC,
 ) -> Tuple[int, Dict]:
     """
     Find optimal min_topic_size using grid search with multiple quality metrics.
@@ -189,6 +319,9 @@ def optimize_topic_count_grid_search(
         plot_metrics: Whether to generate matplotlib plots
         out_dir: Output directory for plots
         custom_tokenizer: Optional tokenizer function (preserves underscores)
+        document_metadata: Paper identifiers and titles aligned to documents
+        min_topics_for_recommendation: Review floor for automatic eligibility
+        representatives_per_topic: Centroid-nearest papers exported per topic
 
     Returns:
         optimal_min_topic_size: Best min_topic_size value
@@ -199,6 +332,12 @@ def optimize_topic_count_grid_search(
 
     if not min_topic_sizes or any(value < 2 for value in min_topic_sizes):
         raise ValueError("min_topic_sizes must contain integers >= 2")
+    if min_topics_for_recommendation < 2:
+        raise ValueError("min_topics_for_recommendation must be at least 2")
+    if representatives_per_topic < 1:
+        raise ValueError("representatives_per_topic must be at least 1")
+    if document_metadata is not None and len(document_metadata) != len(documents):
+        raise ValueError("document_metadata must align one-to-one with documents")
 
     # Import custom tokenizer if not provided
     if custom_tokenizer is None:
@@ -226,6 +365,7 @@ def optimize_topic_count_grid_search(
     logger.info("\nThis may take 5-10 minutes...\n")
 
     results = []
+    failed_configurations = []
     grid_progress = ProgressReporter("Topic grid", len(min_topic_sizes), every=1)
 
     for configuration_number, min_size in enumerate(min_topic_sizes, start=1):
@@ -263,7 +403,26 @@ def optimize_topic_count_grid_search(
             verbose=False
         )
 
-        topics, _ = temp_model.fit_transform(documents, embeddings)
+        try:
+            topics, _ = temp_model.fit_transform(documents, embeddings)
+        except ValueError as error:
+            failure = {
+                "min_topic_size": min_size,
+                "error_type": type(error).__name__,
+                "error": str(error),
+            }
+            failed_configurations.append(failure)
+            logger.warning(
+                "   Invalid candidate min_topic_size=%d: %s",
+                min_size,
+                error,
+            )
+            grid_progress.update(
+                configuration_number,
+                detail=f"min_size={min_size}, invalid candidate",
+                failures=len(failed_configurations),
+            )
+            continue
 
         # Compute metrics
         n_topics = len(set(topics)) - (1 if -1 in topics else 0)
@@ -322,19 +481,63 @@ def optimize_topic_count_grid_search(
             "composite_score": score
         })
 
+        if out_dir is not None:
+            _write_candidate_audit(
+                out_dir=out_dir,
+                min_topic_size=min_size,
+                model=temp_model,
+                topics=topics,
+                embeddings=embeddings,
+                document_metadata=document_metadata,
+                representatives_per_topic=representatives_per_topic,
+            )
+
         logger.info(f"   Topics: {n_topics}, Outliers: {outlier_rate:.1%}, "
                    f"Silhouette: {sil_score:.3f}, Diversity: {diversity:.3f}, "
                    f"Score: {score:.3f}")
         grid_progress.update(
             configuration_number,
             detail=f"min_size={min_size}, topics={n_topics}, outliers={outlier_rate:.1%}",
+            failures=len(failed_configurations),
         )
 
-    # A range is a review aid, not an implicit methodological constraint.
-    filtered_results = results
+    if not results:
+        reasons = "; ".join(
+            f"min_topic_size={item['min_topic_size']}: {item['error']}"
+            for item in failed_configurations
+        )
+        raise RuntimeError(
+            "Topic optimization produced no valid configurations. " + reasons
+        )
+
+    excluded_from_recommendation = [
+        result for result in results
+        if result["n_topics"] < min_topics_for_recommendation
+    ]
+    filtered_results = [
+        result for result in results
+        if result["n_topics"] >= min_topics_for_recommendation
+    ]
+    if not filtered_results:
+        raise RuntimeError(
+            "No topic configuration met the exploratory review floor of "
+            f"{min_topics_for_recommendation} topics. Expand the candidate grid "
+            "and review candidate topic evidence instead of accepting a collapsed model."
+        )
+    if excluded_from_recommendation:
+        logger.info(
+            "Excluded %d collapsed configuration(s) with fewer than %d topics from recommendation",
+            len(excluded_from_recommendation),
+            min_topics_for_recommendation,
+        )
+
+    # A range is an additional review aid, not an implicit methodological constraint.
     if target_topic_range is not None:
         min_topics, max_topics = target_topic_range
-        in_range = [r for r in results if min_topics <= r['n_topics'] <= max_topics]
+        in_range = [
+            result for result in filtered_results
+            if min_topics <= result["n_topics"] <= max_topics
+        ]
         if in_range:
             filtered_results = in_range
             logger.info(
@@ -507,11 +710,20 @@ def optimize_topic_count_grid_search(
                    f"{r['n_topics']:2d} topics, "
                    f"outliers={r['outlier_rate']:.1%}, "
                    f"score={r['composite_score']:.3f}{marker}")
+    for failure in failed_configurations:
+        logger.info(
+            "  min_topic_size=%3d: INVALID (%s)",
+            failure["min_topic_size"],
+            failure["error"],
+        )
     logger.info("=" * 80)
 
     payload = {
         "selection_status": "recommendation_requires_human_approval",
         "grid_search": results,
+        "failed_configurations": failed_configurations,
+        "minimum_topics_for_recommendation": min_topics_for_recommendation,
+        "excluded_from_recommendation": excluded_from_recommendation,
         "eligible": filtered_results,
         "recommended": filtered_results[best_idx],
         "target_topic_range": list(target_topic_range) if target_topic_range else None,

@@ -11,10 +11,6 @@ import re
 from datetime import date
 
 from aecsp.corpus.scopes import SCOPE_BY_ID
-from aecsp.specification.schema import SPECIFICATION_DIMENSIONS
-
-DIM_LABELS = {d.column: d.label for d in SPECIFICATION_DIMENSIONS}
-
 PLATFORM_NAME = "AI-Entrepreneurship Construct Specification Platform"
 
 
@@ -39,12 +35,14 @@ def _citation(row: dict) -> str:
 
 
 def _paper_link(row: dict) -> str | None:
+    link = str(row.get("Link", "")).strip()
+    if link:
+        return link
     doi = str(row.get("DOI", "")).strip()
     if doi:
         doi = re.sub(r"^https?://(dx\.)?doi\.org/", "", doi, flags=re.IGNORECASE)
         return "https://doi.org/" + doi
-    link = str(row.get("Link", "")).strip()
-    return link or None
+    return None
 
 
 def build_scope_report(service, scope_id: str) -> str:
@@ -55,13 +53,11 @@ def build_scope_report(service, scope_id: str) -> str:
     overview = service.scope_overview(scope_id)
     n = overview["paper_count"]
 
-    sections = [_intro(scope_label, n, overview)]
+    sections = [_intro(scope_label, n)]
     sections.append(_performance_section(service, scope_id))
 
     if overview["has_specifications"]:
-        sections.append(_dimensions_section(overview))
         sections.append(_contrast_section(service, scope_id))
-        sections.append(_journal_section(service, scope_id))
     else:
         sections.append(
             "<h2>Specification coding</h2><p>Specification codes have not been "
@@ -76,25 +72,178 @@ def build_scope_report(service, scope_id: str) -> str:
     return _document(scope_label, body)
 
 
-def _intro(scope_label: str, n: int, overview: dict) -> str:
-    clarity = overview["overall_specification_clarity_score"]
-    fragmentation = overview["fragmentation_score"]
-    lead = (
+def build_composition_report(
+    service,
+    scope_id: str,
+    model: str,
+    study_status: str,
+    distribution: str = "compare",
+) -> str:
+    """Return a filter-aware observed-composition and IRR report."""
+
+    distribution_labels = {
+        "compare": "Compare full and observed",
+        "full": "Full only",
+        "observed": "Observed only",
+    }
+    if distribution not in distribution_labels:
+        raise ValueError(f"Unknown composition distribution: {distribution}")
+
+    scope = SCOPE_BY_ID.get(scope_id)
+    scope_label = scope.label if scope else scope_id
+    composition = service.observed_composition(
+        scope_id,
+        study_status=study_status,
+        model=model,
+    )
+    irr = service.composition_irr_matrix(scope_id)
+    status_label = "All papers" if study_status == "all" else study_status.capitalize()
+    coverage = composition["model_coverage_share"] * 100
+    body = (
+        "<h2>Observed construct composition</h2>"
+        f"<p><strong>Dataset:</strong> {html.escape(scope_label)}<br />"
+        f"<strong>Coding model:</strong> {html.escape(composition['model_label'])}<br />"
+        f"<strong>Study-status filter:</strong> {html.escape(status_label)}<br />"
+        f"<strong>Distribution:</strong> {html.escape(distribution_labels[distribution])}<br />"
+        f"<strong>Model coverage:</strong> {composition['scope_papers']:,} of "
+        f"{composition['corpus_scope_papers']:,} papers ({coverage:.2f}%)<br />"
+        f"<strong>Papers after filter:</strong> {composition['filtered_papers']:,}</p>"
+    )
+    if distribution == "compare":
+        body += (
+            "<p>Each dimension reports two distributions. Full shares use every "
+            "successfully coded paper for the selected model after the dataset-scope "
+            "and study-status filters. Observed shares use the subset remaining after "
+            "that dimension's declared missing or unspecified categories are excluded.</p>"
+        )
+    for panel in composition["panels"]:
+        observed_percent = panel["observed_share"] * 100
+        if distribution == "full":
+            rows = "".join(
+                f"<tr><td>{html.escape(str(category['value']))}</td>"
+                f"<td>{category['full_count']:,}</td>"
+                f"<td>{category['full_share'] * 100:.2f}%</td></tr>"
+                for category in panel["comparison_categories"]
+            )
+            body += (
+                f"<h3>{html.escape(panel['label'])}</h3>"
+                f"<p>Full n = {panel['full_n']:,}.</p>"
+                "<table><tr><th>Category</th><th>Papers</th><th>Share of full</th></tr>"
+                f"{rows}</table>"
+            )
+        elif distribution == "observed":
+            rows = "".join(
+                f"<tr><td>{html.escape(str(category['value']))}</td>"
+                f"<td>{category['observed_count']:,}</td>"
+                f"<td>{category['observed_share'] * 100:.2f}%</td></tr>"
+                for category in panel["comparison_categories"]
+                if category["is_observed"]
+            )
+            body += (
+                f"<h3>{html.escape(panel['label'])}</h3>"
+                f"<p>Observed n = {panel['observed_n']:,} "
+                f"({observed_percent:.2f}% of full).</p>"
+                "<table><tr><th>Observed category</th><th>Papers</th>"
+                "<th>Share of observed</th></tr>"
+                f"{rows}</table>"
+            )
+        else:
+            rows = "".join(
+                f"<tr><td>{html.escape(str(category['value']))}</td>"
+                f"<td>{category['full_count']:,}</td>"
+                f"<td>{category['full_share'] * 100:.2f}%</td>"
+                f"<td>{category['observed_count']:,}</td>"
+                f"<td>{_format_metric(category['observed_share'], percent=True) if category['is_observed'] else 'Excluded'}</td></tr>"
+                for category in panel["comparison_categories"]
+            )
+            body += (
+                f"<h3>{html.escape(panel['label'])}</h3>"
+                f"<p>Full n = {panel['full_n']:,}; observed n = {panel['observed_n']:,} "
+                f"({observed_percent:.2f}% observable).</p>"
+                "<table><tr><th>Category</th><th>Full papers</th><th>Full share</th>"
+                "<th>Observed papers</th><th>Observed share</th></tr>"
+                f"{rows}</table>"
+            )
+
+    matrix_head = "".join(
+        f"<th>{html.escape(item['label'])}</th>" for item in irr["models"]
+    )
+
+    def matrix_value(left: str, right: str, metric: str, percent: bool) -> str:
+        if left == right:
+            return "100.00%" if percent else "1.00"
+        pair = next(
+            (
+                item
+                for item in irr["pairs"]
+                if {item["left_model"], item["right_model"]} == {left, right}
+            ),
+            None,
+        )
+        return _format_metric(pair[metric] if pair else None, percent=percent)
+
+    def matrix_rows(metric: str, percent: bool) -> str:
+        return "".join(
+            f"<tr><th>{html.escape(left['label'])}</th>"
+            + "".join(
+                f"<td>{matrix_value(left['id'], right['id'], metric, percent)}</td>"
+                for right in irr["models"]
+            )
+            + "</tr>"
+            for left in irr["models"]
+        )
+
+    irr_rows = "".join(
+        f"<tr><td>{html.escape(pair['left_label'])} / "
+        f"{html.escape(pair['right_label'])}</td>"
+        f"<td>{pair['intersection_papers']:,}</td>"
+        f"<td>{html.escape(str(row['label']))}</td>"
+        f"<td>{html.escape(str(row['classification']))}</td>"
+        f"<td>{row['comparable_papers']:,}</td>"
+        f"<td>{_format_metric(row['percent_agreement'], percent=True)}</td>"
+        f"<td>{_format_metric(row['krippendorff_alpha'])}</td></tr>"
+        for pair in irr["pairs"]
+        for row in pair["dimensions"]
+    )
+    body += (
+        "<h2>Model inter-rater reliability</h2>"
+        f"<p>All {len(irr['pairs']):,} available model pairs are compared on their "
+        "exact common-paper intersections. IRR uses the selected dataset scope but is not restricted "
+        "by the study-status filter because study status is itself a rated dimension.</p>"
+        "<h3>Mean exact agreement across six dimensions</h3>"
+        f"<table><tr><th>Model</th>{matrix_head}</tr>"
+        f"{matrix_rows('mean_percent_agreement', True)}</table>"
+        "<h3>Mean nominal Krippendorff alpha across six dimensions</h3>"
+        f"<table><tr><th>Model</th>{matrix_head}</tr>"
+        f"{matrix_rows('mean_krippendorff_alpha', False)}</table>"
+        "<p>The matrix means are orientation summaries across the six validated "
+        "core dimensions. The table reports all eight displayed dimensions; "
+        "process stage and definition clarity are marked exploratory.</p>"
+        "<table><tr><th>Model pair</th><th>Common papers</th><th>Dimension</th><th>Use</th>"
+        "<th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff alpha</th></tr>"
+        f"{irr_rows}</table>"
+        "<h2>Interpretation boundary</h2>"
+        "<p>Model agreement measures consistency, not accuracy. Exact agreement "
+        "must be interpreted together with nominal Krippendorff alpha because "
+        "dominant categories can produce high raw agreement. Human coding remains "
+        "the accuracy anchor.</p>"
+    )
+    return _document(f"{scope_label}: observed composition", body)
+
+
+def _format_metric(value: float | None, percent: bool = False) -> str:
+    if value is None:
+        return "Not estimable"
+    return f"{value * 100:.2f}%" if percent else f"{value:.2f}"
+
+
+def _intro(scope_label: str, n: int) -> str:
+    return (
         f"<h2>Overview</h2>"
         f"<p>This report examines how artificial intelligence is specified across "
         f"the {html.escape(scope_label)} dataset, which contains "
         f"{n:,} papers.</p>"
     )
-    if overview["has_specifications"]:
-        lead += (
-            f"<p>Across the seven specification dimensions, the papers reach an "
-            f"average specification clarity of {clarity:.2f} on a zero to one "
-            f"scale, where one means the papers agree closely on how AI is "
-            f"specified and zero means they diverge. The corresponding "
-            f"fragmentation score is {fragmentation:.2f}. Higher fragmentation "
-            f"points to a literature that uses the label AI in competing ways.</p>"
-        )
-    return lead
 
 
 def _performance_section(service, scope_id: str) -> str:
@@ -109,7 +258,7 @@ def _performance_section(service, scope_id: str) -> str:
         "<h2>Performance analysis</h2>"
         f"<p>The dataset spans {span} and has attracted {s['total_citations']:,} "
         f"citations in total, an average of {s['mean_citations']:.2f} per paper. "
-        f"About {round(s['cited_share'] * 100)} percent of the papers have been "
+        f"About {s['cited_share'] * 100:.2f} percent of the papers have been "
         f"cited at least once.</p>"
     )
 
@@ -151,28 +300,6 @@ def _performance_section(service, scope_id: str) -> str:
     return lead + journal_table + cited_table
 
 
-def _dimensions_section(overview: dict) -> str:
-    rows = []
-    for column, label in DIM_LABELS.items():
-        score = overview["dimension_convergence"].get(column, 0.0)
-        dominant = overview["dominant_values"].get(column) or "not specified"
-        reading = "converges" if score >= 0.6 else "is divided" if score >= 0.3 else "is fragmented"
-        rows.append(
-            f"<tr><td>{html.escape(label)}</td>"
-            f"<td>{html.escape(str(dominant))}</td>"
-            f"<td>{score:.2f}</td><td>{reading}</td></tr>"
-        )
-    return (
-        "<h2>Specification dimensions</h2>"
-        "<p>For each dimension, the table shows the most common value in this "
-        "dataset and how strongly the papers agree on it.</p>"
-        "<table><tr><th>Dimension</th><th>Most common value</th>"
-        "<th>Convergence</th><th>Reading</th></tr>"
-        + "".join(rows)
-        + "</table>"
-    )
-
-
 def _contrast_section(service, scope_id: str) -> str:
     rows = service.contrast(scope_id, "ai_type_form", "ai_role_function")
     if not rows:
@@ -185,30 +312,9 @@ def _contrast_section(service, scope_id: str) -> str:
     return (
         "<h2>Construct contrast</h2>"
         "<p>The papers below share the same AI type but assign it different roles. "
-        "A high number of distinct roles for one AI type indicates a construct "
-        "contrast, where the same technology is theorised in incompatible ways.</p>"
+        "The distinct-role count identifies types whose role assignments warrant "
+        "closer inspection; it does not by itself establish theoretical incompatibility.</p>"
         "<table><tr><th>AI type</th><th>Distinct roles</th><th>Papers</th></tr>"
-        + items
-        + "</table>"
-    )
-
-
-def _journal_section(service, scope_id: str) -> str:
-    rows = service.group_convergence_table(scope_id, "Source title")
-    if not rows:
-        return ""
-    items = "".join(
-        f"<tr><td>{html.escape(str(r['Source title']))}</td>"
-        f"<td>{r['paper_count']}</td>"
-        f"<td>{r['fragmentation_score']:.2f}</td></tr>"
-        for r in rows[:15]
-    )
-    return (
-        "<h2>Journals with the most fragmented specification</h2>"
-        "<p>These journals show the widest internal disagreement on how AI is "
-        "specified, which can indicate a venue where the construct is still "
-        "unsettled.</p>"
-        "<table><tr><th>Journal</th><th>Papers</th><th>Fragmentation</th></tr>"
         + items
         + "</table>"
     )
@@ -222,9 +328,8 @@ def _methods_note() -> str:
         "filtered for relevance to AI and entrepreneurship or business research. "
         "Specification codes follow a seven dimension framework covering role, "
         "type, mechanism, level of analysis, process stage, scope conditions, and "
-        "definition clarity. Convergence is measured from the spread of codes "
-        "within a group, so every figure in this report can be traced back to the "
-        "underlying papers in the platform.</p>"
+        "definition clarity. Every figure can be traced to the underlying papers "
+        "in the platform.</p>"
     )
 
 

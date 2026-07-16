@@ -7,6 +7,7 @@ grounding, interpretation, implications, decisions, and next actions.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -99,11 +100,20 @@ DIMENSIONS = {
 
 
 def percent(value: float) -> str:
-    return "—" if pd.isna(value) else f"{value:.1%}"
+    return "—" if pd.isna(value) else f"{value:.2%}"
 
 
 def number(value: float) -> str:
-    return "—" if pd.isna(value) else f"{value:.3f}"
+    return "—" if pd.isna(value) else f"{value:.2f}"
+
+
+def markdown_2dp(frame: pd.DataFrame) -> str:
+    """Render floating-point report values consistently to two decimals."""
+
+    displayed = frame.copy()
+    for column in displayed.select_dtypes(include=["floating"]).columns:
+        displayed[column] = displayed[column].map(number)
+    return displayed.to_markdown(index=False, disable_numparse=True)
 
 
 def prevalence_table(prevalence: pd.DataFrame, dimension: str) -> str:
@@ -119,10 +129,10 @@ def agreement_table(agreement: pd.DataFrame, dimension: str) -> str:
     subset = agreement[(agreement.comparison_set == "probability_sample") & (agreement.dimension == dimension)].copy()
     subset["pair"] = subset.left_model + "–" + subset.right_model
     subset["agreement (95% CI)"] = subset.apply(
-        lambda row: f"{row.percent_agreement:.3f} [{row.agreement_ci_low:.3f}, {row.agreement_ci_high:.3f}]", axis=1
+        lambda row: f"{row.percent_agreement:.2f} [{row.agreement_ci_low:.2f}, {row.agreement_ci_high:.2f}]", axis=1
     )
     subset["alpha (95% CI)"] = subset.apply(
-        lambda row: f"{row.krippendorff_alpha:.3f} [{row.alpha_ci_low:.3f}, {row.alpha_ci_high:.3f}]", axis=1
+        lambda row: f"{row.krippendorff_alpha:.2f} [{row.alpha_ci_low:.2f}, {row.alpha_ci_high:.2f}]", axis=1
     )
     return subset[["pair", "comparable", "agreement (95% CI)", "alpha (95% CI)"]].sort_values("pair").to_markdown(index=False)
 
@@ -136,6 +146,7 @@ def grounding_table(grounding: pd.DataFrame, dimension: str) -> str:
 
 
 def main() -> None:
+    manifest = json.loads((DATA / "analysis_manifest.json").read_text(encoding="utf-8"))
     prevalence = pd.read_csv(DATA / "dimension_prevalence.csv")
     agreement = pd.read_csv(DATA / "agreement_pairwise.csv")
     multirater = pd.read_csv(DATA / "agreement_multirater.csv")
@@ -161,7 +172,7 @@ def main() -> None:
 
 {agreement_table(agreement, dimension)}
 
-The four-model common-intersection result is **alpha = {four.krippendorff_alpha:.3f}**, with **{four.unanimous_share:.1%}** unanimous classifications across {int(four.comparable_units):,} comparable papers.
+The four-model common-intersection result is **alpha = {four.krippendorff_alpha:.2f}**, with **{four.unanimous_share:.2%}** unanimous classifications across {int(four.comparable_units):,} comparable papers.
 
 **Evidence-grounding diagnostic**
 
@@ -185,6 +196,8 @@ This document reports the complete model-validation results for the AI–entrepr
 
 The analysis is reproducible from `scripts/analyze_model_validation.py`. Numeric tables come from `data/processed/analysis/model_validation/`; figures come from `reports/analysis/figures/model_validation/`.
 
+**Snapshot date:** {manifest['generated_at']}. Llama and Gemma results are point-in-time supplementary cache snapshots. Their incomplete coverage may increase while local coding continues, so these rows and their intersections must not be described as final.
+
 ## Evidentiary and inferential boundary
 
 The coding evidence consists only of titles, abstracts and author keywords. Therefore, absence codes mean “not observable in the supplied metadata,” not “absent from the full paper.” Agreement measures reliability, not truth. Mini remains the preselected primary full-corpus rater; Nano is a complete sensitivity baseline; Claude and Gemini are independent strong raters on a frozen probability sample; Llama and Gemma are supplementary local stress tests. No model is treated as an infallible gold standard.
@@ -193,7 +206,7 @@ The coding evidence consists only of titles, abstracts and author keywords. Ther
 
 The representative validation population is the frozen 2,235-paper stratified probability sample. The common Mini–Nano–Claude–Gemini intersection contains 2,233 papers. The additional human-anchor-only papers are excluded from representative model prevalence and IRR. Sampling weights are used for category prevalence; agreement is calculated on exact paper-ID intersections.
 
-{coverage.to_markdown(index=False)}
+{markdown_2dp(coverage)}
 
 Mini and Gemini cover the complete probability sample. Nano and Claude each have one non-response, leaving a 2,233-paper common-four intersection. Llama and Gemma cover only selective subsets and are not pooled into representative four-model reliability.
 
@@ -203,7 +216,7 @@ Exact agreement is the proportion of papers receiving identical codes. Krippendo
 
 The average values below are orientation summaries only. A mean alpha across heterogeneous dimensions is not a formal overall reliability coefficient; all substantive decisions use dimension-level estimates.
 
-{macro.sort_values('percent_agreement', ascending=False).to_markdown(index=False)}
+{markdown_2dp(macro.sort_values('percent_agreement', ascending=False))}
 
 Claude–Gemini is the most convergent representative pair. Mini is closer to each strong sampled rater than Nano is, supporting Mini's continued role as the primary production rater while preserving model sensitivity as an explicit limitation.
 
@@ -235,7 +248,7 @@ Nano's lower agreement with every strong rater demonstrates capability-related m
 
 ## Supplementary local-model intersections
 
-{local.sort_values('percent_agreement', ascending=False).to_markdown(index=False)}
+{markdown_2dp(local.sort_values('percent_agreement', ascending=False))}
 
 Llama and Gemma comparisons use small successful intersections and may be affected by selective non-response. Their high literal evidence overlap cannot compensate for low or selective coverage. These estimates are diagnostic stress tests and must not be generalized to the corpus.
 

@@ -10,7 +10,7 @@ from collections import defaultdict
 from typing import Any
 
 from aecsp.knowledge_graph.records import GraphDraft
-from aecsp.knowledge_graph.schema import NODE_SPECS
+from aecsp.knowledge_graph.schema import NODE_SPECS, RELATIONSHIP_SPECS
 from aecsp.progress import ProgressReporter
 
 
@@ -31,7 +31,7 @@ def create_constraints(session) -> None:
 
     for spec in NODE_SPECS:
         session.run(
-            f"CREATE CONSTRAINT {_constraint_name(spec.label)} IF NOT EXISTS "
+            f"CREATE CONSTRAINT {_constraint_name(spec.label, spec.key)} IF NOT EXISTS "
             f"FOR (n:`{spec.label}`) REQUIRE n.`{spec.key}` IS UNIQUE"
         )
 
@@ -43,10 +43,11 @@ def load_graph(
     batch_size: int = 1000,
     *,
     show_progress: bool = False,
+    database: str = "neo4j",
 ) -> dict:
     """Ingest all nodes and relationships; return counts."""
 
-    with driver.session() as session:
+    with driver.session(database=database) as session:
         if wipe:
             session.run("MATCH (n) DETACH DELETE n")
         create_constraints(session)
@@ -63,6 +64,36 @@ def load_graph(
         )
         rels = _load_relationships(session, graph, batch_size, relationship_progress)
     return {"nodes": nodes, "relationships": rels}
+
+
+def database_counts(driver, database: str = "neo4j") -> dict[str, Any]:
+    """Return loaded counts and any labels or relationships outside the contract."""
+
+    with driver.session(database=database, default_access_mode="READ") as session:
+        node_rows = session.run(
+            "MATCH (n) UNWIND labels(n) AS label "
+            "RETURN label, count(*) AS count ORDER BY label"
+        )
+        node_counts = {row["label"]: int(row["count"]) for row in node_rows}
+        relationship_rows = session.run(
+            "MATCH ()-[r]->() RETURN type(r) AS type, count(*) AS count ORDER BY type"
+        )
+        relationship_counts = {
+            row["type"]: int(row["count"]) for row in relationship_rows
+        }
+
+    allowed_labels = {spec.label for spec in NODE_SPECS}
+    allowed_relationships = {spec.relationship for spec in RELATIONSHIP_SPECS}
+    return {
+        "nodes": sum(node_counts.values()),
+        "relationships": sum(relationship_counts.values()),
+        "node_labels": node_counts,
+        "relationship_types": relationship_counts,
+        "unexpected_node_labels": sorted(set(node_counts) - allowed_labels),
+        "unexpected_relationship_types": sorted(
+            set(relationship_counts) - allowed_relationships
+        ),
+    }
 
 
 def _load_nodes(session, graph: GraphDraft, batch_size: int, progress=None) -> int:
@@ -133,8 +164,9 @@ def _load_relationships(session, graph: GraphDraft, batch_size: int, progress=No
     return total
 
 
-def _constraint_name(label: str) -> str:
-    return "uniq_" + "".join(ch if ch.isalnum() else "_" for ch in label).lower()
+def _constraint_name(label: str, key: str) -> str:
+    text = f"{label}_{key}"
+    return "uniq_" + "".join(ch if ch.isalnum() else "_" for ch in text).lower()
 
 
 def _chunks(rows: list, size: int):

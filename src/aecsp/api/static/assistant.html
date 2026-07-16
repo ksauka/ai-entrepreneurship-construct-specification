@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI-Entrepreneurship Construct Specification Platform - Assistant</title>
 <link rel="stylesheet" href="/static/esd.css" />
-<script src="/static/citation.js"></script>
+<script src="/static/citation.js?v=scopus-first-20260716"></script>
 <style>
   .q-list { display: flex; flex-direction: column; gap: 10px; }
   .q-item { text-align: left; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line);
@@ -23,7 +23,9 @@
     <p>Ask how AI is specified across the corpus. Each answer links to the exact papers behind it.</p>
     <nav class="nav-links">
       <a class="nav-link" href="/">Analytics Dashboard</a>
-      <a class="nav-link" href="/graph">Knowledge Graph</a>
+      <a class="nav-link" href="/composition">Observed Composition</a>
+      <a class="nav-link" href="/topic-review">Topic Review</a>
+      <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
       <a class="nav-link active" href="/assistant">Assistant</a>
     </nav>
     <div class="toolbar">
@@ -52,7 +54,6 @@ const QUESTIONS = [
   { id:"mech",   text:"Which papers link AI to a given mechanism?",                                  column:"ai_mechanism" },
   { id:"nomech", text:"Which papers omit the mechanism, leaving a black box claim?",                filter:{ai_mechanism:"mechanism missing"} },
   { id:"typerole", text:"Same AI type but different role, a construct contrast",                     contrast:["ai_type_form","ai_role_function"] },
-  { id:"journals", text:"Which journals converge or fragment on AI specification?",                  groups:"Source title" },
 ];
 let scope = "full_corpus";
 const api = (p) => fetch(p).then(r => r.json());
@@ -82,13 +83,89 @@ async function pick(id) {
   } else if (q.filter) {
     runPapers(q.filter);
   } else if (q.contrast) {
+    el("controls").innerHTML = `<label>Documents per view
+      <select id="contrastLimit">
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+        <option value="250">250</option>
+        <option value="500">500</option>
+        <option value="1000">1,000</option>
+        <option value="50000">All</option>
+      </select></label>`;
     const rows = await api(`/api/scope/${scope}/contrast?shared=${q.contrast[0]}&differ=${q.contrast[1]}`);
-    el("answer").innerHTML = rows.length ? `<table><tr><th>AI type</th><th>Distinct roles</th><th>Papers</th></tr>` +
-      rows.map(r => `<tr><td>${esc(r.shared_value)}</td><td><span class="pill">${r.contrast_value_count}</span></td><td>${r.paper_count}</td></tr>`).join("") + `</table>` : note();
-  } else if (q.groups) {
-    const rows = await api(`/api/scope/${scope}/groups?by=${encodeURIComponent(q.groups)}`);
-    el("answer").innerHTML = rows.length ? `<table><tr><th>Journal</th><th>Papers</th><th>Fragmentation</th></tr>` +
-      rows.slice(0,30).map(r => `<tr><td>${esc(r["Source title"])}</td><td>${r.paper_count}</td><td>${Number(r.fragmentation_score).toFixed(2)}</td></tr>`).join("") + `</table>` : note();
+    el("answer").innerHTML = rows.length
+      ? `<p class="muted">Inspect the roles or open the documents supporting each figure.</p>
+         <table><tr><th>AI type</th><th>Distinct roles</th><th>Papers</th></tr>` +
+        rows.map(r => `<tr><td>${esc(r.shared_value)}</td>
+          <td><button class="table-number table-action assistant-contrast" type="button" data-action="roles" data-value="${esc(r.shared_value)}" aria-label="View roles for ${esc(r.shared_value)}"><strong>${r.contrast_value_count}</strong><span class="action-label">View roles</span></button></td>
+          <td><button class="table-number table-action assistant-contrast" type="button" data-action="papers" data-value="${esc(r.shared_value)}" aria-label="View papers for ${esc(r.shared_value)}"><strong>${r.paper_count.toLocaleString()}</strong><span class="action-label">View papers</span></button></td></tr>`).join("") + `</table>`
+      : note();
+    document.querySelectorAll(".assistant-contrast").forEach(button => {
+      button.onclick = () => button.dataset.action === "roles"
+        ? showContrastRoles(button.dataset.value)
+        : showContrastPapers(button.dataset.value);
+    });
+  }
+}
+
+function contrastEvidenceLimit() {
+  return Number(el("contrastLimit")?.value || 100);
+}
+
+async function loadContrastDetail(aiType, limit = contrastEvidenceLimit()) {
+  return api(`/api/scope/${scope}/contrast/evidence?shared=ai_type_form&value=${encodeURIComponent(aiType)}&differ=ai_role_function&limit=${limit}`);
+}
+
+async function showContrastRoles(aiType) {
+  const detail = await loadContrastDetail(aiType, 1);
+  const rows = detail.values.map(item => `<tr><td>${esc(item.value)}</td>
+    <td><button class="table-number table-action assistant-role-papers" type="button" data-type="${esc(aiType)}" data-role="${esc(item.filter_value)}" data-count="${item.count}" aria-label="View ${item.count} papers for ${esc(aiType)} as ${esc(item.value)}"><strong>${item.count.toLocaleString()}</strong><span class="action-label">View papers</span></button></td></tr>`).join("");
+  el("answer").innerHTML =
+    `<div class="evidence-controls"><button class="btn btn-outline" id="backToContrast" type="button">Back to construct contrast</button>
+      <button class="btn" id="viewTypePapers" type="button">View supporting papers</button></div>
+     <h3>${esc(aiType)}: ${detail.values.length} distinct roles</h3>
+     <p class="muted">${detail.total_papers.toLocaleString()} papers. Click a role count to inspect its documents.</p>
+     <table><tr><th>Role</th><th>Supporting papers</th></tr>${rows}</table>`;
+  el("backToContrast").onclick = () => pick("typerole");
+  el("viewTypePapers").onclick = () => showContrastPapers(aiType);
+  document.querySelectorAll(".assistant-role-papers").forEach(button => {
+    button.onclick = () => showRolePapers(
+      button.dataset.type,
+      button.dataset.role,
+      Number(button.dataset.count),
+    );
+  });
+}
+
+async function showContrastPapers(aiType, requestedLimit = null) {
+  const limit = requestedLimit == null ? contrastEvidenceLimit() : requestedLimit;
+  const detail = await loadContrastDetail(aiType, limit);
+  const shown = detail.papers.length;
+  el("answer").innerHTML =
+    `<div class="evidence-controls"><button class="btn btn-outline" id="backToRoles" type="button">View distinct roles</button>
+      ${shown < detail.total_papers ? `<button class="btn" id="showAllTypePapers" type="button">Show all ${detail.total_papers.toLocaleString()}</button>` : ""}</div>
+     <h3>${esc(aiType)}: supporting papers</h3>
+     <p class="muted">Showing ${shown.toLocaleString()} of ${detail.total_papers.toLocaleString()} papers.</p>
+     ${detail.papers.map(paperEvidenceItem).join("")}`;
+  el("backToRoles").onclick = () => showContrastRoles(aiType);
+  if (el("showAllTypePapers")) {
+    el("showAllTypePapers").onclick = () => showContrastPapers(aiType, 50000);
+  }
+}
+
+async function showRolePapers(aiType, role, totalPapers, requestedLimit = null) {
+  const limit = requestedLimit == null ? contrastEvidenceLimit() : requestedLimit;
+  const filters = `ai_type_form:${aiType},ai_role_function:${role}`;
+  const items = await api(`/api/scope/${scope}/query?filters=${encodeURIComponent(filters)}&limit=${limit}`);
+  el("answer").innerHTML =
+    `<div class="evidence-controls"><button class="btn btn-outline" id="backToRoles" type="button">View distinct roles</button>
+      ${items.length < totalPapers ? `<button class="btn" id="showAllRolePapers" type="button">Show all ${totalPapers.toLocaleString()}</button>` : ""}</div>
+     <h3>${esc(aiType)} → ${esc(role)}</h3>
+     <p class="muted">Showing ${items.length.toLocaleString()} of ${totalPapers.toLocaleString()} papers.</p>
+     ${items.map(paperEvidenceItem).join("")}`;
+  el("backToRoles").onclick = () => showContrastRoles(aiType);
+  if (el("showAllRolePapers")) {
+    el("showAllRolePapers").onclick = () => showRolePapers(aiType, role, totalPapers, 50000);
   }
 }
 

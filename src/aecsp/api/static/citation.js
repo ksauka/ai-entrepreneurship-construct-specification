@@ -1,16 +1,27 @@
 // Shared helpers for in-text citations and links out to the source article.
-// Used by the dashboard, knowledge graph, and assistant pages.
+// Used by the dashboard, observed composition, topic review, knowledge graph,
+// and assistant pages.
 
 function _escAttr(s) {
   return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-// Best available link for a paper: DOI first, then the Scopus record link.
+// Best available link for a paper: Scopus first, then DOI.
+// Scopus is primary because the corpus and its citation metrics originate there.
 function paperHref(p) {
-  const doi = (p.DOI || "").trim();
-  if (doi) return "https://doi.org/" + doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "");
   const link = (p.Link || "").trim();
-  return link || null;
+  if (link) {
+    try {
+      const url = new URL(link);
+      if (url.protocol === "https:" || url.protocol === "http:") return url.href;
+    } catch (_) {
+      // Invalid or relative values are not exposed as publication links.
+    }
+  }
+  const doi = (p.DOI || "").trim();
+  return doi
+    ? "https://doi.org/" + doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+    : null;
 }
 
 // In-text citation, for example "Obschonka et al. (2019)".
@@ -30,7 +41,7 @@ function citation(p) {
 function paperTitleLink(p) {
   const href = paperHref(p);
   const title = _escAttr(p.Title || "(untitled)");
-  return href ? `<a href="${_escAttr(href)}" target="_blank" rel="noopener">${title}</a>` : title;
+  return href ? `<a href="${_escAttr(href)}" target="_blank" rel="noopener noreferrer">${title}</a>` : title;
 }
 
 // One evidence row: linked title plus citation and source.

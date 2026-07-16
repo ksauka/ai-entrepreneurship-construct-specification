@@ -10,6 +10,7 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from aecsp.analytics.keyword_trends import load_keyword_aliases, normalize_keyword
 from aecsp.corpus.query_provenance import QUERY_SOURCE_COLUMN, SEARCH_QUERIES
 from aecsp.knowledge_graph.records import GraphDraft, NodeRef
 from aecsp.progress import ProgressReporter
@@ -27,8 +28,27 @@ YEAR_COLUMNS = ("year", "Year", "publication_year")
 AFFILIATION_COLUMNS = ("Authors with affiliations", "authors_with_affiliations")
 REFERENCE_COLUMNS = ("References", "references")
 
-# BERTopic assignments become Topic nodes; keywords are handled separately.
-TOPIC_COLUMNS = ("bertopic_topic", "topic", "topics")
+# Each fitted model has its own topic namespace. The stable graph identity is
+# ``scope:topic_id``; display labels remain editable researcher interpretations.
+TOPIC_MODELS = (
+    {
+        "scope": "full_corpus",
+        "model": "global",
+        "topic_id": "bertopic_topic",
+        "label": "bertopic_topic_label",
+        "probability": "bertopic_topic_prob",
+    },
+    *(
+        {
+            "scope": f"query_{query}",
+            "model": "native",
+            "topic_id": f"query_{query}_topic_id",
+            "label": f"query_{query}_topic_label",
+            "probability": f"query_{query}_topic_prob",
+        }
+        for query in range(1, 5)
+    ),
+)
 
 # (column, source tag) for keyword-bearing fields.
 KEYWORD_SOURCES = (
@@ -49,6 +69,7 @@ _DOI_PATTERN = re.compile(r"10\.\d{4,9}/[-._;()/:a-z0-9]+", re.IGNORECASE)
 # Papers with more authors than this skip co-authorship pairing (avoids the
 # quadratic blow-up on large consortium author lists).
 MAX_COAUTHORS = 25
+KEYWORD_ALIASES = load_keyword_aliases()
 
 
 class GraphBuildError(ValueError):
@@ -56,7 +77,10 @@ class GraphBuildError(ValueError):
 
 
 def build_publication_graph(
-    rows: Iterable[Mapping[str, Any]], *, show_progress: bool = False
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    show_progress: bool = False,
+    topic_scopes: set[str] | None = None,
 ) -> GraphDraft:
     """Build a graph draft from paper records.
 
@@ -81,7 +105,7 @@ def build_publication_graph(
         _add_journal(graph, publication_ref, row)
         _add_year(graph, publication_ref, row)
         _add_queries(graph, publication_ref, row)
-        _add_topics(graph, publication_ref, row)
+        _add_topics(graph, publication_ref, row, topic_scopes=topic_scopes)
         _add_keywords(graph, publication_ref, row)
         _add_references(graph, publication_ref, row, doi_index)
         _add_specification(graph, publication_ref, row)
@@ -106,6 +130,16 @@ def _add_publication(graph: GraphDraft, row: Mapping[str, Any], index: int) -> N
     if publication_id is None:
         raise GraphBuildError(f"Record {index} has no usable publication id")
 
+    scope_properties = {
+        column: int(_is_truthy(row.get(column)))
+        for column in (
+            "in_query_1",
+            "in_query_2",
+            "in_query_3",
+            "in_query_4",
+            "ai_ent_relevant",
+        )
+    }
     return graph.add_node(
         "Publication",
         "id",
@@ -114,7 +148,11 @@ def _add_publication(graph: GraphDraft, row: Mapping[str, Any], index: int) -> N
         abstract=_first_value(row, ABSTRACT_COLUMNS),
         doi=_clean(row.get("doi") or row.get("DOI")),
         year=_first_value(row, YEAR_COLUMNS),
+        citations=_clean(row.get("Cited by") or row.get("citations")),
+        link=_clean(row.get("Link") or row.get("link")),
+        query_sources=_clean(row.get(QUERY_SOURCE_COLUMN)),
         source_record_index=index,
+        **scope_properties,
     )
 
 
@@ -198,12 +236,80 @@ def _add_queries(graph: GraphDraft, publication_ref: NodeRef, row: Mapping[str, 
         graph.add_relationship(publication_ref, "CAPTURED_BY", query_ref)
 
 
-def _add_topics(graph: GraphDraft, publication_ref: NodeRef, row: Mapping[str, Any]) -> None:
-    for column in TOPIC_COLUMNS:
-        for topic in _split_list(row.get(column)):
-            topic_ref = graph.add_node("Topic", "label", topic)
+def _add_topics(
+    graph: GraphDraft,
+    publication_ref: NodeRef,
+    row: Mapping[str, Any],
+    *,
+    topic_scopes: set[str] | None = None,
+) -> None:
+    structured = any(
+        _clean(row.get(config["label"])) is not None for config in TOPIC_MODELS
+    )
+    for config in TOPIC_MODELS:
+        if topic_scopes is not None and config["scope"] not in topic_scopes:
+            continue
+        topic_id = _clean(row.get(config["topic_id"]))
+        label = _clean(row.get(config["label"]))
+        if not topic_id or topic_id == "-1" or not label or label.startswith("-1"):
+            continue
+        scope = str(config["scope"])
+        label_column = str(config["label"])
+        automatic_label = (
+            _clean(row.get(f"{label_column}_automatic")) or label
+        )
+        review_status = (
+            _clean(row.get(f"{label_column}_review_status")) or "automatic"
+        )
+        uid = f"{scope}:{topic_id}"
+        topic_ref = graph.add_node(
+            "Topic",
+            "uid",
+            uid,
+            uid=uid,
+            scope=scope,
+            topic_id=topic_id,
+            model=config["model"],
+            topic_label=label,
+            display_label=label,
+            automatic_label=automatic_label,
+            approved_label=label if review_status == "approved" else "",
+            review_status=review_status,
+        )
+        graph.add_relationship(
+            publication_ref,
+            "HAS_TOPIC",
+            topic_ref,
+            scope=scope,
+            model=config["model"],
+            probability=_clean(row.get(config["probability"])),
+        )
+
+    # Backward compatibility for older paper records and small unit fixtures
+    # that expose a label directly in ``bertopic_topic``.
+    if not structured and (topic_scopes is None or "full_corpus" in topic_scopes):
+        legacy = _clean(row.get("bertopic_topic") or row.get("topic") or row.get("topics"))
+        if legacy and legacy != "-1":
+            uid = f"full_corpus:{legacy}"
+            topic_ref = graph.add_node(
+                "Topic",
+                "uid",
+                uid,
+                uid=uid,
+                scope="full_corpus",
+                topic_id=legacy,
+                model="global",
+                topic_label=legacy,
+                display_label=legacy,
+                automatic_label=legacy,
+                review_status="automatic",
+            )
             graph.add_relationship(
-                publication_ref, "HAS_TOPIC", topic_ref, model="global"
+                publication_ref,
+                "HAS_TOPIC",
+                topic_ref,
+                scope="full_corpus",
+                model="global",
             )
 
 
@@ -309,8 +415,7 @@ def _split_list(value: Any) -> list[str]:
 
 
 def _normalize_keyword(term: str) -> str:
-    text = str(term).strip().lower()
-    return re.sub(r"\s+", " ", text)
+    return normalize_keyword(term, KEYWORD_ALIASES)
 
 
 def _normalize_doi(value: Any) -> str:
