@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/esd.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
+<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
 </head>
 <body>
 <div class="container">
@@ -101,17 +102,6 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2>Construct contrast <span class="sub">same AI type, different role</span></h2>
-    <p class="chart-note">Click a Distinct roles figure to inspect its role categories. Click a Papers figure to inspect the supporting documents.</p>
-    <div class="metric-controls">
-      <label>Evidence papers per selection
-        <input id="evidenceLimit" type="number" min="1" max="50000" value="100" />
-      </label>
-      <span class="muted">Default 100; enter any value up to the papers available.</span>
-    </div>
-    <table id="contrastTable"><tbody></tbody></table>
-  </div>
 </div>
 
 <aside id="panel" class="side-panel"><span class="close" onclick="closePanel()">close</span><div id="panelBody"></div></aside>
@@ -155,100 +145,6 @@ async function init() {
 async function render() {
   renderPerformance();
   renderKeywordEvolution();
-  const contrast = await api(`/api/scope/${scope}/contrast?shared=ai_type_form&differ=ai_role_function`);
-  el("contrastTable").querySelector("tbody").innerHTML = contrast.length
-    ? `<tr><th>AI type</th><th>Distinct roles: inspect</th><th>Papers: inspect</th></tr>` + contrast.slice(0,12).map(c =>
-        `<tr><td>${esc(c.shared_value)}</td>
-          <td><button class="table-number table-action contrast-detail" type="button" data-action="roles" data-value="${esc(c.shared_value)}" aria-label="Inspect roles for ${esc(c.shared_value)}"><strong>${c.contrast_value_count}</strong><span class="action-label">View roles</span></button></td>
-          <td><button class="table-number table-action contrast-detail" type="button" data-action="papers" data-value="${esc(c.shared_value)}" aria-label="Inspect papers for ${esc(c.shared_value)}"><strong>${c.paper_count.toLocaleString()}</strong><span class="action-label">View papers</span></button></td></tr>`).join("")
-    : `<tr><td class="muted">Needs specification codes. Run Stage 2A.5.</td></tr>`;
-  document.querySelectorAll(".contrast-detail").forEach(button => {
-    button.onclick = () => button.dataset.action === "roles"
-      ? showContrastRoles(button.dataset.value)
-      : showContrastPapers(button.dataset.value);
-  });
-
-}
-
-function selectedEvidenceLimit() {
-  const requested = Number.parseInt(el("evidenceLimit").value, 10);
-  const limit = Number.isFinite(requested) ? Math.min(50000, Math.max(1, requested)) : 100;
-  el("evidenceLimit").value = limit;
-  return limit;
-}
-
-async function loadContrastDetail(aiType, limit = selectedEvidenceLimit()) {
-  return api(`/api/scope/${scope}/contrast/evidence?shared=ai_type_form&value=${encodeURIComponent(aiType)}&differ=ai_role_function&limit=${limit}`);
-}
-
-async function showContrastRoles(aiType) {
-  const detail = await loadContrastDetail(aiType, 1);
-  const roleRows = detail.values.map(item =>
-    `<tr><td>${esc(item.value)}</td><td><button class="table-number table-action role-papers" type="button" data-type="${esc(aiType)}" data-role="${esc(item.filter_value)}" data-count="${item.count}"><strong>${item.count.toLocaleString()}</strong><span class="action-label">View papers</span></button></td></tr>`
-  ).join("");
-  el("panelBody").innerHTML =
-    `<h2>${esc(aiType)} <span class="muted">· ${detail.total_papers.toLocaleString()} papers · ${detail.values.length} roles</span></h2>` +
-    `<p class="chart-note">Click a paper count to inspect the documents assigned to that role.</p>` +
-    `<h3>Observed role distribution</h3><table><tbody><tr><th>Distinct role</th><th>Supporting papers</th></tr>${roleRows}</tbody></table>` +
-    `<button class="btn" id="showTypePapers" type="button" style="margin-top:18px">View supporting papers</button>`;
-  document.querySelectorAll(".role-papers").forEach(button => {
-    button.onclick = () => showRolePapers(
-      button.dataset.type,
-      button.dataset.role,
-      Number(button.dataset.count),
-    );
-  });
-  el("showTypePapers").onclick = () => showContrastPapers(aiType);
-  el("panel").classList.add("open");
-}
-
-async function showContrastPapers(aiType, requestedLimit = null) {
-  const limit = requestedLimit == null ? selectedEvidenceLimit() : requestedLimit;
-  const detail = await loadContrastDetail(aiType, limit);
-  const shown = detail.papers.length;
-  el("panelBody").innerHTML =
-    `<h2>${esc(aiType)} <span class="muted">· supporting documents</span></h2>` +
-    `<p class="chart-note">Showing ${shown.toLocaleString()} of ${detail.total_papers.toLocaleString()} papers.</p>` +
-    `<div class="evidence-controls"><button class="btn btn-outline" id="backToRoles" type="button">View distinct roles</button>` +
-    (shown < detail.total_papers
-      ? `<button class="btn" id="showAllTypePapers" type="button">Show all ${detail.total_papers.toLocaleString()}</button>`
-      : "") + `</div>` +
-    detail.papers.map(contrastPaperEvidenceItem).join("");
-  el("backToRoles").onclick = () => showContrastRoles(aiType);
-  if (el("showAllTypePapers")) {
-    el("showAllTypePapers").onclick = () =>
-      showContrastPapers(aiType, Math.min(50000, detail.total_papers));
-  }
-  el("panel").classList.add("open");
-}
-
-function contrastPaperEvidenceItem(paper) {
-  const role = paper.ai_role_function || "not specified";
-  return `<div class="ev-item">
-    <div class="t">${paperTitleLink(paper)}</div>
-    <div class="m">${esc(citation(paper))} · ${esc(paper["Source title"])}</div>
-    <div class="tag-row"><span class="pill">${esc(role)}</span></div>
-  </div>`;
-}
-
-async function showRolePapers(aiType, role, totalPapers, requestedLimit = null) {
-  const limit = requestedLimit == null ? selectedEvidenceLimit() : requestedLimit;
-  const filters = `ai_type_form:${aiType},ai_role_function:${role}`;
-  const items = await api(`/api/scope/${scope}/query?filters=${encodeURIComponent(filters)}&limit=${limit}`);
-  el("panelBody").innerHTML =
-    `<h2>${esc(aiType)} → ${esc(role)}</h2>` +
-    `<p class="chart-note">Showing ${items.length.toLocaleString()} of ${totalPapers.toLocaleString()} supporting papers.</p>` +
-    `<div class="evidence-controls"><button class="btn btn-outline" id="backToRoles" type="button">View distinct roles</button>` +
-    (items.length < totalPapers
-      ? `<button class="btn" id="showAllRolePapers" type="button">Show all ${totalPapers.toLocaleString()}</button>`
-      : "") + `</div>` +
-    items.map(contrastPaperEvidenceItem).join("");
-  el("backToRoles").onclick = () => showContrastRoles(aiType);
-  if (el("showAllRolePapers")) {
-    el("showAllRolePapers").onclick = () =>
-      showRolePapers(aiType, role, totalPapers, Math.min(50000, totalPapers));
-  }
-  el("panel").classList.add("open");
 }
 
 async function renderPerformance() {
@@ -350,8 +246,16 @@ async function renderPerformance() {
     `<tr><td>${esc(citation(m))}</td><td>${paperTitleLink(m)}</td><td>${esc(m["Source title"])}</td><td>${m.citations.toLocaleString()}</td></tr>`).join("");
 }
 
-async function showPublicationPapers(year, mode = "annual", requestedLimit = 100) {
+async function showPublicationPapers(
+  year,
+  mode = "annual",
+  requestedLimit = 100,
+  requestedKeywordSource = null,
+  requestedKeywordLimit = 20,
+) {
   const limit = Math.min(50000, Math.max(1, Number.parseInt(requestedLimit, 10) || 100));
+  const keywordSource = requestedKeywordSource || el("keywordSource").value || "author";
+  const keywordLimit = Math.min(100, Math.max(1, Number.parseInt(requestedKeywordLimit, 10) || 20));
   const query = new URLSearchParams({year: String(year), mode, limit: String(limit)});
   const data = await api(`/api/scope/${encodeURIComponent(scope)}/performance/papers?${query}`);
   const heading = mode === "annual"
@@ -372,35 +276,83 @@ async function showPublicationPapers(year, mode = "annual", requestedLimit = 100
         ? `<button class="btn" id="showAllPublicationPapers" type="button">Show all ${data.total_papers.toLocaleString()}</button>`
         : "") +
     `</div>` +
-    data.papers.map(publicationPaperEvidenceItem).join("");
+    `<section class="publication-keyword-summary">` +
+      `<h3>Top keywords in ${year}</h3>` +
+      `<div class="evidence-controls">` +
+        `<label>Keyword source <select id="publicationKeywordSource">` +
+          `<option value="author" ${keywordSource === "author" ? "selected" : ""}>Author keywords</option>` +
+          `<option value="index" ${keywordSource === "index" ? "selected" : ""}>Scopus index keywords</option>` +
+          `<option value="combined" ${keywordSource === "combined" ? "selected" : ""}>Author and Scopus index keywords</option>` +
+        `</select></label>` +
+        `<label>Keywords displayed <input id="publicationKeywordLimit" type="number" min="1" max="100" value="${keywordLimit}" /></label>` +
+        `<button class="btn btn-outline" id="applyPublicationKeywordLimit" type="button">Apply</button>` +
+      `</div>` +
+      `<p id="publicationKeywordStatus" class="metric-definition">Loading keywords</p>` +
+      `<div id="publicationKeywordTable"></div>` +
+    `</section>` +
+    `<h3 class="publication-paper-heading">Supporting papers</h3>` +
+    data.papers.map(paper => paperInspectionCard(
+      paper,
+      [],
+      mode === "annual"
+        ? `Included because Scopus records ${year} as this paper's publication year.`
+        : `Included because Scopus records this paper's publication year as no later than ${year}.`
+    )).join("");
   el("annualPaperMode").onclick = () =>
-    showPublicationPapers(year, "annual", el("publicationPaperLimit").value);
+    showPublicationPapers(year, "annual", el("publicationPaperLimit").value, el("publicationKeywordSource").value, el("publicationKeywordLimit").value);
   el("cumulativePaperMode").onclick = () =>
-    showPublicationPapers(year, "cumulative", el("publicationPaperLimit").value);
+    showPublicationPapers(year, "cumulative", el("publicationPaperLimit").value, el("publicationKeywordSource").value, el("publicationKeywordLimit").value);
   el("applyPublicationLimit").onclick = () =>
-    showPublicationPapers(year, mode, el("publicationPaperLimit").value);
+    showPublicationPapers(year, mode, el("publicationPaperLimit").value, el("publicationKeywordSource").value, el("publicationKeywordLimit").value);
   if (el("showAllPublicationPapers")) {
     el("showAllPublicationPapers").onclick = () =>
-      showPublicationPapers(year, mode, data.total_papers);
+      showPublicationPapers(year, mode, data.total_papers, el("publicationKeywordSource").value, el("publicationKeywordLimit").value);
   }
+  el("publicationKeywordSource").onchange = () => loadPublicationYearKeywords(year, mode, limit);
+  el("applyPublicationKeywordLimit").onclick = () => loadPublicationYearKeywords(year, mode, limit);
   el("panel").classList.add("open");
+  await loadPublicationYearKeywords(year, mode, limit);
 }
 
-function publicationPaperEvidenceItem(paper) {
-  const citations = Number.parseInt(paper["Cited by"], 10);
-  const citationCount = Number.isFinite(citations)
-    ? ` · ${citations.toLocaleString()} citations`
-    : "";
-  return `<div class="ev-item">
-    <div class="t">${paperTitleLink(paper)}</div>
-    <div class="m">${esc(citation(paper))} · ${esc(paper["Source title"] || "")}${citationCount}</div>
-  </div>`;
+async function loadPublicationYearKeywords(year, mode, paperLimit) {
+  const source = el("publicationKeywordSource").value;
+  const limit = Math.min(100, Math.max(1, Number.parseInt(el("publicationKeywordLimit").value, 10) || 20));
+  el("publicationKeywordLimit").value = limit;
+  el("publicationKeywordStatus").textContent = "Loading keywords";
+  const query = new URLSearchParams({year: String(year), source, limit: String(limit)});
+  const result = await api(`/api/scope/${encodeURIComponent(scope)}/keywords/year?${query}`);
+  el("publicationKeywordStatus").textContent =
+    `${result.keyword_papers.toLocaleString()} of ${result.papers.toLocaleString()} papers published in ${year} ` +
+    `contain at least one ${result.source_label.toLowerCase()}. Percentages use those ` +
+    `${result.keyword_papers.toLocaleString()} keyword-bearing papers as the denominator.`;
+  el("publicationKeywordTable").innerHTML = result.top_keywords.length
+    ? `<table><thead><tr><th>Keyword</th><th>Papers</th><th>Prevalence</th></tr></thead><tbody>` +
+      result.top_keywords.map(item => `<tr class="publication-keyword-row" data-keyword="${esc(item.keyword)}">` +
+        `<td class="clickable">${esc(item.keyword)}</td>` +
+        `<td>${item.papers.toLocaleString()}</td>` +
+        `<td>${(item.prevalence * 100).toFixed(2)}%</td></tr>`).join("") +
+      `</tbody></table>`
+    : `<p class="empty-state">No ${esc(result.source_label.toLowerCase())} are recorded for papers published in ${year}.</p>`;
+  document.querySelectorAll(".publication-keyword-row").forEach(row => {
+    row.onclick = () => showKeywordEvidence(
+      row.dataset.keyword,
+      null,
+      year,
+      source,
+      {year, mode, paperLimit, keywordSource: source, keywordLimit: limit},
+    );
+  });
 }
 
 const KEYWORD_COLORS = [
   "#3498db", "#e74c3c", "#2ecc71", "#9b59b6", "#f39c12",
   "#1abc9c", "#34495e", "#e67e22", "#16a085", "#8e44ad",
 ];
+const KEYWORD_SOURCE_LABELS = {
+  author: "Author keywords",
+  index: "Scopus index keywords",
+  combined: "Author and Scopus index keywords",
+};
 
 async function renderKeywordEvolution() {
   const source = el("keywordSource").value;
@@ -619,24 +571,50 @@ function wireKeywordRows() {
   });
 }
 
-async function showKeywordEvidence(keyword, periodId, year = null) {
-  const source = el("keywordSource").value;
-  const period = periodId === "all_time"
-    ? keywordData.all_time
-    : keywordData.periods.find(item => item.id === periodId);
+async function showKeywordEvidence(
+  keyword,
+  periodId,
+  year = null,
+  sourceOverride = null,
+  returnToPublication = null,
+) {
+  const source = sourceOverride || el("keywordSource").value;
+  const sourceLabel = KEYWORD_SOURCE_LABELS[source] || keywordData?.source_label || source;
+  const period = !keywordData
+    ? null
+    : periodId === "all_time"
+      ? keywordData.all_time
+      : keywordData.periods.find(item => item.id === periodId);
   const query = new URLSearchParams({source, keyword});
   if (year == null) query.set("period", periodId);
   else query.set("year", String(year));
   const items = await api(`/api/scope/${scope}/keywords/evidence?${query}`);
+  const searchCutoff = keywordData?.search_cutoff;
   const timeLabel = year == null
     ? (period?.label || periodId)
-    : (year === keywordData.search_cutoff.year
-      ? `${year} (as at ${keywordData.search_cutoff.label})`
+    : (year === searchCutoff?.year
+      ? `${year} (as at ${searchCutoff.label})`
       : String(year));
   el("panelBody").innerHTML =
+    (returnToPublication
+      ? `<div class="evidence-controls"><button class="btn btn-outline" id="backToPublicationPoint" type="button">Back to publication year</button></div>`
+      : "") +
     `<h2>${esc(keyword)} <span class="muted">· ${esc(timeLabel)} · ${items.length} evidence papers shown</span></h2>` +
-    `<p class="chart-note">Source: ${esc(keywordData.source_label)}. The list is capped at 100 papers.</p>` +
-    items.map(paperEvidenceItem).join("");
+    `<p class="chart-note">Source: ${esc(sourceLabel)}. The list is capped at 100 papers.</p>` +
+    items.map(paper => paperInspectionCard(
+      paper,
+      [],
+      `Included because the canonical keyword “${keyword}” appears in the selected ${sourceLabel.toLowerCase()} source for ${timeLabel}.`
+    )).join("");
+  if (returnToPublication) {
+    el("backToPublicationPoint").onclick = () => showPublicationPapers(
+      returnToPublication.year,
+      returnToPublication.mode,
+      returnToPublication.paperLimit,
+      returnToPublication.keywordSource,
+      returnToPublication.keywordLimit,
+    );
+  }
   el("panel").classList.add("open");
 }
 

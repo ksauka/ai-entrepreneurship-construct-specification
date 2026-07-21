@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/esd.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
+<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
 </head>
 <body>
 <div class="container topic-review-container">
@@ -99,6 +100,7 @@ let summary = null;
 let topics = [];
 let prevalenceTopics = [];
 let topicPrevalenceChart = null;
+const fittedPaperLimits = new Map();
 
 async function api(path, options = {}) {
   const response = await fetch(path, options);
@@ -319,39 +321,35 @@ async function showEvidence(topicId) {
     title: topic[`representative_${rank}_title`],
     similarity: topic[`representative_${rank}_centroid_similarity`],
   })).filter(item => item.paper_id || item.title);
-  const representativePapers = await Promise.all(representatives.map(async item => {
-    if (!item.paper_id) return {...item, paper: {Title: item.title}};
-    try {
-      const paper = await api(`/api/paper/${encodeURIComponent(item.paper_id)}`);
-      return {...item, paper};
-    } catch (_) {
-      return {...item, paper: {paper_id: item.paper_id, Title: item.title}};
-    }
-  }));
+  const fittedLimit = fittedPaperLimits.get(topicId) || 100;
   el("topicEvidenceBody").innerHTML = `<h2>${esc(scopeLabels[scope])} T${topic.topic_id}: ${esc(topic.display_label)}</h2>
     <p class="metric-definition">Fitted papers: ${topic.fitted_papers.toLocaleString()} | Final assigned papers: ${topic.final_assigned_papers.toLocaleString()}</p>
     <h3>Top terms</h3>
     <div class="topic-term-list">${terms.map(term => `<span class="pill">${esc(term)}</span>`).join("")}</div>
     <h3>Centroid-nearest representative papers</h3>
-    ${representativePapers.map(item => `<div class="ev-item">
-      <div class="t">${paperEvidenceLink(item.paper, item.title, `${item.rank}. `)}</div>
+    ${representatives.map(item => `<div class="ev-item">
+      <div class="t"><button class="paper-inspection-trigger" type="button" data-topic-paper="${esc(item.paper_id)}" data-paper-kind="representative" data-paper-rank="${item.rank}" data-paper-similarity="${esc(item.similarity)}">${item.rank}. ${esc(item.title || "Untitled paper")}</button></div>
       <div class="m">${esc(item.paper_id)} | Centroid similarity: ${Number(item.similarity || 0).toFixed(4)}</div>
     </div>`).join("")}
     <h3>Fitted papers</h3>
     <div class="topic-evidence-controls">
       <label>Papers displayed
         <select id="fittedPaperLimit">
-          <option value="25">25</option>
-          <option value="100" selected>100</option>
-          <option value="500">500</option>
-          <option value="50000">All</option>
+          <option value="25" ${fittedLimit === 25 ? "selected" : ""}>25</option>
+          <option value="100" ${fittedLimit === 100 ? "selected" : ""}>100</option>
+          <option value="500" ${fittedLimit === 500 ? "selected" : ""}>500</option>
+          <option value="50000" ${fittedLimit === 50000 ? "selected" : ""}>All</option>
         </select>
       </label>
       <span id="fittedPaperStatus" class="muted">Loading fitted papers</span>
     </div>
     <div id="fittedPaperList"></div>`;
   el("topicEvidencePanel").classList.add("open");
-  el("fittedPaperLimit").onchange = () => loadFittedPapers(topicId);
+  wireTopicPaperTriggers(topic);
+  el("fittedPaperLimit").onchange = () => {
+    fittedPaperLimits.set(topicId, Number(el("fittedPaperLimit").value));
+    loadFittedPapers(topicId);
+  };
   await loadFittedPapers(topicId);
 }
 
@@ -366,6 +364,9 @@ async function loadFittedPapers(topicId) {
     el("fittedPaperList").innerHTML = result.papers.length
       ? result.papers.map((paper, index) => fittedPaperItem(paper, index + 1)).join("")
       : '<p class="muted">No fitted papers were found for this topic.</p>';
+    const topic = prevalenceTopics.find(item => item.topic_id === topicId)
+      || topics.find(item => item.topic_id === topicId);
+    wireTopicPaperTriggers(topic);
   } catch (error) {
     el("fittedPaperStatus").textContent = error.message;
     el("fittedPaperList").innerHTML = "";
@@ -383,17 +384,44 @@ function fittedPaperItem(paper, rank) {
       : `Topic probability: ${Number(paper.topic_probability).toFixed(4)}`,
   ].filter(Boolean);
   return `<div class="ev-item">
-    <div class="t">${paperEvidenceLink(paper, paper.Title, `${rank}. `)}</div>
+    <div class="t"><button class="paper-inspection-trigger" type="button" data-topic-paper="${esc(paper.paper_id)}" data-paper-kind="fitted" data-paper-probability="${esc(paper.topic_probability)}">${rank}. ${esc(paper.Title || "Untitled paper")}</button></div>
     <div class="m">${metadata.map(esc).join(" | ")}</div>
     <div class="m">${esc(paper.paper_id)}</div>
   </div>`;
 }
 
-function paperEvidenceLink(paper, title, prefix = "") {
-  const label = `${prefix}${title || "Untitled paper"}`;
-  const url = paperHref(paper);
-  if (!url) return esc(label);
-  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+function wireTopicPaperTriggers(topic) {
+  if (!topic) return;
+  document.querySelectorAll("[data-topic-paper]").forEach(button => {
+    button.onclick = () => showTopicPaper(topic, button);
+  });
+}
+
+async function showTopicPaper(topic, button) {
+  const paperId = button.dataset.topicPaper;
+  const kind = button.dataset.paperKind;
+  const probability = button.dataset.paperProbability === ""
+    ? Number.NaN : Number(button.dataset.paperProbability);
+  const rank = button.dataset.paperRank === ""
+    ? Number.NaN : Number(button.dataset.paperRank);
+  const similarity = button.dataset.paperSimilarity === ""
+    ? Number.NaN : Number(button.dataset.paperSimilarity);
+  const context = kind === "representative"
+    ? `Included as centroid-nearest representative paper ${rank} for T${topic.topic_id}: ${topic.display_label}; centroid similarity ${Number.isFinite(similarity) ? similarity.toFixed(4) : "not recorded"}.`
+    : `Included because it was fitted to T${topic.topic_id}: ${topic.display_label}${Number.isFinite(probability) ? ` with topic probability ${probability.toFixed(4)}` : ""}.`;
+  try {
+    const paper = await api(`/api/paper/${encodeURIComponent(paperId)}`);
+    el("topicEvidenceBody").innerHTML =
+      `<div class="evidence-controls"><button class="btn btn-outline" id="backToTopicEvidence" type="button">Back to topic evidence</button></div>` +
+      paperInspectionCard(paper, [], context);
+    el("backToTopicEvidence").onclick = () => showEvidence(topic.topic_id);
+    el("topicEvidencePanel").scrollTop = 0;
+  } catch (error) {
+    el("topicEvidenceBody").innerHTML =
+      `<div class="evidence-controls"><button class="btn btn-outline" id="backToTopicEvidence" type="button">Back to topic evidence</button></div>` +
+      `<p class="empty-state">${esc(error.message)}</p>`;
+    el("backToTopicEvidence").onclick = () => showEvidence(topic.topic_id);
+  }
 }
 
 function closeEvidencePanel() { el("topicEvidencePanel").classList.remove("open"); }

@@ -110,6 +110,7 @@ def test_performance_rankings(service):
     assert annual_papers["total_papers"] == 2
     assert annual_papers["returned_papers"] == 1
     assert annual_papers["papers"][0]["paper_id"] in {"P2", "P3"}
+    assert annual_papers["papers"][0]["_inspection"]["dimensions"]
     cumulative_papers = service.performance_papers(
         "full_corpus", 2021, mode="cumulative", limit=100
     )
@@ -192,11 +193,21 @@ def test_keyword_evolution_and_evidence_are_scope_aware(service):
         "query_4", "author", "generative ai", "2021_2023"
     )
     assert [item["paper_id"] for item in evidence] == ["P3"]
+    assert evidence[0]["_inspection"]["evidence_boundary"] == (
+        "Title, abstract, and author keywords"
+    )
 
     annual_evidence = service.keyword_evidence(
         "query_4", "author", "generative ai", year=2021
     )
     assert [item["paper_id"] for item in annual_evidence] == ["P3"]
+
+    year_summary = service.keyword_year_summary(
+        "query_4", "author", 2021, limit=20
+    )
+    assert year_summary["papers"] == 1
+    assert year_summary["keyword_papers"] == 1
+    assert year_summary["top_keywords"][0]["papers"] == 1
 
 
 def test_contrast_evidence_returns_roles_and_supporting_papers(service):
@@ -253,6 +264,30 @@ def test_observed_composition_is_filtered_and_inspectable(service):
         limit=1,
     )
     assert len(limited) == 1
+
+    conditioned = service.observed_composition(
+        "full_corpus",
+        filter_dimension="study_status",
+        filter_value="phenomenon",
+    )
+    assert conditioned["filtered_papers"] == 1
+    assert conditioned["control"]["dimension_label"] == "Study status"
+    assert {item["id"] for item in conditioned["filter_options"]} == {
+        "study_status", "ai_role", "technical_type", "mechanism", "level",
+        "process_stage", "scope", "definition",
+    }
+
+    matrix = service.composition_relationship_matrix(
+        "full_corpus",
+        None,
+        "ai_role",
+        "level",
+        "observed",
+        filter_dimension="study_status",
+        filter_value="phenomenon",
+    )
+    assert matrix["analyzed_n"] == 1
+    assert matrix["cells"][0]["papers"] == 1
 
 
 def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
@@ -855,6 +890,11 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert redirect.headers["location"] == "/knowledge-graph"
     assert redirect.headers["cache-control"] == "no-store, max-age=0"
 
+    targeted_redirect = main.targeted_reading_page()
+    assert targeted_redirect.status_code == 307
+    assert targeted_redirect.headers["location"] == "/composition"
+    assert targeted_redirect.headers["cache-control"] == "no-store, max-age=0"
+
     for filename in (
         "index.html",
         "knowledge_graph.html",
@@ -893,12 +933,13 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'id="fittedPaperLimit"' in topic_review_html
     assert "Centroid-nearest representative papers" in topic_review_html
     assert "Fitted papers" in topic_review_html
-    assert "function paperEvidenceLink" in topic_review_html
+    assert "/static/paper_inspection.js" in topic_review_html
+    assert "function showTopicPaper" in topic_review_html
+    assert "paperInspectionCard(paper, [], context)" in topic_review_html
+    assert 'class="paper-inspection-trigger"' in topic_review_html
     assert 'src="/static/citation.js?v=scopus-first-20260716"' in topic_review_html
-    assert "const url = paperHref(paper)" in topic_review_html
-    assert "paperEvidenceLink(item.paper, item.title" in topic_review_html
-    assert "paperEvidenceLink(paper, paper.Title" in topic_review_html
-    assert '<a href="/api/paper/' not in topic_review_html
+    assert "api(`/api/paper/${encodeURIComponent(paperId)}`)" in topic_review_html
+    assert "Back to topic evidence" in topic_review_html
     assert 'api("/api/scopes")' in topic_review_html
     assert 'id="reviewScope"></select>' in topic_review_html
     assert "Dataset review progress" not in topic_review_html
@@ -941,7 +982,11 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'id="humanRaterControls"' in composition_html
     assert "Balanced common papers" in composition_html
     assert "/static/paper_inspection.js" in composition_html
-    assert "paperInspectionCard(paper, [column])" in composition_html
+    assert "paperInspectionCard(paper, [column, secondaryColumn].filter(Boolean))" in composition_html
+    assert 'id="filterDimension"' in composition_html
+    assert 'id="filterValue"' in composition_html
+    assert 'id="compositionMatrix"' in composition_html
+    assert "/composition/targeted-reading" not in composition_html
 
     contrasting_html = (
         main.STATIC_DIR / "construct_contrasting.html"
@@ -1052,8 +1097,14 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Cumulative publication growth across dataset views" not in index_html
     assert 'id="publicationGrowthTable"' not in index_html
     assert "/performance/papers" in index_html
+    assert "/keywords/year" in index_html
     assert "showPublicationPapers(year)" in index_html
     assert 'id="publicationPaperLimit"' in index_html
+    assert 'id="publicationKeywordSource"' in index_html
+    assert 'id="publicationKeywordLimit"' in index_html
+    assert "Top keywords in ${year}" in index_html
+    assert "function loadPublicationYearKeywords" in index_html
+    assert "Back to publication year" in index_html
     assert "Show all ${data.total_papers.toLocaleString()}" in index_html
     assert "The final cumulative point matches all" in index_html
     assert "publication year recorded in Scopus" in index_html
@@ -1147,19 +1198,18 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "keywordData.all_time" in dashboard_html
     assert 'id="keywordFormula"' in dashboard_html
     assert "The denominator is not every paper published that year" not in dashboard_html
-    assert 'data-action="roles"' in dashboard_html
-    assert 'data-action="papers"' in dashboard_html
-    assert "View roles" in dashboard_html
-    assert "View papers" in dashboard_html
-    assert "Distinct roles: inspect" in dashboard_html
+    assert "/static/paper_inspection.js" in dashboard_html
+    assert "paperInspectionCard(" in dashboard_html
+    assert "Construct contrast" not in dashboard_html
+    assert 'id="contrastTable"' not in dashboard_html
     for pattern in ("*.html", "*.js"):
         for static_page in main.STATIC_DIR.glob(pattern):
             platform_copy = static_page.read_text(encoding="utf-8")
             assert "—" not in platform_copy
             assert "&mdash;" not in platform_copy.lower()
-    assert "showContrastRoles" in dashboard_html
-    assert "showContrastPapers" in dashboard_html
-    assert "showRolePapers" in dashboard_html
+    assert "showContrastRoles" not in dashboard_html
+    assert "showContrastPapers" not in dashboard_html
+    assert "showRolePapers" not in dashboard_html
     assert "Click any chart point to inspect its supporting papers" in dashboard_html
     assert "period incomplete" not in dashboard_html
     assert "Generate scope report" in dashboard_html

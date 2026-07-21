@@ -1,10 +1,22 @@
 """Tests for model-validation statistics."""
 
 from aecsp.analytics.model_validation import (
+    CORE_DIMENSIONS,
+    DIMENSIONS,
+    EXPLORATORY_DIMENSIONS,
+    SUPPLEMENTARY_DIAGNOSTIC_DIMENSIONS,
     multirater_summary,
     normalized_entropy,
     pairwise_with_bootstrap,
 )
+
+
+def test_validation_dimension_sets_are_explicit_and_non_overlapping():
+    assert len(CORE_DIMENSIONS) == 6
+    assert len(EXPLORATORY_DIMENSIONS) == 2
+    assert len(SUPPLEMENTARY_DIAGNOSTIC_DIMENSIONS) == 3
+    assert len(DIMENSIONS) == 11
+    assert len(set(DIMENSIONS)) == len(DIMENSIONS)
 
 
 def test_pairwise_bootstrap_and_weighted_agreement():

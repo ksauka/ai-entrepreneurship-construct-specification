@@ -541,6 +541,55 @@ def search_keyword_series(
     return results
 
 
+def keyword_year_summary(
+    frame: pd.DataFrame,
+    source: str,
+    year: int,
+    *,
+    limit: int = 20,
+    aliases: dict[str, str] | None = None,
+) -> dict:
+    """Rank canonical keywords within one recorded publication year."""
+
+    if source not in KEYWORD_SOURCES:
+        raise ValueError(f"Unknown keyword source: {source}")
+    if not 1 <= int(limit) <= 100:
+        raise ValueError("Keyword-year limit must be between 1 and 100")
+    aliases = load_keyword_aliases() if aliases is None else aliases
+    years = pd.to_numeric(
+        frame.get("Year", pd.Series(index=frame.index)), errors="coerce"
+    )
+    selected = frame.loc[years.eq(year)]
+    keyword_sets = selected.apply(
+        paper_keywords, axis=1, source=source, aliases=aliases
+    )
+    eligible = keyword_sets[keyword_sets.map(bool)]
+    counts = Counter(term for terms in eligible for term in terms)
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    denominator = len(eligible)
+    return {
+        "year": int(year),
+        "source": source,
+        "source_label": KEYWORD_SOURCE_LABELS[source],
+        "papers": len(selected),
+        "keyword_papers": denominator,
+        "coverage": round(denominator / len(selected), 6) if len(selected) else 0.0,
+        "denominator_definition": (
+            "Papers published in the selected year with at least one keyword "
+            "from the selected source form the denominator; each canonical "
+            "keyword is counted once per paper."
+        ),
+        "top_keywords": [
+            {
+                "keyword": keyword,
+                "papers": int(count),
+                "prevalence": round(count / denominator, 6) if denominator else 0.0,
+            }
+            for keyword, count in ranked[:limit]
+        ],
+    }
+
+
 def keyword_evidence_mask(
     frame: pd.DataFrame,
     source: str,

@@ -39,6 +39,7 @@ from aecsp.api.report import (
 )
 from aecsp.corpus.scopes import SCOPE_BY_ID
 from aecsp.human_annotation import HumanAnnotationStore
+from aecsp.targeted_reading import TargetedReadingStore
 from aecsp.knowledge_graph.neo4j_reader import GraphQueryError
 from aecsp.specification.llm_coder import load_env
 from aecsp.topics.review import TopicReviewStore
@@ -108,6 +109,14 @@ class HumanAnnotationSaveRequest(BaseModel):
     submit: bool = False
 
 
+class TargetedReadingSaveRequest(BaseModel):
+    """One independent qualitative interpretation of a previously read paper."""
+
+    reviewer_id: str = Field(min_length=2, max_length=40)
+    paper_id: str = Field(min_length=1, max_length=180)
+    review: dict[str, object] = Field(default_factory=dict)
+
+
 def _csv_set(value: str) -> set[str] | None:
     items = {part.strip() for part in value.split(",") if part.strip()}
     return items or None
@@ -148,6 +157,7 @@ async def lifespan(app: FastAPI):
     )
     state["topic_review"] = TopicReviewStore(PROJECT_ROOT)
     state["human_annotation"] = HumanAnnotationStore(PROJECT_ROOT)
+    state["targeted_reading"] = TargetedReadingStore(PROJECT_ROOT)
     yield
     if driver is not None:
         driver.close()
@@ -203,6 +213,14 @@ def human_annotation_store() -> HumanAnnotationStore:
     if store is None:
         store = HumanAnnotationStore(PROJECT_ROOT)
         state["human_annotation"] = store
+    return store
+
+
+def targeted_reading_store() -> TargetedReadingStore:
+    store = state.get("targeted_reading")
+    if store is None:
+        store = TargetedReadingStore(PROJECT_ROOT)
+        state["targeted_reading"] = store
     return store
 
 
@@ -433,6 +451,8 @@ def _composition_release_response(
     model: str,
     study_status: str,
     distribution: str = "compare",
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
 ) -> Response:
     """Build a filter-aware composition and IRR archive in memory."""
 
@@ -451,6 +471,8 @@ def _composition_release_response(
             scope,
             study_status=study_status,
             model=model,
+            filter_dimension=filter_dimension,
+            filter_value=filter_value,
         )
         irr = svc.composition_irr_matrix(scope)
     except ValueError as error:
@@ -469,6 +491,8 @@ def _composition_release_response(
                     "scope": scope,
                     "model": model,
                     "study_status_filter": study_status,
+                    "filter_dimension": filter_dimension or "",
+                    "filter_value": filter_value or "",
                     "dimension": panel["label"],
                     "column": panel["column"],
                     "category": category["value"],
@@ -499,7 +523,13 @@ def _composition_release_response(
         )
         add_bytes(
             "composition/observed_composition_papers.csv",
-            svc.composition_export(scope, model, study_status).to_csv(index=False),
+            svc.composition_export(
+                scope,
+                model,
+                study_status,
+                filter_dimension,
+                filter_value,
+            ).to_csv(index=False),
         )
 
     if bundle in {"irr", "release"}:
@@ -566,6 +596,8 @@ def _composition_release_response(
                 model,
                 study_status,
                 distribution,
+                filter_dimension,
+                filter_value,
             ),
         )
 
@@ -580,9 +612,11 @@ def _composition_release_response(
         "model": model,
         "model_label": composition["model_label"],
         "study_status_filter": study_status,
+        "filter_dimension": filter_dimension,
+        "filter_value": filter_value,
         "distribution_view": distribution,
         "filtered_papers": composition["filtered_papers"],
-        "model_coded_papers": composition["scope_papers"],
+        "model_coded_papers": composition["model_scope_papers"],
         "corpus_scope_papers": composition["corpus_scope_papers"],
         "model_coverage_share": composition["model_coverage_share"],
         "irr_models": [item["id"] for item in irr["models"]],
@@ -743,6 +777,23 @@ def keyword_evidence(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+@app.get("/api/scope/{scope_id}/keywords/year")
+def keyword_year(
+    scope_id: str,
+    source: str = Query("author", pattern="^(author|index|combined)$"),
+    year: int = Query(..., ge=1800, le=2200),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict:
+    """Return the top canonical keywords for one publication year."""
+
+    try:
+        return service().keyword_year_summary(
+            scope_id, source=source, year=year, limit=limit
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @app.get("/api/scope/{scope_id}/keywords/search")
 def keyword_search(
     scope_id: str,
@@ -760,10 +811,16 @@ def observed_composition(
     scope_id: str,
     study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
     model: str | None = Query(None),
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
 ) -> dict:
     try:
         return service().observed_composition(
-            scope_id, study_status=study_status, model=model
+            scope_id,
+            study_status=study_status,
+            model=model,
+            filter_dimension=filter_dimension,
+            filter_value=filter_value,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -777,6 +834,10 @@ def observed_composition_evidence(
     value: str = Query(...),
     limit: int = Query(100, ge=1, le=50000),
     model: str | None = Query(None),
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
+    secondary_column: str | None = None,
+    secondary_value: str | None = None,
 ) -> list[dict]:
     try:
         return service().observed_composition_evidence(
@@ -786,6 +847,36 @@ def observed_composition_evidence(
             value=value,
             limit=limit,
             model=model,
+            filter_dimension=filter_dimension,
+            filter_value=filter_value,
+            secondary_column=secondary_column,
+            secondary_value=secondary_value,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/scope/{scope_id}/composition/matrix")
+def observed_composition_matrix(
+    scope_id: str,
+    model: str | None = Query(None),
+    row_dimension: str = Query("ai_role"),
+    column_dimension: str = Query("technical_type"),
+    distribution: str = Query("observed", pattern="^(full|observed)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
+) -> dict:
+    try:
+        return service().composition_relationship_matrix(
+            scope_id,
+            model,
+            row_dimension,
+            column_dimension,
+            distribution,
+            study_status,
+            filter_dimension,
+            filter_value,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -817,6 +908,8 @@ def observed_composition_report(
     model: str = Query("gpt-5.4-mini-2026-03-17"),
     study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
     distribution: str = Query("compare", pattern="^(compare|full|observed)$"),
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
 ) -> str:
     try:
         return build_composition_report(
@@ -825,6 +918,8 @@ def observed_composition_report(
             model,
             study_status,
             distribution,
+            filter_dimension,
+            filter_value,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -837,6 +932,8 @@ def observed_composition_download(
     model: str = Query("gpt-5.4-mini-2026-03-17"),
     study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
     distribution: str = Query("compare", pattern="^(compare|full|observed)$"),
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
 ) -> Response:
     return _composition_release_response(
         scope_id,
@@ -844,6 +941,8 @@ def observed_composition_download(
         model,
         study_status,
         distribution,
+        filter_dimension,
+        filter_value,
     )
 
 
@@ -1887,6 +1986,192 @@ def export_human_annotations(
     )
 
 
+@app.get("/api/targeted-reading/metadata")
+def targeted_reading_metadata() -> dict:
+    """Describe the audited 136/113/23 qualitative-review populations."""
+
+    try:
+        return targeted_reading_store().metadata()
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.get("/api/targeted-reading/papers")
+def targeted_reading_papers(
+    reviewer_id: str = Query(..., min_length=2, max_length=40),
+    target_set: str = Query("remaining", pattern="^(remaining|human_overlap|all)$"),
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
+    cell_column: str | None = None,
+    cell_value: str | None = None,
+    secondary_cell_column: str | None = None,
+    secondary_cell_value: str | None = None,
+    acknowledge_human_overlap: bool = Query(False),
+    limit: int = Query(136, ge=1, le=136),
+) -> dict:
+    """Return prior-reading evidence and model codes on an exact selected subset."""
+
+    try:
+        store = targeted_reading_store()
+        reviewer = store.validate_reviewer_id(reviewer_id)
+        if target_set in {"human_overlap", "all"} and not acknowledge_human_overlap:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The selected set includes blind human-validation papers. "
+                    "Complete independent annotation first, or explicitly acknowledge "
+                    "that opening model codes can compromise blindness."
+                ),
+            )
+        sample = store.sample()
+        if target_set == "remaining":
+            sample = sample.loc[~sample["human_validation_overlap"]].copy()
+        elif target_set == "human_overlap":
+            sample = sample.loc[sample["human_validation_overlap"]].copy()
+
+        svc = service()
+        frame = svc._composition_model_frame(model)
+        dimension_options = svc._composition_filter_options(frame)
+        frame, control = svc._theory_controlled_frame(
+            frame, filter_dimension, filter_value
+        )
+        if bool(cell_column) != (cell_value is not None):
+            raise ValueError("Cell column and value must be supplied together")
+        if cell_column:
+            if cell_column not in frame.columns:
+                raise ValueError(f"Unknown cell column: {cell_column}")
+            frame = frame.loc[
+                frame[cell_column].astype(str).str.strip().eq(str(cell_value).strip())
+            ].copy()
+        if bool(secondary_cell_column) != (secondary_cell_value is not None):
+            raise ValueError(
+                "Secondary cell column and value must be supplied together"
+            )
+        if secondary_cell_column:
+            if secondary_cell_column not in frame.columns:
+                raise ValueError(
+                    f"Unknown secondary cell column: {secondary_cell_column}"
+                )
+            frame = frame.loc[
+                frame[secondary_cell_column]
+                .astype(str)
+                .str.strip()
+                .eq(str(secondary_cell_value).strip())
+            ].copy()
+        patterns = []
+        for selected_column, selected_value in (
+            (cell_column, cell_value),
+            (secondary_cell_column, secondary_cell_value),
+        ):
+            if not selected_column:
+                continue
+            definition = next(
+                (
+                    item
+                    for item in dimension_options
+                    if item["column"] == selected_column
+                ),
+                None,
+            )
+            patterns.append(
+                {
+                    "dimension_id": definition["id"] if definition else "",
+                    "dimension_label": (
+                        definition["label"] if definition else selected_column
+                    ),
+                    "column": selected_column,
+                    "value": str(selected_value or ""),
+                    "value_label": str(selected_value or "Missing value"),
+                }
+            )
+        review_context = {
+            "dataset_scope": "full_corpus",
+            "dataset_label": "Full corpus (all papers)",
+            "target_set": target_set,
+            "model": model,
+            "model_label": next(
+                (
+                    item["label"]
+                    for item in svc.composition_models()
+                    if item["id"] == model
+                ),
+                model,
+            ),
+            "condition": control,
+            "patterns": patterns,
+        }
+        store.canonical_context(review_context)
+        sample_order = {paper_id: index for index, paper_id in enumerate(sample["paper_id"])}
+        joined = frame.merge(sample, on="paper_id", how="inner", suffixes=("", "_prior"))
+        joined["_sample_order"] = joined["paper_id"].map(sample_order)
+        joined = joined.sort_values("_sample_order", kind="stable")
+        records = svc._paper_inspection_records(
+            joined,
+            selected_columns=tuple(
+                item for item in (cell_column, secondary_cell_column) if item
+            ),
+            limit=limit,
+        )
+        prior_by_id = sample.set_index("paper_id").to_dict(orient="index")
+        reviews = store.review_map(reviewer, review_context)
+        for record in records:
+            paper_id = str(record.get("paper_id", ""))
+            prior = prior_by_id.get(paper_id, {})
+            record["_targeted_reading"] = {
+                "human_validation_overlap": bool(prior.get("human_validation_overlap", False)),
+                "workbook_topics": prior.get("workbook_topics", ""),
+                "workbook_p1": prior.get("workbook_p1", ""),
+                "workbook_p2": prior.get("workbook_p2", ""),
+                "workbook_p2_contrast": prior.get("workbook_p2_contrast", ""),
+                "workbook_p3": prior.get("workbook_p3", ""),
+                "workbook_contribution_notes": prior.get("workbook_contribution_notes", ""),
+                "review": reviews.get(paper_id, {}),
+            }
+        return {
+            "reviewer_id": reviewer,
+            "target_set": target_set,
+            "control": control,
+            "review_context": review_context,
+            "available_papers": len(joined),
+            "returned_papers": len(records),
+            "papers": records,
+            "blindness_acknowledged": acknowledge_human_overlap,
+        }
+    except HTTPException:
+        raise
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/targeted-reading/save")
+def save_targeted_reading(request: TargetedReadingSaveRequest) -> dict:
+    """Save an independent interpretation and an append-only audit revision."""
+
+    _require_authenticated_annotation_write()
+    try:
+        return targeted_reading_store().save(
+            request.reviewer_id, request.paper_id, request.review
+        )
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/targeted-reading/export")
+def export_targeted_reading() -> Response:
+    """Download all reviewer-separated qualitative interpretations."""
+
+    frame = targeted_reading_store().export()
+    return Response(
+        content=frame.to_csv(index=False),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="targeted_reading_reviews.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @app.get("/api/topic-review")
 def topic_review_summary() -> dict:
     """Return review progress across all five independently fitted models."""
@@ -2082,6 +2367,17 @@ def assistant_page() -> FileResponse:
 def composition_page() -> FileResponse:
     return FileResponse(
         STATIC_DIR / "observed_composition.html", headers=HTML_NO_CACHE_HEADERS
+    )
+
+
+@app.get("/composition/targeted-reading")
+def targeted_reading_page() -> RedirectResponse:
+    """Keep the completed prototype off the public workflow pending review."""
+
+    return RedirectResponse(
+        "/composition",
+        status_code=307,
+        headers=HTML_NO_CACHE_HEADERS,
     )
 
 

@@ -29,6 +29,7 @@ from aecsp.analytics.keyword_trends import (
     SEARCH_CUTOFF_YEAR,
     analyze_keyword_evolution,
     keyword_evidence_mask,
+    keyword_year_summary,
     search_keyword_series,
 )
 from aecsp.analytics.observed_composition import (
@@ -454,12 +455,17 @@ class GraphService:
         scope_id: str,
         model: str,
         study_status: str = "all",
+        filter_dimension: str | None = None,
+        filter_value: str | None = None,
     ) -> pd.DataFrame:
         """Return the traceable paper table behind one composition view."""
 
         if study_status not in STUDY_STATUS_FILTERS:
             raise ValueError(f"Unknown study status: {study_status}")
         frame, _ = self._composition_scope(scope_id, model)
+        frame, _ = self._theory_controlled_frame(
+            frame, filter_dimension, filter_value
+        )
         if study_status != "all":
             frame = frame[
                 frame[AI_STUDY_STATUS_COLUMN].astype(str).str.strip().eq(study_status)
@@ -860,20 +866,14 @@ class GraphService:
             ascending=[False, False, True],
             kind="stable",
         )
-        columns = list(
-            dict.fromkeys(
-                column
-                for column in [*EVIDENCE_COLUMNS, "Cited by"]
-                if column in subset.columns
-            )
-        )
+        papers = self._paper_inspection_records(subset, limit=limit)
         return {
             "scope": scope_id,
             "year": year,
             "mode": mode,
             "total_papers": len(subset),
             "returned_papers": min(limit, len(subset)),
-            "papers": subset[columns].head(limit).to_dict("records"),
+            "papers": papers,
             "search_cutoff": {
                 "date": SEARCH_CUTOFF_DATE.isoformat(),
                 "label": SEARCH_CUTOFF_LABEL,
@@ -948,18 +948,7 @@ class GraphService:
             year=year,
         )
         subset = frame[mask]
-        columns = list(
-            dict.fromkeys(
-                column
-                for column in [
-                    *EVIDENCE_COLUMNS,
-                    "Author Keywords",
-                    "Index Keywords",
-                ]
-                if column in subset.columns
-            )
-        )
-        return subset[columns].head(limit).to_dict("records")
+        return self._paper_inspection_records(subset, limit=limit)
 
     def keyword_search(
         self,
@@ -974,17 +963,39 @@ class GraphService:
             self._scope(scope_id), source=source, query=query, limit=limit
         )
 
+    def keyword_year_summary(
+        self,
+        scope_id: str,
+        source: str,
+        year: int,
+        limit: int = 20,
+    ) -> dict:
+        """Return the leading canonical keywords for one publication year."""
+
+        result = keyword_year_summary(
+            self._scope(scope_id), source=source, year=year, limit=limit
+        )
+        result["scope"] = scope_id
+        return result
+
     # ---- observed construct composition -------------------------------
     def observed_composition(
         self,
         scope_id: str,
         study_status: str = "all",
         model: str | None = None,
+        filter_dimension: str | None = None,
+        filter_value: str | None = None,
     ) -> dict:
-        """Return observed-only dimension composition after status filtering."""
+        """Return full and observed composition under one optional dimension filter."""
 
         selected_model = model or resolve_primary_model()
         frame, corpus_scope_n = self._composition_scope(scope_id, selected_model)
+        model_scope_n = len(frame)
+        filter_options = self._composition_filter_options(frame)
+        frame, control = self._theory_controlled_frame(
+            frame, filter_dimension, filter_value
+        )
         result = analyze_observed_composition(
             frame, study_status=study_status
         )
@@ -992,9 +1003,81 @@ class GraphService:
         result["model"] = selected_model
         result["model_label"] = MODEL_DISPLAY_NAMES.get(selected_model, selected_model)
         result["corpus_scope_papers"] = corpus_scope_n
-        result["model_missing_papers"] = max(0, corpus_scope_n - len(frame))
+        result["model_scope_papers"] = model_scope_n
+        result["model_missing_papers"] = max(0, corpus_scope_n - model_scope_n)
         result["model_coverage_share"] = (
-            round(len(frame) / corpus_scope_n, 6) if corpus_scope_n else 0.0
+            round(model_scope_n / corpus_scope_n, 6)
+            if corpus_scope_n
+            else 0.0
+        )
+        result["control"] = control
+        result["filter_options"] = filter_options
+        return result
+
+    def _composition_filter_options(self, frame: pd.DataFrame) -> list[dict]:
+        """Return the shared eight-dimension filter contract and live values."""
+
+        options = []
+        for definition in THEORY_DIMENSIONS:
+            column = dimension_column(frame, definition["id"])
+            values = []
+            if column in frame.columns:
+                counts = (
+                    frame[column].astype(str).str.strip().value_counts(dropna=False)
+                )
+                values = [
+                    {
+                        "value": str(value),
+                        "label": "Missing value" if str(value) == "" else str(value),
+                        "papers": int(count),
+                    }
+                    for value, count in counts.items()
+                ]
+            options.append(
+                {
+                    "id": definition["id"],
+                    "label": definition["label"],
+                    "column": column,
+                    "values": values,
+                }
+            )
+        return options
+
+    def composition_relationship_matrix(
+        self,
+        scope_id: str,
+        model: str | None,
+        row_dimension: str,
+        column_dimension: str,
+        distribution_view: str = "observed",
+        study_status: str = "all",
+        filter_dimension: str | None = None,
+        filter_value: str | None = None,
+    ) -> dict:
+        """Cross any two specification dimensions inside the active filters."""
+
+        if row_dimension == column_dimension:
+            raise ValueError("Matrix axes must use different dimensions")
+        selected_model = model or resolve_primary_model()
+        frame, corpus_scope_n = self._composition_scope(scope_id, selected_model)
+        frame, control = self._theory_controlled_frame(
+            frame, filter_dimension, filter_value
+        )
+        result = relationship_matrix(
+            frame,
+            row_dimension,
+            column_dimension,
+            distribution_view,
+            study_status,
+        )
+        result.update(
+            {
+                "scope": scope_id,
+                "model": selected_model,
+                "model_label": MODEL_DISPLAY_NAMES.get(selected_model, selected_model),
+                "corpus_scope_papers": corpus_scope_n,
+                "control": control,
+            }
         )
         return result
 
@@ -1006,21 +1089,40 @@ class GraphService:
         value: str,
         limit: int = 100,
         model: str | None = None,
+        filter_dimension: str | None = None,
+        filter_value: str | None = None,
+        secondary_column: str | None = None,
+        secondary_value: str | None = None,
     ) -> list[dict]:
         """Return papers supporting one observed-composition bar."""
 
         selected_model = model or resolve_primary_model()
         frame, _ = self._composition_scope(scope_id, selected_model)
+        frame, _ = self._theory_controlled_frame(
+            frame, filter_dimension, filter_value
+        )
         mask = observed_composition_evidence_mask(
             frame,
             study_status=study_status,
             column=column,
             value=value,
         )
+        if bool(secondary_column) != (secondary_value is not None):
+            raise ValueError(
+                "Secondary evidence column and value must be supplied together"
+            )
+        if secondary_column:
+            if secondary_column not in frame.columns:
+                raise ValueError(f"Unknown evidence column: {secondary_column}")
+            mask &= frame[secondary_column].astype(str).str.strip().eq(
+                str(secondary_value).strip()
+            )
         subset = frame[mask]
         return self._paper_inspection_records(
             subset,
-            selected_columns=(column,),
+            selected_columns=tuple(
+                item for item in (column, secondary_column) if item
+            ),
             limit=limit,
         )
 
@@ -1907,7 +2009,7 @@ class GraphService:
         if match.empty:
             return None
         row = match.iloc[0].to_dict()
-        record = {k: row.get(k, "") for k in EVIDENCE_COLUMNS if k in row}
+        record = self._paper_inspection_records(match, limit=1)[0]
         record["convergent_papers"] = self._nearest(row, same=True)
         record["contrasting_papers"] = self._nearest(row, same=False)
         return record

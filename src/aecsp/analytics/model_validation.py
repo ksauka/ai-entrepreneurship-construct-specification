@@ -16,18 +16,30 @@ import numpy as np
 from aecsp.analytics.agreement import krippendorff_alpha_nominal
 
 
-DIMENSIONS = (
+CORE_DIMENSIONS = (
     "ai_method_or_phenomenon",
-    "ai_role_function",
     "ai_type_form",
+    "ai_role_function",
     "ai_mechanism_analysis",
     "level_of_analysis",
-    "entrepreneurial_process_stage",
     "scope_conditions",
+)
+
+EXPLORATORY_DIMENSIONS = (
+    "entrepreneurial_process_stage",
     "definition_construct_clarity",
+)
+
+SUPPLEMENTARY_DIAGNOSTIC_DIMENSIONS = (
     "process_sequence_specified",
     "ai_definition_present",
     "ai_distinction_present",
+)
+
+DIMENSIONS = (
+    *CORE_DIMENSIONS,
+    *EXPLORATORY_DIMENSIONS,
+    *SUPPLEMENTARY_DIAGNOSTIC_DIMENSIONS,
 )
 
 

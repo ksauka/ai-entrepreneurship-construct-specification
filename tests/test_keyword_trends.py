@@ -6,6 +6,7 @@ from aecsp.analytics.keyword_trends import (
     SEARCH_CUTOFF_DATE,
     analyze_keyword_evolution,
     keyword_evidence_mask,
+    keyword_year_summary,
     load_keyword_aliases,
     normalize_keyword,
     search_keyword_series,
@@ -139,6 +140,20 @@ def test_keyword_evidence_mask_applies_period_and_alias():
         _papers(), "author", "artificial intelligence", "all_time"
     )
     assert _papers().loc[all_time_mask, "paper_id"].tolist() == ["P1"]
+
+
+def test_keyword_year_summary_ranks_canonical_terms_and_discloses_denominator():
+    result = keyword_year_summary(_papers(), "author", 2022, limit=20)
+
+    assert result["year"] == 2022
+    assert result["papers"] == 1
+    assert result["keyword_papers"] == 1
+    assert result["coverage"] == 1.0
+    assert [item["keyword"] for item in result["top_keywords"]] == [
+        "generative ai",
+        "large language models",
+    ]
+    assert all(item["prevalence"] == 1.0 for item in result["top_keywords"])
 
 
 def test_dynamic_series_include_period_leaders_and_search_trajectories():

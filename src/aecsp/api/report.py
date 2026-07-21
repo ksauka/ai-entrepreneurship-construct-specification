@@ -78,6 +78,8 @@ def build_composition_report(
     model: str,
     study_status: str,
     distribution: str = "compare",
+    filter_dimension: str | None = None,
+    filter_value: str | None = None,
 ) -> str:
     """Return a filter-aware construct-specification and IRR report."""
 
@@ -95,17 +97,26 @@ def build_composition_report(
         scope_id,
         study_status=study_status,
         model=model,
+        filter_dimension=filter_dimension,
+        filter_value=filter_value,
     )
     irr = service.composition_irr_matrix(scope_id)
     status_label = "All papers" if study_status == "all" else study_status.capitalize()
+    control = composition.get("control")
+    control_label = (
+        f"{control['dimension_label']} = {control['value']}"
+        if control
+        else "No dimension filter"
+    )
     coverage = composition["model_coverage_share"] * 100
     body = (
         "<h2>Construct specification</h2>"
         f"<p><strong>Dataset:</strong> {html.escape(scope_label)}<br />"
         f"<strong>Coding model:</strong> {html.escape(composition['model_label'])}<br />"
         f"<strong>Study-status filter:</strong> {html.escape(status_label)}<br />"
+        f"<strong>Dimension filter:</strong> {html.escape(control_label)}<br />"
         f"<strong>Distribution:</strong> {html.escape(distribution_labels[distribution])}<br />"
-        f"<strong>Model coverage:</strong> {composition['scope_papers']:,} of "
+        f"<strong>Model coverage:</strong> {composition['model_scope_papers']:,} of "
         f"{composition['corpus_scope_papers']:,} papers ({coverage:.2f}%)<br />"
         f"<strong>Papers after filter:</strong> {composition['filtered_papers']:,}</p>"
     )

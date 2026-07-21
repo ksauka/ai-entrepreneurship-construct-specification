@@ -25,14 +25,8 @@
     <div class="toolbar">
       <label>Dataset scope <select id="scope"></select></label>
       <label>Coding model <select id="codingModel"></select></label>
-      <label>Study status
-        <select id="studyStatus">
-          <option value="all">All papers</option>
-          <option value="phenomenon">Phenomenon</option>
-          <option value="method">Method</option>
-          <option value="both">Both</option>
-        </select>
-      </label>
+      <label>Filter dimension <select id="filterDimension"><option value="">No dimension filter</option></select></label>
+      <label>Filter value <select id="filterValue" disabled><option value="">All values</option></select></label>
       <label>Distribution
         <select id="distributionView">
           <option value="compare">Compare full and observed</option>
@@ -42,6 +36,14 @@
       </label>
       <span id="status" class="status-pill warn">loading</span>
     </div>
+    <div class="view-tabs" aria-label="Construct specification workspaces">
+      <a class="view-tab active" href="/composition">Specification results</a>
+    </div>
+    <details class="method-info">
+      <summary>How this analysis works</summary>
+      <p>The selected dataset and coding model define the analytical population. Filter dimension and Filter value then condition every chart and matrix on one exact coded subgroup. Full retains all papers after those selections. Observed excludes only the missing or unspecified categories registered for the dimension being displayed.</p>
+      <p>The nested matrix crosses any two different dimensions within the same population. Counts, row percentages, column percentages, and the supporting papers are alternative views of the same cells; they do not imply causal order.</p>
+    </details>
   </header>
 
   <section class="card">
@@ -64,6 +66,24 @@
   </div>
 
   <main class="composition-grid" id="compositionGrid"></main>
+
+  <section class="card contrasting-matrix-card">
+    <h2>Nested specification matrix <span class="sub">inspect how two dimensions combine inside the active filter</span></h2>
+    <div class="toolbar compact-analysis-controls">
+      <label>Matrix rows <select id="matrixRows"></select></label>
+      <label>Matrix columns <select id="matrixColumns"></select></label>
+      <label>Cell value
+        <select id="matrixMetric">
+          <option value="share_within_row">Percentage within row</option>
+          <option value="share_within_column">Percentage within column</option>
+          <option value="share_of_analyzed">Percentage of matrix papers</option>
+          <option value="papers">Paper count</option>
+        </select>
+      </label>
+      <span id="matrixStatus" class="status-pill warn">loading</span>
+    </div>
+    <div id="compositionMatrix" class="contrasting-matrix-wrap"></div>
+  </section>
 
   <section class="card">
     <h2>Model inter-rater reliability <span class="sub">eight dimensions; six core</span></h2>
@@ -146,10 +166,15 @@ const esc = value => String(value ?? "").replace(/[&<>"]/g, character => ({
 const params = new URLSearchParams(window.location.search);
 let scope = params.get("scope") || "full_corpus";
 let codingModel = params.get("model") || "";
-let studyStatus = ["all", "phenomenon", "method", "both"].includes(params.get("study_status"))
-  ? params.get("study_status") : "all";
+const studyStatus = "all";
+let filterDimension = params.get("filter_dimension") || "";
+let filterValue = params.get("filter_value") || "";
 let distributionView = ["compare", "full", "observed"].includes(params.get("distribution"))
   ? params.get("distribution") : "compare";
+let matrixRowDimension = params.get("matrix_rows") || "ai_role";
+let matrixColumnDimension = params.get("matrix_columns") || "level";
+let matrixMetric = params.get("matrix_metric") || "share_within_row";
+let filterOptions = [];
 const EVIDENCE_LIMITS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 50000];
 const requestedEvidenceLimit = Number.parseInt(params.get("evidence_limit"), 10);
 let evidenceLimit = EVIDENCE_LIMITS.includes(requestedEvidenceLimit)
@@ -173,7 +198,6 @@ async function init() {
   ).join("");
   el("scope").value = scope;
   el("codingModel").value = codingModel;
-  el("studyStatus").value = studyStatus;
   el("distributionView").value = distributionView;
   el("status").className = "status-pill " + (health.has_specifications ? "ok" : "warn");
   el("status").textContent = `${health.papers_loaded.toLocaleString()} papers · live dataset`;
@@ -187,8 +211,15 @@ async function init() {
     updateLocation();
     render();
   };
-  el("studyStatus").onchange = event => {
-    studyStatus = event.target.value;
+  el("filterDimension").onchange = event => {
+    filterDimension = event.target.value;
+    filterValue = "";
+    populateFilterValues();
+    updateLocation();
+    render();
+  };
+  el("filterValue").onchange = event => {
+    filterValue = event.target.value;
     updateLocation();
     render();
   };
@@ -202,6 +233,26 @@ async function init() {
     button.onclick = () => downloadCompositionBundle(button.dataset.compositionDownload);
   });
   el("refreshHumanIrr").onclick = () => renderHumanIrr(true);
+  el("matrixRows").onchange = event => {
+    matrixRowDimension = event.target.value;
+    if (matrixRowDimension === matrixColumnDimension) {
+      matrixColumnDimension = filterOptions.find(item => item.id !== matrixRowDimension)?.id || "level";
+      el("matrixColumns").value = matrixColumnDimension;
+    }
+    updateLocation(); renderMatrix();
+  };
+  el("matrixColumns").onchange = event => {
+    matrixColumnDimension = event.target.value;
+    if (matrixColumnDimension === matrixRowDimension) {
+      matrixRowDimension = filterOptions.find(item => item.id !== matrixColumnDimension)?.id || "ai_role";
+      el("matrixRows").value = matrixRowDimension;
+    }
+    updateLocation(); renderMatrix();
+  };
+  el("matrixMetric").onchange = event => {
+    matrixMetric = event.target.value;
+    updateLocation(); renderMatrix();
+  };
   updateLocation();
   await Promise.all([render(), renderIrr(), renderHumanIrr()]);
 }
@@ -210,30 +261,44 @@ function updateLocation() {
   const query = new URLSearchParams({
     scope,
     model: codingModel,
-    study_status: studyStatus,
     distribution: distributionView,
     evidence_limit: String(evidenceLimit),
+    matrix_rows: matrixRowDimension,
+    matrix_columns: matrixColumnDimension,
+    matrix_metric: matrixMetric,
   });
+  if (filterDimension && filterValue !== "") {
+    query.set("filter_dimension", filterDimension);
+    query.set("filter_value", filterValue);
+  }
   window.history.replaceState({}, "", `/composition?${query}`);
 }
 
 async function render() {
   el("status").textContent = "recalculating from dataset…";
   const query = new URLSearchParams({study_status: studyStatus, model: codingModel});
+  if (filterDimension && filterValue !== "") {
+    query.set("filter_dimension", filterDimension);
+    query.set("filter_value", filterValue);
+  }
   const data = await api(`/api/scope/${encodeURIComponent(scope)}/composition?${query}`);
+  filterOptions = data.filter_options || [];
+  syncFilterControls();
   el("filteredPapers").textContent = data.filtered_papers.toLocaleString();
-  el("modelPapers").textContent = data.scope_papers.toLocaleString();
+  el("modelPapers").textContent = data.model_scope_papers.toLocaleString();
   el("scopePapers").textContent = data.corpus_scope_papers.toLocaleString();
   el("modelCoverage").textContent = `${(data.model_coverage_share * 100).toFixed(2)}%`;
-  const statusLabel = studyStatus === "all" ? "all papers" : studyStatus;
+  const statusLabel = data.control
+    ? `${data.control.dimension_label} = ${data.control.value || "Missing value"}`
+    : "no dimension filter";
   const distributionLabel = el("distributionView").selectedOptions[0].textContent;
   el("artifactContext").textContent = `${data.model_label}: ${statusLabel}: ${distributionLabel}`;
-  updateStatusOptions(data);
   charts.forEach(chart => chart.destroy());
   charts = [];
   el("compositionGrid").innerHTML = data.panels.map((panel, index) => panelMarkup(panel, index)).join("");
   data.panels.forEach((panel, index) => renderPanelChart(panel, index));
   wireCategoryRows();
+  await renderMatrix();
   el("status").className = "status-pill ok";
   el("status").textContent = `${data.model_label} · ${data.filtered_papers.toLocaleString()} filtered papers · calculated live`;
 }
@@ -376,11 +441,16 @@ function showHumanIrrEmpty(message) {
 }
 
 function compositionArtifactQuery() {
-  return new URLSearchParams({
+  const query = new URLSearchParams({
     model: codingModel,
     study_status: studyStatus,
     distribution: distributionView,
   });
+  if (filterDimension && filterValue !== "") {
+    query.set("filter_dimension", filterDimension);
+    query.set("filter_value", filterValue);
+  }
+  return query;
 }
 
 function openCompositionReport() {
@@ -393,14 +463,101 @@ function downloadCompositionBundle(bundle) {
   );
 }
 
-function updateStatusOptions(data) {
-  const counts = new Map(data.status_options.map(item => [item.value, item.papers]));
-  [...el("studyStatus").options].forEach(option => {
-    const label = option.value === "all" ? "All papers" : option.value[0].toUpperCase() + option.value.slice(1);
-    const count = option.value === "all" ? data.scope_papers : (counts.get(option.value) || 0);
-    option.textContent = `${label} (${count.toLocaleString()})`;
+function syncFilterControls() {
+  const validDimension = filterOptions.some(item => item.id === filterDimension);
+  if (!validDimension) {
+    filterDimension = "";
+    filterValue = "";
+  }
+  el("filterDimension").innerHTML = `<option value="">No dimension filter</option>` +
+    filterOptions.map(item => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("");
+  el("filterDimension").value = filterDimension;
+  populateFilterValues();
+  const dimensionOptions = filterOptions.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)}</option>`
+  ).join("");
+  el("matrixRows").innerHTML = dimensionOptions;
+  el("matrixColumns").innerHTML = dimensionOptions;
+  if (!filterOptions.some(item => item.id === matrixRowDimension)) matrixRowDimension = "ai_role";
+  if (!filterOptions.some(item => item.id === matrixColumnDimension) || matrixColumnDimension === matrixRowDimension) {
+    matrixColumnDimension = filterOptions.find(item => item.id !== matrixRowDimension)?.id || "level";
+  }
+  el("matrixRows").value = matrixRowDimension;
+  el("matrixColumns").value = matrixColumnDimension;
+  el("matrixMetric").value = matrixMetric;
+}
+
+function populateFilterValues() {
+  const definition = filterOptions.find(item => item.id === filterDimension);
+  el("filterValue").disabled = !definition;
+  el("filterValue").innerHTML = `<option value="">All values</option>` + (definition?.values || []).map(item =>
+    `<option value="${esc(item.value)}">${esc(item.label)} (${item.papers.toLocaleString()})</option>`
+  ).join("");
+  if (definition && definition.values.some(item => item.value === filterValue)) {
+    el("filterValue").value = filterValue;
+  } else {
+    filterValue = "";
+    el("filterValue").value = "";
+  }
+}
+
+async function renderMatrix() {
+  if (!filterOptions.length || matrixRowDimension === matrixColumnDimension) return;
+  el("matrixStatus").className = "status-pill warn";
+  el("matrixStatus").textContent = "calculating";
+  const query = new URLSearchParams({
+    model: codingModel,
+    row_dimension: matrixRowDimension,
+    column_dimension: matrixColumnDimension,
+    distribution: distributionView === "full" ? "full" : "observed",
+    study_status: studyStatus,
   });
-  el("studyStatus").value = studyStatus;
+  if (filterDimension && filterValue !== "") {
+    query.set("filter_dimension", filterDimension);
+    query.set("filter_value", filterValue);
+  }
+  const matrix = await api(`/api/scope/${encodeURIComponent(scope)}/composition/matrix?${query}`);
+  const lookup = new Map(matrix.cells.map(item => [`${item.row_raw_value}\u0000${item.column_raw_value}`, item]));
+  const values = matrix.cells.map(item => Number(item[matrixMetric] || 0));
+  const maximum = Math.max(...values, 0.000001);
+  const headings = matrix.columns.map(value => `<th>${esc(value)}</th>`).join("");
+  const rows = matrix.rows.map(rowValue => {
+    const rawRow = rowValue === "Missing value" ? "" : rowValue;
+    const rowN = matrix.cells.filter(item => item.row_raw_value === rawRow)
+      .reduce((total, item) => total + item.papers, 0);
+    const cells = matrix.columns.map(columnValue => {
+      const rawColumn = columnValue === "Missing value" ? "" : columnValue;
+      const item = lookup.get(`${rawRow}\u0000${rawColumn}`) || {papers: 0};
+      const value = Number(item[matrixMetric] || 0);
+      const label = matrixMetric === "papers" ? item.papers.toLocaleString() : `${(value * 100).toFixed(2)}%`;
+      const alpha = Math.min(0.88, 0.10 + value / maximum * 0.70);
+      return `<td><button class="heatmap-cell composition-matrix-cell" style="background:rgba(52,152,219,${alpha})" ` +
+        `data-row-column="${esc(matrix.row_column)}" data-row-value="${esc(rawRow)}" ` +
+        `data-column-column="${esc(matrix.column_column)}" data-column-value="${esc(rawColumn)}" ` +
+        `data-row-label="${esc(matrix.row_label)}" data-column-label="${esc(matrix.column_label)}" ` +
+        `data-papers="${item.papers}">${label}</button></td>`;
+    }).join("");
+    return `<tr><th>${esc(rowValue)}<span class="matrix-denominator">n = ${rowN.toLocaleString()}</span></th>${cells}</tr>`;
+  }).join("");
+  el("compositionMatrix").innerHTML = `<table class="contrasting-matrix"><thead><tr><th></th>${headings}</tr></thead><tbody>${rows}</tbody></table>`;
+  document.querySelectorAll(".composition-matrix-cell").forEach(button => {
+    button.onclick = () => showMatrixEvidence(button);
+  });
+  el("matrixStatus").className = "status-pill ok";
+  el("matrixStatus").textContent = `${matrix.analyzed_n.toLocaleString()} matrix papers`;
+}
+
+function showMatrixEvidence(button) {
+  const rowValue = button.dataset.rowValue;
+  const columnValue = button.dataset.columnValue;
+  showEvidence(
+    button.dataset.rowColumn,
+    rowValue,
+    `${button.dataset.rowLabel}: ${rowValue || "Missing value"} / ${button.dataset.columnLabel}: ${columnValue || "Missing value"}`,
+    Number(button.dataset.papers),
+    button.dataset.columnColumn,
+    columnValue,
+  );
 }
 
 function panelMarkup(panel, index) {
@@ -545,8 +702,8 @@ function wireCategoryRows() {
   });
 }
 
-async function showEvidence(column, value, panelLabel, count) {
-  activeEvidence = {column, value, panelLabel, count};
+async function showEvidence(column, value, panelLabel, count, secondaryColumn = "", secondaryValue = "") {
+  activeEvidence = {column, value, panelLabel, count, secondaryColumn, secondaryValue};
   const displayValue = value || "Missing value";
   const query = new URLSearchParams({
     study_status: studyStatus,
@@ -555,10 +712,20 @@ async function showEvidence(column, value, panelLabel, count) {
     value,
     limit: String(evidenceLimit),
   });
+  if (filterDimension && filterValue !== "") {
+    query.set("filter_dimension", filterDimension);
+    query.set("filter_value", filterValue);
+  }
+  if (secondaryColumn) {
+    query.set("secondary_column", secondaryColumn);
+    query.set("secondary_value", secondaryValue);
+  }
   el("panel").classList.add("open");
   el("panelBody").innerHTML = `<h2>${esc(panelLabel)}: ${esc(displayValue)}</h2><p class="muted">Loading evidence papers…</p>`;
   const papers = await api(`/api/scope/${encodeURIComponent(scope)}/composition/evidence?${query}`);
-  const filterLabel = studyStatus === "all" ? "all study statuses" : studyStatus;
+  const filterLabel = filterDimension && filterValue !== ""
+    ? `${el("filterDimension").selectedOptions[0].textContent} = ${el("filterValue").selectedOptions[0].textContent}`
+    : "the full selected dataset scope";
   const showingAll = papers.length >= count;
   const limitOptions = EVIDENCE_LIMITS.map(limit =>
     `<option value="${limit}" ${limit === evidenceLimit ? "selected" : ""}>` +
@@ -572,7 +739,7 @@ async function showEvidence(column, value, panelLabel, count) {
     `<p class="chart-note">${displaySummary}</p>` +
     `<div class="evidence-controls"><label for="compositionEvidenceLimit">Papers displayed</label>` +
     `<select id="compositionEvidenceLimit">${limitOptions}</select></div>` +
-    papers.map(paper => paperInspectionCard(paper, [column])).join("");
+    papers.map(paper => paperInspectionCard(paper, [column, secondaryColumn].filter(Boolean))).join("");
   el("compositionEvidenceLimit").onchange = event => {
     evidenceLimit = Number.parseInt(event.target.value, 10);
     updateLocation();
@@ -581,6 +748,8 @@ async function showEvidence(column, value, panelLabel, count) {
       activeEvidence.value,
       activeEvidence.panelLabel,
       activeEvidence.count,
+      activeEvidence.secondaryColumn,
+      activeEvidence.secondaryValue,
     );
   };
 }

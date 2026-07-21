@@ -24,7 +24,10 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from aecsp.analytics.model_validation import (  # noqa: E402
+    CORE_DIMENSIONS,
     DIMENSIONS,
+    EXPLORATORY_DIMENSIONS,
+    SUPPLEMENTARY_DIAGNOSTIC_DIMENSIONS,
     multirater_summary,
     normalized_entropy,
     pairwise_with_bootstrap,
@@ -304,19 +307,28 @@ def main() -> None:
     pd.DataFrame(intersections).to_csv(OUTPUT / "agreement_intersections.csv", index=False)
 
     probability_agreement = agreement[agreement.comparison_set == "probability_sample"]
-    pair_macro = probability_agreement.groupby(["left_model", "right_model"], as_index=False).agg(
+    core_probability_agreement = probability_agreement[
+        probability_agreement.dimension.isin(CORE_DIMENSIONS)
+    ]
+    pair_macro = core_probability_agreement.groupby(
+        ["left_model", "right_model"], as_index=False
+    ).agg(
         percent_agreement=("percent_agreement", "mean"),
         krippendorff_alpha=("krippendorff_alpha", "mean"),
     )
+    pair_macro.insert(0, "dimension_set", "six_core_dimensions")
     pair_macro.to_csv(TABLES / "pairwise_macro_agreement.csv", index=False)
-    local_macro = agreement[agreement.comparison_set == "supplementary_local_intersection"].groupby(
+    local_macro = agreement[
+        (agreement.comparison_set == "supplementary_local_intersection")
+        & agreement.dimension.isin(CORE_DIMENSIONS)
+    ].groupby(
         ["left_model", "right_model"], as_index=False
     ).agg(percent_agreement=("percent_agreement", "mean"),
           krippendorff_alpha=("krippendorff_alpha", "mean"),
           minimum_comparable=("comparable", "min"))
     local_macro.to_csv(TABLES / "supplementary_local_macro_agreement.csv", index=False)
-    heatmap_svg(pair_macro, "percent_agreement", "Mean exact agreement across dimensions", FIGURES / "pairwise_agreement_heatmap.svg")
-    heatmap_svg(pair_macro, "krippendorff_alpha", "Mean nominal Krippendorff alpha", FIGURES / "pairwise_alpha_heatmap.svg")
+    heatmap_svg(pair_macro, "percent_agreement", "Mean exact agreement across six core dimensions", FIGURES / "pairwise_agreement_heatmap.svg")
+    heatmap_svg(pair_macro, "krippendorff_alpha", "Mean nominal Krippendorff alpha across six core dimensions", FIGURES / "pairwise_alpha_heatmap.svg")
     bar_svg([(row.model, row.probability_coverage) for row in coverage.itertuples()], "Probability-sample model coverage", FIGURES / "model_coverage.svg")
     grounding_macro = grounding.groupby("model", as_index=False).agg(exact_match_share=("exact_match_share", "mean"))
     bar_svg([(row.model, row.exact_match_share) for row in grounding_macro.itertuples()], "Exact stated-evidence grounding (diagnostic)", FIGURES / "evidence_grounding.svg")
@@ -357,6 +369,9 @@ def main() -> None:
         "git_revision": subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, capture_output=True, text=True).stdout.strip(),
         "python": platform.python_version(), "pandas": pd.__version__, "numpy": np.__version__,
         "notes": ["Agreement is diagnostic; no model is a gold standard.",
+                  "Macro pairwise heatmaps average the six core dimensions only.",
+                  f"Exploratory displayed dimensions: {', '.join(EXPLORATORY_DIMENSIONS)}.",
+                  f"Supplementary binary diagnostics: {', '.join(SUPPLEMENTARY_DIAGNOSTIC_DIMENSIONS)}.",
                   "Exact evidence matching is conservative and does not detect paraphrases.",
                   "Llama and Gemma cache counts are point-in-time partial snapshots and may increase after this analysis.",
                   "Human coding fields were empty at generation time; human-model IRR is pending."],
@@ -364,7 +379,7 @@ def main() -> None:
     (OUTPUT / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     best = pair_macro.sort_values("percent_agreement", ascending=False).iloc[0]
-    summary = f"""# Model-validation analysis\n\nGenerated {manifest['generated_at']}. All outputs are non-mutating and use the frozen 2,235-paper probability sample unless labelled full Mini-Nano.\n\n## Coverage\n\n{markdown_2dp(coverage)}\n\n## Pairwise macro agreement\n\n{markdown_2dp(pair_macro.sort_values('percent_agreement', ascending=False))}\n\nThe strongest representative pair is **{best.left_model}-{best.right_model}** with mean exact agreement **{best.percent_agreement:.2f}**. Agreement is not accuracy; blinded human coding remains the accuracy anchor.\n\n## Supplementary local-model intersections\n\n{markdown_2dp(local_macro.sort_values('percent_agreement', ascending=False))}\n\nLocal estimates are supplementary because successful local records cover only part of the probability sample and their non-response may be selective.\n\n## Four-model agreement\n\n{markdown_2dp(multirater)}\n\n## Interpretation controls\n\n- Mini remains the primary full-corpus rater; Nano is a full-corpus sensitivity baseline.\n- Claude and Gemini validate Mini on a model-independent probability sample.\n- Llama and Gemma comparisons are separately labelled supplementary intersections.\n- Binary fields with high raw agreement but low alpha are prevalence-sensitive and require both statistics.\n- Exact evidence grounding is a conservative lexical diagnostic, not a hallucination rate.\n- Human-model IRR will be added only after blinded human fields are completed.\n"""
+    summary = f"""# Model-validation analysis\n\nGenerated {manifest['generated_at']}. All outputs are non-mutating and use the frozen 2,235-paper probability sample unless labelled full Mini-Nano.\n\n## Coverage\n\n{markdown_2dp(coverage)}\n\n## Pairwise macro agreement: six core dimensions\n\n{markdown_2dp(pair_macro.sort_values('percent_agreement', ascending=False))}\n\nThe macro heatmaps average only study status, technical type, AI role, mechanism, level, and scope. Process stage and definition form are displayed as exploratory dimensions; the three binary diagnostics are supplementary. The strongest representative pair is **{best.left_model}-{best.right_model}** with mean exact agreement **{best.percent_agreement:.2f}**. Agreement is not accuracy; blinded human coding remains the accuracy anchor.\n\n## Supplementary local-model intersections\n\n{markdown_2dp(local_macro.sort_values('percent_agreement', ascending=False))}\n\nLocal estimates are supplementary because successful local records cover only part of the probability sample and their non-response may be selective.\n\n## Four-model agreement\n\n{markdown_2dp(multirater)}\n\n## Interpretation controls\n\n- Mini remains the primary full-corpus rater; Nano is a full-corpus sensitivity baseline.\n- Claude and Gemini validate Mini on a model-independent probability sample.\n- Llama and Gemma comparisons are separately labelled supplementary intersections.\n- Macro heatmaps use the six core dimensions; process stage and definition form remain exploratory.\n- Binary fields with high raw agreement but low alpha are prevalence-sensitive and require both statistics.\n- Exact evidence grounding is a conservative lexical diagnostic, not a hallucination rate.\n- Human-model IRR will be added only after blinded human fields are completed.\n"""
     summary = summary.replace(
         "\n\n## Coverage",
         (

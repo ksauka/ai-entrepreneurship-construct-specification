@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Targeted Interpretation Review</title>
+<link rel="stylesheet" href="/static/esd.css" />
+<script src="/static/citation.js?v=scopus-first-20260716"></script>
+<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
+</head>
+<body>
+<div class="container composition-container">
+  <header class="app-header">
+    <h1>Construct specification</h1>
+    <p>Interpret previously read papers inside the exact specification cells produced by the analytical workflow.</p>
+    <nav class="nav-links">
+      <a class="nav-link" href="/">Analytics Dashboard</a>
+      <a class="nav-link active" href="/composition">Construct Specification</a>
+      <a class="nav-link" href="/contrasting">Construct Contrasting</a>
+      <a class="nav-link" href="/topic-review">Topic Review</a>
+      <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
+      <a class="nav-link" href="/assistant">Assistant</a>
+    </nav>
+    <div class="view-tabs" aria-label="Construct specification workspaces">
+      <a class="view-tab" href="/composition">Specification results</a>
+      <a class="view-tab active" href="/composition/targeted-reading">Targeted interpretation review</a>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>Targeted interpretation review</h2>
+    <p>Use the title, abstract, author keywords, model evidence, and earlier workbook notes to explain why a paper supports, contrasts with, or bounds the pattern in its selected cell. This qualitative interpretation does not alter the model code.</p>
+    <div class="toolbar targeted-reading-controls">
+      <label>Reviewer ID <input id="reviewerId" maxlength="40" placeholder="your-name-or-id" /></label>
+      <label>Paper set <select id="targetSet"></select></label>
+      <label>Coding model <select id="codingModel"></select></label>
+      <label>Population filter dimension <select id="filterDimension"><option value="">No dimension filter</option></select></label>
+      <label>Population filter value <select id="filterValue" disabled><option value="">All values</option></select></label>
+      <a class="btn btn-outline" href="/api/targeted-reading/export">Download reviews</a>
+    </div>
+    <div class="targeted-pattern-builder">
+      <h3>Selected analytical pattern</h3>
+      <div class="toolbar targeted-reading-controls">
+        <label>Pattern dimension <select id="patternDimension"></select></label>
+        <label>Pattern category <select id="patternValue"></select></label>
+        <label>Second dimension <select id="secondPatternDimension"><option value="">None</option></select></label>
+        <label>Second category <select id="secondPatternValue" disabled><option value="">Not selected</option></select></label>
+        <button class="btn" id="loadPapers" type="button">Load pattern papers</button>
+      </div>
+      <div id="reviewContext" class="review-context-banner warn-context">
+        Select at least one pattern dimension and category before loading papers.
+      </div>
+    </div>
+    <label id="blindnessGuard" class="blindness-guard" hidden>
+      <input type="checkbox" id="acknowledgeOverlap" />
+      I understand that these papers belong to the blind human-validation set. Independent human annotation must be completed before model codes are inspected.
+    </label>
+    <p id="methodBoundary" class="chart-note"></p>
+    <span id="status" class="status-pill warn">Enter a reviewer ID</span>
+  </section>
+
+  <section id="reviewSummary" class="card" hidden>
+    <div class="stat-grid">
+      <div class="stat-tile"><div class="n" id="availableN">0</div><div class="l">Papers in selected cell</div></div>
+      <div class="stat-tile"><div class="n" id="reviewedN">0</div><div class="l">Reviewed by this reviewer</div></div>
+      <div class="stat-tile"><div class="n" id="revisitN">0</div><div class="l">Marked for revisit</div></div>
+    </div>
+  </section>
+
+  <main id="paperList" class="targeted-reading-list"></main>
+</div>
+
+<script>
+const api = async (path, options = {}) => {
+  const response = await fetch(path, options);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(detail.detail || `Request failed (${response.status})`);
+  }
+  return response.json();
+};
+const el = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>\"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[character]));
+const params = new URLSearchParams(window.location.search);
+let metadata = null;
+let filterOptions = [];
+let filterDimension = params.get("filter_dimension") || "";
+let filterValue = params.get("filter_value") || "";
+let cellColumn = params.get("cell_column") || "";
+let cellValue = params.get("cell_value") || "";
+let secondaryCellColumn = params.get("secondary_cell_column") || "";
+let secondaryCellValue = params.get("secondary_cell_value") || "";
+let activeReviewContext = null;
+
+async function init() {
+  const [meta, models] = await Promise.all([
+    api("/api/targeted-reading/metadata"),
+    api("/api/specification/models"),
+  ]);
+  metadata = meta;
+  el("methodBoundary").textContent = meta.methodological_boundary;
+  el("targetSet").innerHTML = meta.sets.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${item.papers.toLocaleString()})</option>`
+  ).join("");
+  el("codingModel").innerHTML = models.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${(item.coverage_share * 100).toFixed(2)}% coverage)</option>`
+  ).join("");
+  const requestedModel = params.get("model");
+  if (models.some(item => item.id === requestedModel)) el("codingModel").value = requestedModel;
+  el("reviewerId").value = localStorage.getItem("etvTargetedReviewer") || "";
+  el("targetSet").onchange = () => { updateGuard(); updateContextPreview(); };
+  el("filterDimension").onchange = event => {
+    filterDimension = event.target.value;
+    filterValue = "";
+    populateFilterValues(); updateContextPreview();
+  };
+  el("filterValue").onchange = event => { filterValue = event.target.value; updateContextPreview(); };
+  el("patternDimension").onchange = event => {
+    const definition = filterOptions.find(item => item.id === event.target.value);
+    cellColumn = definition?.column || "";
+    cellValue = "";
+    populatePatternValues(false);
+    updateContextPreview();
+  };
+  el("patternValue").onchange = event => { cellValue = event.target.value; updateContextPreview(); };
+  el("secondPatternDimension").onchange = event => {
+    const definition = filterOptions.find(item => item.id === event.target.value);
+    secondaryCellColumn = definition?.column || "";
+    secondaryCellValue = "";
+    populatePatternValues(true);
+    updateContextPreview();
+  };
+  el("secondPatternValue").onchange = event => { secondaryCellValue = event.target.value; updateContextPreview(); };
+  el("loadPapers").onclick = loadPapers;
+  updateGuard();
+  await loadFilterContract();
+}
+
+async function loadFilterContract() {
+  const model = el("codingModel").value;
+  const data = await api(`/api/scope/full_corpus/composition?model=${encodeURIComponent(model)}`);
+  filterOptions = data.filter_options || [];
+  el("filterDimension").innerHTML = `<option value="">No dimension filter</option>` + filterOptions.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)}</option>`
+  ).join("");
+  if (!filterOptions.some(item => item.id === filterDimension)) filterDimension = "";
+  el("filterDimension").value = filterDimension;
+  populateFilterValues();
+  populatePatternDimensions();
+}
+
+function populatePatternDimensions() {
+  const options = filterOptions.map(item => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("");
+  const primary = filterOptions.find(item => item.column === cellColumn);
+  const secondary = filterOptions.find(item => item.column === secondaryCellColumn);
+  el("patternDimension").innerHTML = `<option value="">Select dimension</option>${options}`;
+  el("secondPatternDimension").innerHTML = `<option value="">None</option>${options}`;
+  el("patternDimension").value = primary?.id || "";
+  el("secondPatternDimension").value = secondary?.id || "";
+  if (!primary) { cellColumn = ""; cellValue = ""; }
+  if (!secondary) { secondaryCellColumn = ""; secondaryCellValue = ""; }
+  populatePatternValues(false);
+  populatePatternValues(true);
+  updateContextPreview();
+}
+
+function populatePatternValues(secondary) {
+  const dimensionNode = el(secondary ? "secondPatternDimension" : "patternDimension");
+  const valueNode = el(secondary ? "secondPatternValue" : "patternValue");
+  const definition = filterOptions.find(item => item.id === dimensionNode.value);
+  const current = secondary ? secondaryCellValue : cellValue;
+  valueNode.disabled = !definition;
+  valueNode.innerHTML = `<option value="">${secondary ? "Not selected" : "Select category"}</option>` +
+    (definition?.values || []).filter(item => item.value !== "").map(item =>
+      `<option value="${esc(item.value)}">${esc(item.label)} (${item.papers.toLocaleString()})</option>`
+    ).join("");
+  if (definition?.values.some(item => item.value === current)) valueNode.value = current;
+  else {
+    valueNode.value = "";
+    if (secondary) secondaryCellValue = ""; else cellValue = "";
+  }
+}
+
+function updateContextPreview(context = null) {
+  if (context) {
+    const patterns = context.patterns.map(item => `${item.dimension_label} = ${item.value_label}`).join(" × ");
+    const condition = context.condition ? `${context.condition.dimension_label} = ${context.condition.value}` : "No additional population filter";
+    el("reviewContext").className = "review-context-banner";
+    el("reviewContext").innerHTML = `<strong>Pattern being reviewed:</strong> ${esc(patterns)}<br>` +
+      `<strong>Population:</strong> ${esc(context.dataset_label)}; ${esc(el("targetSet").selectedOptions[0]?.textContent || context.target_set)}<br>` +
+      `<strong>Coding model:</strong> ${esc(context.model_label)}<br>` +
+      `<strong>Condition:</strong> ${esc(condition)}`;
+    return;
+  }
+  const primaryDefinition = filterOptions.find(item => item.column === cellColumn);
+  const secondaryDefinition = filterOptions.find(item => item.column === secondaryCellColumn);
+  const patterns = [];
+  if (primaryDefinition && cellValue) patterns.push(`${primaryDefinition.label} = ${cellValue}`);
+  if (secondaryDefinition && secondaryCellValue) patterns.push(`${secondaryDefinition.label} = ${secondaryCellValue}`);
+  el("reviewContext").className = `review-context-banner ${patterns.length ? "" : "warn-context"}`;
+  el("reviewContext").textContent = patterns.length
+    ? `Pattern to load: ${patterns.join(" × ")}`
+    : "Select at least one pattern dimension and category before loading papers.";
+}
+
+function populateFilterValues() {
+  const definition = filterOptions.find(item => item.id === filterDimension);
+  el("filterValue").disabled = !definition;
+  el("filterValue").innerHTML = `<option value="">All values</option>` + (definition?.values || []).map(item =>
+    `<option value="${esc(item.value)}">${esc(item.label)} (${item.papers.toLocaleString()})</option>`
+  ).join("");
+  if (!definition?.values.some(item => item.value === filterValue)) filterValue = "";
+  el("filterValue").value = filterValue;
+}
+
+function updateGuard() {
+  const includesOverlap = ["human_overlap", "all"].includes(el("targetSet").value);
+  el("blindnessGuard").hidden = !includesOverlap;
+  if (!includesOverlap) el("acknowledgeOverlap").checked = false;
+}
+
+async function loadPapers() {
+  const reviewer = el("reviewerId").value.trim();
+  if (!reviewer) {
+    el("status").textContent = "Enter a reviewer ID";
+    return;
+  }
+  if (!cellColumn || !cellValue) {
+    el("status").className = "status-pill bad";
+    el("status").textContent = "Select a pattern dimension and category";
+    updateContextPreview();
+    return;
+  }
+  localStorage.setItem("etvTargetedReviewer", reviewer);
+  el("status").className = "status-pill warn";
+  el("status").textContent = "loading";
+  const query = new URLSearchParams({
+    reviewer_id: reviewer,
+    target_set: el("targetSet").value,
+    model: el("codingModel").value,
+    acknowledge_human_overlap: String(el("acknowledgeOverlap").checked),
+    limit: "136",
+  });
+  if (filterDimension && filterValue !== "") {
+    query.set("filter_dimension", filterDimension);
+    query.set("filter_value", filterValue);
+  }
+  if (cellColumn) {
+    query.set("cell_column", cellColumn);
+    query.set("cell_value", cellValue);
+  }
+  if (secondaryCellColumn) {
+    query.set("secondary_cell_column", secondaryCellColumn);
+    query.set("secondary_cell_value", secondaryCellValue);
+  }
+  try {
+    const data = await api(`/api/targeted-reading/papers?${query}`);
+    activeReviewContext = data.review_context;
+    updateContextPreview(activeReviewContext);
+    renderPapers(data);
+    el("status").className = "status-pill ok";
+    el("status").textContent = `${data.returned_papers.toLocaleString()} papers loaded`;
+  } catch (error) {
+    el("status").className = "status-pill bad";
+    el("status").textContent = error.message;
+  }
+}
+
+function renderPapers(data) {
+  const reviewed = data.papers.filter(paper => paper._targeted_reading.review?.status === "reviewed").length;
+  const revisit = data.papers.filter(paper => paper._targeted_reading.review?.status === "revisit").length;
+  el("reviewSummary").hidden = false;
+  el("availableN").textContent = data.available_papers.toLocaleString();
+  el("reviewedN").textContent = reviewed.toLocaleString();
+  el("revisitN").textContent = revisit.toLocaleString();
+  el("paperList").innerHTML = data.papers.map((paper, index) => reviewCard(paper, index)).join("") ||
+    `<section class="card empty-state">No previously read papers occur in this exact analytical cell.</section>`;
+  document.querySelectorAll("[data-save-review]").forEach(button => {
+    button.onclick = () => saveReview(button.dataset.saveReview);
+  });
+}
+
+function reviewCard(paper, index) {
+  const target = paper._targeted_reading || {};
+  const review = target.review || {};
+  const priorNotes = [
+    ["Earlier topics", target.workbook_topics],
+    ["Earlier bottleneck reading", target.workbook_p2],
+    ["Earlier contrast", target.workbook_p2_contrast],
+    ["Earlier contribution note", target.workbook_contribution_notes],
+  ].filter(item => item[1]).map(item => `<p><strong>${esc(item[0])}:</strong> ${esc(item[1])}</p>`).join("");
+  return `<section class="card targeted-review-card" data-paper-id="${esc(paper.paper_id)}">
+    <div class="targeted-paper-inspection">${paperInspectionCard(paper)}</div>
+    ${priorNotes ? `<details class="prior-reading"><summary>Earlier workbook reading</summary>${priorNotes}</details>` : ""}
+    <div class="targeted-review-form">
+      <label>Relationship to the selected pattern
+        <select data-field="relation">
+          ${[["","Select"],["supports","Supports"],["contrasts","Contrasts"],["boundary","Boundary condition"],["context","Contextual evidence"],["not_relevant","Not relevant"]].map(([value,label]) => `<option value="${value}" ${review.relation === value ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </label>
+      <label>Evidence from the paper<textarea data-field="evidence_note" rows="3">${esc(review.evidence_note || "")}</textarea></label>
+      <label>Interpretation<textarea data-field="interpretation" rows="3">${esc(review.interpretation || "")}</textarea></label>
+      <label>Theoretical implication<textarea data-field="theoretical_implication" rows="3">${esc(review.theoretical_implication || "")}</textarea></label>
+      <label>Review status
+        <select data-field="status">
+          ${[["pending","Pending"],["reviewed","Reviewed"],["revisit","Revisit"]].map(([value,label]) => `<option value="${value}" ${review.status === value ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </label>
+      <button class="btn" type="button" data-save-review="${esc(paper.paper_id)}">Save interpretation</button>
+      <span class="save-state" id="saveState${index}"></span>
+    </div>
+  </section>`;
+}
+
+async function saveReview(paperId) {
+  const card = document.querySelector(`[data-paper-id="${CSS.escape(paperId)}"]`);
+  const review = Object.fromEntries([...card.querySelectorAll("[data-field]")].map(field => [field.dataset.field, field.value]));
+  review.context = activeReviewContext;
+  const button = card.querySelector("[data-save-review]");
+  button.disabled = true;
+  try {
+    await api("/api/targeted-reading/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({reviewer_id: el("reviewerId").value.trim(), paper_id: paperId, review}),
+    });
+    button.textContent = "Saved";
+  } catch (error) {
+    button.textContent = error.message;
+  } finally {
+    setTimeout(() => { button.disabled = false; button.textContent = "Save interpretation"; }, 1800);
+  }
+}
+
+el("codingModel").onchange = async () => { await loadFilterContract(); updateContextPreview(); };
+init().catch(error => {
+  el("status").className = "status-pill bad";
+  el("status").textContent = error.message;
+});
+</script>
+</body>
+</html>

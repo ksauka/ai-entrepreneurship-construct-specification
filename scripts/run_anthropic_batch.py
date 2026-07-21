@@ -643,20 +643,23 @@ def main() -> None:
     if args.action == "run":
         if not args.confirm_submit:
             raise SystemExit("`run` may submit PAID work. Re-run with --confirm-submit.")
-        state = load_state(batch_dir / "batch_state.json")
-        if not state["batches"]:
+        if not (batch_dir / "batch_manifest.json").exists():
             prepare(
                 args.model, cache_dir, batch_dir, args.chunk_size, args.limit,
                 args.paper_ids_file,
             )
-            gate_path = batch_dir / "live_validation_gate.json"
-            gate = json.loads(gate_path.read_text()) if gate_path.exists() else {}
-            if gate.get("provider_fingerprint") != anthropic_fingerprint(args.model) or not gate.get("passed"):
-                corpus = pd.read_csv(PROCESSED_DIR / "master_corpus.csv", dtype=str, keep_default_na=False)
-                target = pd.read_csv(args.paper_ids_file, dtype=str, keep_default_na=False)
-                row = corpus[corpus["paper_id"] == target.iloc[0]["paper_id"]].iloc[0]
-                validate_one(api_key, args.model, paper_from_row(row), batch_dir)
-            submit(api_key, batch_dir, True)
+        gate_path = batch_dir / "live_validation_gate.json"
+        gate = json.loads(gate_path.read_text()) if gate_path.exists() else {}
+        if gate.get("provider_fingerprint") != anthropic_fingerprint(args.model) or not gate.get("passed"):
+            corpus = pd.read_csv(PROCESSED_DIR / "master_corpus.csv", dtype=str, keep_default_na=False)
+            target = pd.read_csv(args.paper_ids_file, dtype=str, keep_default_na=False)
+            row = corpus[corpus["paper_id"] == target.iloc[0]["paper_id"]].iloc[0]
+            validate_one(api_key, args.model, paper_from_row(row), batch_dir)
+        # `submit` records every accepted shard immediately and skips those
+        # request paths on a later invocation. Calling it unconditionally makes
+        # `run` resumable after an insufficient-credit or other submission
+        # error interrupts a multi-shard launch.
+        submit(api_key, batch_dir, True)
         watch(api_key, args.model, cache_dir, batch_dir, args.poll_seconds)
         return
     if args.action == "validate":

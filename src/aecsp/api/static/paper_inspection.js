@@ -69,7 +69,7 @@ function profileTable(dimensions) {
   </table></div>`;
 }
 
-function paperInspectionCard(paper, selectedColumns = []) {
+function paperInspectionCard(paper, selectedColumns = [], selectionContext = "") {
   const inspection = paper._inspection || {};
   const dimensions = Array.isArray(inspection.dimensions)
     ? inspection.dimensions.map(dimension => ({
@@ -102,9 +102,15 @@ function paperInspectionCard(paper, selectedColumns = []) {
     ["Full-text review flags", inspection.needs_full_text],
     ["Named theories", inspection.theories_mentioned],
   ].filter(([, value]) => String(value ?? "").trim());
-  const rationale = rationaleDimensions.length
+  const context = String(selectionContext || "").trim();
+  const contextMarkup = context
+    ? `<section class="inspection-rationale"><p>${_escAttr(context)}</p></section>`
+    : "";
+  const rationale = contextMarkup + (rationaleDimensions.length
     ? rationaleDimensions.map(dimensionEvidenceMarkup).join("")
-    : `<p class="inspection-empty">This selection has no dimension-specific code filter.</p>`;
+    : contextMarkup
+      ? ""
+      : `<p class="inspection-empty">This selection has no dimension-specific code filter.</p>`);
 
   return `<article class="paper-inspection-card">
     <header class="paper-inspection-header">

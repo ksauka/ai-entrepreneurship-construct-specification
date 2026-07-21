@@ -214,7 +214,13 @@ Mini and Gemini cover the complete probability sample. Nano and Claude each have
 
 Exact agreement is the proportion of papers receiving identical codes. Krippendorff alpha adjusts for agreement expected from the category distribution. High agreement with low alpha usually indicates a prevalence problem: raters repeatedly select the same dominant category but do not reliably discriminate minority categories. Confidence intervals quantify paper-sampling uncertainty; they do not include uncertainty caused by prompt choice, model version or the abstract-only evidentiary boundary.
 
-The average values below are orientation summaries only. A mean alpha across heterogeneous dimensions is not a formal overall reliability coefficient; all substantive decisions use dimension-level estimates.
+The average values below are orientation summaries across the six core
+dimensions only: study status, technical type, AI role, mechanism, level and
+scope. Process stage and definition form remain displayed exploratory
+dimensions. The three binary fields are supplementary diagnostics and are not
+included in the macro heatmaps. A mean alpha across heterogeneous dimensions
+is not a formal overall reliability coefficient; all substantive decisions use
+dimension-level estimates.
 
 {markdown_2dp(macro.sort_values('percent_agreement', ascending=False))}
 
