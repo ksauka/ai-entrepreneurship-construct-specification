@@ -15,7 +15,8 @@
     <p>This platform examines how entrepreneurship research specifies artificial intelligence, and shows where those specifications agree, differ, or break down.</p>
     <nav class="nav-links">
       <a class="nav-link active" href="/">Analytics Dashboard</a>
-      <a class="nav-link" href="/composition">Observed Composition</a>
+      <a class="nav-link" href="/composition">Construct Specification</a>
+      <a class="nav-link" href="/contrasting">Construct Contrasting</a>
       <a class="nav-link" href="/topic-review">Topic Review</a>
       <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
       <a class="nav-link" href="/assistant">Assistant</a>
@@ -34,15 +35,27 @@
   <div class="card">
     <h2>Performance analysis <span class="sub">productivity and citation impact</span></h2>
     <div class="stat-grid" id="perfCards"></div>
-    <h3 style="margin-top:18px">Annual publication output and citations by publication cohort</h3>
-    <p class="chart-note">The citation series is the current cumulative citation total of papers published in each year, not citations received during that year. Click a year to inspect the keywords for its publication period.</p>
-    <div class="chart-wrap"><canvas id="annualChart"></canvas></div>
+    <h3 style="margin-top:18px">Annual and cumulative publication output</h3>
+    <p class="chart-note" id="publicationTrendNote"></p>
+    <div class="chart-wrap publication-chart"><canvas id="annualChart"></canvas></div>
     <div class="grid-2" style="margin-top:18px">
-      <div><h3>Most productive journals</h3><table id="perfJournals"><tbody></tbody></table></div>
-      <div><h3>Most productive authors</h3><table id="perfAuthors"><tbody></tbody></table></div>
+      <div>
+        <h3>Most productive journals</h3>
+        <div class="performance-table-scroll">
+          <table id="perfJournals"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+      <div>
+        <h3>Most productive authors</h3>
+        <div class="performance-table-scroll">
+          <table id="perfAuthors"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
     </div>
     <h3 style="margin-top:18px">Most cited papers</h3>
-    <table id="citedTable"><tbody></tbody></table>
+    <div class="performance-table-scroll performance-table-scroll-wide">
+      <table id="citedTable"><thead></thead><tbody></tbody></table>
+    </div>
   </div>
 
   <div class="card" id="keywordEvolutionCard">
@@ -248,39 +261,140 @@ async function renderPerformance() {
     <div class="stat-tile"><div class="n">${(s.cited_share*100).toFixed(2)}%</div><div class="l">Papers cited at least once</div></div>
     <div class="stat-tile"><div class="n">${s.year_min ? s.year_min + " to " + s.year_max : "n/a"}</div><div class="l">Publication years</div></div>`;
 
-  const labels = p.annual_production.map(a => a.year);
+  const labels = p.annual_production.map(a =>
+    a.year === p.search_cutoff.year
+      ? `${a.year} (retrieved ${p.search_cutoff.label})`
+      : a.year > p.search_cutoff.year
+        ? `${a.year} (retrieved ${p.search_cutoff.label})`
+      : String(a.year)
+  );
+  const reconciliation = p.trend_reconciliation;
+  const laterDatedRows = p.annual_production.filter(
+    row => row.publication_year_after_retrieval_year && row.papers > 0
+  );
+  const laterDatedDescription = laterDatedRows.map(
+    row => `${row.papers.toLocaleString()} carry publication year ${row.year}`
+  ).join("; ");
+  const laterDated = reconciliation.records_dated_after_retrieval_year
+    ? ` Of the retrieved records, ${laterDatedDescription} in Scopus.`
+    : "";
+  const reconciliationText = reconciliation.matches_scope_papers
+    ? ` The final cumulative point matches all ${s.papers.toLocaleString()} papers in this dataset view.`
+    : ` The final cumulative point covers ${reconciliation.final_cumulative_papers.toLocaleString()} of ${s.papers.toLocaleString()} papers because ${reconciliation.invalid_year.toLocaleString()} record(s) have no usable publication year.`;
+  el("publicationTrendNote").textContent =
+    `Bars show papers by the publication year recorded in Scopus. The line shows the running total through each recorded publication year. ` +
+    `All records were downloaded from Scopus on ${p.search_cutoff.label}.${laterDated}` +
+    `${reconciliationText} Click a chart point to inspect its papers.`;
   if (annualChart) annualChart.destroy();
+  const annualBarColours = p.annual_production.map(row =>
+    row.publication_year_after_retrieval_year
+      ? "rgba(230,126,34,.68)"
+      : "rgba(52,152,219,.42)"
+  );
+  const annualBarBorders = p.annual_production.map(row =>
+    row.publication_year_after_retrieval_year ? "#e67e22" : "#3498db"
+  );
   annualChart = new Chart(el("annualChart"), {
-    type: "line",
+    type: "bar",
     data: { labels, datasets: [
-      { label: "Papers", data: p.annual_production.map(a => a.papers), borderColor: "#3498db",
-        backgroundColor: "rgba(52,152,219,.15)", fill: true, tension: 0.3, yAxisID: "y" },
-      { label: "Citations accumulated by publication cohort", data: p.annual_production.map(a => a.citations), borderColor: "#e74c3c",
-        backgroundColor: "rgba(231,76,60,.10)", fill: true, tension: 0.3, yAxisID: "y1" },
+      { type: "bar", label: "Papers published in year", data: p.annual_production.map(a => a.papers),
+        borderColor: annualBarBorders, backgroundColor: annualBarColours,
+        borderWidth: 1, minBarLength: 4, order: 2, yAxisID: "y" },
+      { type: "line", label: "Cumulative papers", data: p.annual_production.map(a => a.cumulative_papers),
+        borderColor: "#167354", backgroundColor: "rgba(33,144,107,.10)", borderWidth: 4,
+        pointRadius: p.annual_production.map(row =>
+          row.year >= p.search_cutoff.year ? 5 : 1.5
+        ),
+        pointHoverRadius: 7, pointBackgroundColor: "#167354",
+        pointBorderColor: "#ffffff", pointBorderWidth: 1.5,
+        fill: false, tension: 0.22, order: 1, yAxisID: "y1" },
     ]},
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
       onClick: (_event, elements) => {
         if (!elements.length) return;
-        const year = Number(labels[elements[0].index]);
-        const periodId = keywordPeriodForYear(year);
-        if (periodId) selectKeywordPeriod(periodId);
-        else showUnclassifiedYear(year);
+        const year = p.annual_production[elements[0].index].year;
+        showPublicationPapers(year);
       },
       scales: {
-        y: { beginAtZero: true, title: { display: true, text: "Papers" } },
-        y1: { beginAtZero: true, position: "right", title: { display: true, text: "Cumulative cohort citations" }, grid: { drawOnChartArea: false } },
+        x: {
+          ticks: {
+            autoSkip: false,
+            maxRotation: 55,
+            minRotation: 0,
+            callback: (_value, index) => {
+              const row = p.annual_production[index];
+              return row.year === p.annual_production[0].year ||
+                row.year % 5 === 0 ||
+                row.year >= p.search_cutoff.year
+                ? labels[index]
+                : "";
+            },
+          },
+        },
+        y: { beginAtZero: true, title: { display: true, text: "Papers published in year" } },
+        y1: { beginAtZero: true, position: "right", title: { display: true, text: "Cumulative papers" }, grid: { drawOnChartArea: false } },
       } },
   });
 
-  el("perfJournals").querySelector("tbody").innerHTML =
-    `<tr><th>Journal</th><th>Papers</th><th>Citations</th></tr>` + p.top_journals.map(j =>
-      `<tr><td>${esc(j["Source title"])}</td><td>${j.papers}</td><td>${j.citations.toLocaleString()}</td></tr>`).join("");
-  el("perfAuthors").querySelector("tbody").innerHTML =
-    `<tr><th>Author</th><th>Papers</th></tr>` + p.top_authors.map(a =>
-      `<tr><td>${esc(a.author)}</td><td>${a.papers}</td></tr>`).join("");
-  el("citedTable").querySelector("tbody").innerHTML =
-    `<tr><th>Citation</th><th>Title</th><th>Journal</th><th>Citations</th></tr>` + p.most_cited.map(m =>
-      `<tr><td>${esc(citation(m))}</td><td>${paperTitleLink(m)}</td><td>${esc(m["Source title"])}</td><td>${m.citations.toLocaleString()}</td></tr>`).join("");
+  el("perfJournals").querySelector("thead").innerHTML =
+    `<tr><th>Journal</th><th>Papers</th><th>Citations</th></tr>`;
+  el("perfJournals").querySelector("tbody").innerHTML = p.top_journals.map(j =>
+    `<tr><td>${esc(j["Source title"])}</td><td>${j.papers}</td><td>${j.citations.toLocaleString()}</td></tr>`).join("");
+  el("perfAuthors").querySelector("thead").innerHTML =
+    `<tr><th>Author</th><th>Papers</th></tr>`;
+  el("perfAuthors").querySelector("tbody").innerHTML = p.top_authors.map(a =>
+    `<tr><td>${esc(a.author)}</td><td>${a.papers}</td></tr>`).join("");
+  el("citedTable").querySelector("thead").innerHTML =
+    `<tr><th>Citation</th><th>Title</th><th>Journal</th><th>Citations</th></tr>`;
+  el("citedTable").querySelector("tbody").innerHTML = p.most_cited.map(m =>
+    `<tr><td>${esc(citation(m))}</td><td>${paperTitleLink(m)}</td><td>${esc(m["Source title"])}</td><td>${m.citations.toLocaleString()}</td></tr>`).join("");
+}
+
+async function showPublicationPapers(year, mode = "annual", requestedLimit = 100) {
+  const limit = Math.min(50000, Math.max(1, Number.parseInt(requestedLimit, 10) || 100));
+  const query = new URLSearchParams({year: String(year), mode, limit: String(limit)});
+  const data = await api(`/api/scope/${encodeURIComponent(scope)}/performance/papers?${query}`);
+  const heading = mode === "annual"
+    ? `Papers published in ${year}`
+    : `Cumulative papers through ${year}`;
+  const cutoffNote = year > data.search_cutoff.year
+    ? ` These records were present in the Scopus export downloaded on ${data.search_cutoff.label} and carry publication year ${year} in Scopus.`
+    : "";
+  el("panelBody").innerHTML =
+    `<h2>${esc(heading)}</h2>` +
+    `<p class="chart-note">Showing ${data.returned_papers.toLocaleString()} of ${data.total_papers.toLocaleString()} papers.${esc(cutoffNote)}</p>` +
+    `<div class="evidence-controls">` +
+      `<button class="btn ${mode === "annual" ? "" : "btn-outline"}" id="annualPaperMode" type="button">Published in ${year}</button>` +
+      `<button class="btn ${mode === "cumulative" ? "" : "btn-outline"}" id="cumulativePaperMode" type="button">Cumulative through ${year}</button>` +
+      `<label>Paper limit <input id="publicationPaperLimit" type="number" min="1" max="50000" value="${limit}" /></label>` +
+      `<button class="btn btn-outline" id="applyPublicationLimit" type="button">Apply</button>` +
+      (data.returned_papers < data.total_papers
+        ? `<button class="btn" id="showAllPublicationPapers" type="button">Show all ${data.total_papers.toLocaleString()}</button>`
+        : "") +
+    `</div>` +
+    data.papers.map(publicationPaperEvidenceItem).join("");
+  el("annualPaperMode").onclick = () =>
+    showPublicationPapers(year, "annual", el("publicationPaperLimit").value);
+  el("cumulativePaperMode").onclick = () =>
+    showPublicationPapers(year, "cumulative", el("publicationPaperLimit").value);
+  el("applyPublicationLimit").onclick = () =>
+    showPublicationPapers(year, mode, el("publicationPaperLimit").value);
+  if (el("showAllPublicationPapers")) {
+    el("showAllPublicationPapers").onclick = () =>
+      showPublicationPapers(year, mode, data.total_papers);
+  }
+  el("panel").classList.add("open");
+}
+
+function publicationPaperEvidenceItem(paper) {
+  const citations = Number.parseInt(paper["Cited by"], 10);
+  const citationCount = Number.isFinite(citations)
+    ? ` · ${citations.toLocaleString()} citations`
+    : "";
+  return `<div class="ev-item">
+    <div class="t">${paperTitleLink(paper)}</div>
+    <div class="m">${esc(citation(paper))} · ${esc(paper["Source title"] || "")}${citationCount}</div>
+  </div>`;
 }
 
 const KEYWORD_COLORS = [
@@ -544,7 +658,7 @@ function selectKeywordPeriod(periodId) {
 
 function showUnclassifiedYear(year) {
   const cutoff = keywordData?.search_cutoff;
-  el("panelBody").innerHTML = `<h2>${year}</h2><p>This year is outside the locked historical periods. Records after ${cutoff?.year || 2026} are treated as forthcoming or early-access papers and are excluded from keyword-trend comparisons. The source search was completed on ${esc(cutoff?.label || "8 July 2026")}.</p>`;
+  el("panelBody").innerHTML = `<h2>${year}</h2><p>This Scopus publication year is outside the historical keyword periods, which end in ${cutoff?.year || 2026}. These records were nevertheless present in the Scopus export downloaded on ${esc(cutoff?.label || "8 July 2026")}.</p>`;
   el("panel").classList.add("open");
 }
 

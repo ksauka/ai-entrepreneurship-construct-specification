@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Construct Contrasting</title>
+<link rel="stylesheet" href="/static/esd.css">
+<script src="/static/citation.js?v=scopus-first-20260716"></script>
+<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
+</head>
+<body>
+<div class="container contrasting-container">
+  <header class="app-header">
+    <h1>Construct contrasting</h1>
+    <p>Inspect how AI specification changes across entrepreneurship populations, business domains, analytical levels, and recurring configurations.</p>
+    <nav class="nav-links">
+      <a class="nav-link" href="/">Analytics Dashboard</a>
+      <a class="nav-link" href="/composition">Construct Specification</a>
+      <a class="nav-link active" href="/contrasting">Construct Contrasting</a>
+      <a class="nav-link" href="/topic-review">Topic Review</a>
+      <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
+      <a class="nav-link" href="/assistant">Assistant</a>
+    </nav>
+    <div class="contrasting-toolbar">
+      <label>Coding model <select id="codingModel"></select></label>
+      <label>Filter dimension <select id="filterDimension"></select></label>
+      <label>Filter value <select id="filterValue"></select></label>
+      <label>Evidence view
+        <select id="distributionView">
+          <option value="observed">Observed</option>
+          <option value="full">Full</option>
+        </select>
+      </label>
+      <span id="status" class="status-pill warn">loading</span>
+      <details class="artifact-menu" id="artifactMenu">
+        <summary class="btn btn-outline">Research artifacts</summary>
+        <div class="artifact-menu-panel">
+          <p id="artifactContext" class="artifact-menu-context"></p>
+          <button class="btn btn-outline" id="generateReport" type="button">Generate filtered report</button>
+          <button class="btn btn-outline" id="downloadCurrent" type="button">Download current analysis</button>
+          <button class="btn" id="downloadRelease" type="button">Download complete release</button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <section class="card contrasting-workspace-controls">
+    <div class="contrasting-tabs" aria-label="Theory elaboration analysis">
+      <button class="contrasting-tab active" data-tactic="horizontal" type="button">Horizontal contrasting</button>
+      <button class="contrasting-tab" data-tactic="vertical" type="button">Vertical contrasting</button>
+      <button class="contrasting-tab" data-tactic="structuring" type="button">Structuring</button>
+    </div>
+    <h2><span id="analysisTitle">Horizontal contrasting</span><button class="info-button" id="analysisScopeInfoButton" type="button" aria-label="Explain analysis scope" title="Explain analysis scope">i</button></h2>
+    <p class="chart-note" id="analysisDescription"></p>
+    <div class="contrasting-analysis-controls" id="analysisControls"></div>
+    <div class="contrasting-context-strip" aria-label="Current analysis context">
+      <span><strong id="analysisN">0</strong> <span id="analysisNLabel">Baseline papers</span></span>
+      <span><strong id="availableGroups">0</strong> groups available</span>
+      <span><strong id="selectedAnalysisScope">Full corpus</strong> analysis population</span>
+      <span><strong id="selectedView">Observed</strong> evidence view</span>
+      <span><strong id="selectedModel">-</strong> coding model</span>
+    </div>
+  </section>
+
+  <main id="analysisBody"></main>
+</div>
+
+<aside id="panel" class="side-panel">
+  <span class="close" onclick="closePanel()">close</span>
+  <div id="panelBody"></div>
+</aside>
+
+<script>
+const api = async path => {
+  const response = await fetch(path);
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(detail.detail || `Request failed (${response.status})`);
+  }
+  return response.json();
+};
+const el = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>\"]/g, character => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;",
+}[character]));
+const params = new URLSearchParams(window.location.search);
+const VALID_TACTICS = ["horizontal", "vertical", "structuring"];
+let tactic = VALID_TACTICS.includes(params.get("tactic")) ? params.get("tactic") : "horizontal";
+let codingModel = params.get("model") || "";
+let population = ["core", "other", "combined"].includes(params.get("population")) ? params.get("population") : "combined";
+let journalScope = ["all", "ft50"].includes(params.get("journal_scope")) ? params.get("journal_scope") : "all";
+let filterDimension = params.get("filter_dimension") || "study_status";
+let filterValue = params.get("filter_value") || (["phenomenon", "method", "both"].includes(params.get("study_status")) ? params.get("study_status") : "");
+let distributionView = ["full", "observed"].includes(params.get("distribution")) ? params.get("distribution") : "observed";
+let horizontalDimension = params.get("dimension") || "ai_role";
+let horizontalMetric = params.get("horizontal_metric") || "share";
+let entrepreneurshipPopulationView = ["all", "core", "other", "combined"].includes(params.get("entrepreneurship_population")) ? params.get("entrepreneurship_population") : "all";
+let verticalRow = params.get("vertical_row") || "ai_role";
+let verticalColumn = params.get("vertical_column") || "level";
+let verticalMetric = params.get("vertical_metric") || "share_within_column";
+let structuringPair = params.get("pair") || "ai_role__mechanism";
+let structuringMetric = params.get("structuring_metric") || "share_within_column";
+let minSupport = Math.max(1, Number.parseInt(params.get("min_support"), 10) || 10);
+let evidenceLimit = Number.parseInt(params.get("evidence_limit"), 10) || 100;
+const EVIDENCE_LIMITS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 50000];
+const FISHER_AGUINIS_URL = "https://doi.org/10.1177/1094428116689707";
+let metadata = null;
+let currentPayload = null;
+let activeEvidence = null;
+let cellContexts = [];
+
+const TACTIC_COPY = {
+  horizontal: {
+    title: "Horizontal contrasting",
+    description: "Compare the same specification dimension across registered business domains and entrepreneurship journal populations. The selected comparison corpus defines both the baseline and the papers eligible for every row.",
+  },
+  vertical: {
+    title: "Vertical contrasting",
+    description: "Examine how any specification dimension changes across coded levels of analysis within entrepreneurship. Level of analysis remains on one matrix axis.",
+  },
+  structuring: {
+    title: "Structuring",
+    description: "Inspect recurring relationships among AI role, mechanism, level, scope condition, and process stage.",
+  },
+};
+
+async function init() {
+  const models = await api("/api/specification/models");
+  if (!models.some(item => item.id === codingModel)) codingModel = models[0]?.id || "";
+  el("codingModel").innerHTML = models.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${(item.coverage_share * 100).toFixed(2)}% coverage)</option>`
+  ).join("");
+  el("codingModel").value = codingModel;
+  await loadMetadata();
+  renderGlobalFilterControls();
+  bindGlobalControls();
+  await activateTactic(tactic);
+}
+
+async function loadMetadata() {
+  metadata = await api(`/api/contrasting/metadata?model=${encodeURIComponent(codingModel)}`);
+  if (!metadata.populations.some(item => item.id === population)) population = "combined";
+  el("selectedModel").textContent = metadata.model_label;
+  el("availableGroups").textContent = String(metadata.domains.length + 1);
+}
+
+function bindGlobalControls() {
+  el("codingModel").onchange = async event => {
+    codingModel = event.target.value;
+    await loadMetadata();
+    renderGlobalFilterControls();
+    renderAnalysisControls();
+    await loadCurrent();
+  };
+  el("filterDimension").onchange = event => {
+    filterDimension = event.target.value;
+    filterValue = "";
+    renderGlobalFilterControls();
+    loadCurrent();
+  };
+  el("filterValue").onchange = event => { filterValue = event.target.value; loadCurrent(); };
+  el("distributionView").value = distributionView;
+  el("distributionView").onchange = event => { distributionView = event.target.value; loadCurrent(); };
+  document.querySelectorAll(".contrasting-tab").forEach(button => {
+    button.onclick = () => activateTactic(button.dataset.tactic);
+  });
+  el("analysisScopeInfoButton").onclick = showAnalysisScopeInfo;
+  el("generateReport").onclick = () => {
+    el("artifactMenu").removeAttribute("open");
+    window.open(`/api/contrasting/report?${artifactQuery()}`, "_blank");
+  };
+  el("downloadCurrent").onclick = () => {
+    el("artifactMenu").removeAttribute("open");
+    window.location.href = `/api/contrasting/download/current?${artifactQuery()}`;
+  };
+  el("downloadRelease").onclick = () => {
+    el("artifactMenu").removeAttribute("open");
+    window.location.href = `/api/contrasting/download/release?${artifactQuery()}`;
+  };
+  document.addEventListener("click", event => {
+    const menu = el("artifactMenu");
+    if (menu.open && !menu.contains(event.target)) menu.removeAttribute("open");
+  });
+}
+
+async function activateTactic(next) {
+  tactic = next;
+  document.querySelectorAll(".contrasting-tab").forEach(button => {
+    button.classList.toggle("active", button.dataset.tactic === tactic);
+  });
+  el("analysisTitle").textContent = TACTIC_COPY[tactic].title;
+  el("analysisDescription").textContent = TACTIC_COPY[tactic].description;
+  renderAnalysisControls();
+  await loadCurrent();
+}
+
+function renderAnalysisControls() {
+  if (tactic === "horizontal") {
+    el("analysisControls").innerHTML = `
+      <label>Specification dimension <select id="horizontalDimension">${metadata.dimensions.map(item =>
+        `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("")}</select></label>
+      <label>Cell value <select id="horizontalMetric">
+        <option value="share">Percentage within domain</option>
+        <option value="difference">Percentage-point difference from selected baseline</option>
+        <option value="papers">Paper count</option>
+      </select></label>
+      <label>Comparison corpus <select id="horizontalJournalScope">
+        <option value="all">All journals (full-corpus baseline)</option>
+        <option value="ft50">FT50 papers only (FT50 baseline)</option>
+      </select></label>
+      <label>Entrepreneurship rows <select id="entrepreneurshipPopulationView">
+        <option value="all">Core, Additional, and Combined</option>
+        <option value="core">Core entrepreneurship only</option>
+        <option value="other">Additional entrepreneurship only</option>
+        <option value="combined">Combined entrepreneurship only</option>
+      </select></label>`;
+    el("horizontalDimension").value = horizontalDimension;
+    el("horizontalMetric").value = horizontalMetric;
+    el("horizontalJournalScope").value = journalScope;
+    el("entrepreneurshipPopulationView").value = entrepreneurshipPopulationView;
+    el("horizontalDimension").onchange = event => { horizontalDimension = event.target.value; loadCurrent(); };
+    el("horizontalMetric").onchange = event => { horizontalMetric = event.target.value; renderHorizontal(currentPayload); };
+    el("horizontalJournalScope").onchange = event => { journalScope = event.target.value; loadCurrent(); };
+    el("entrepreneurshipPopulationView").onchange = event => { entrepreneurshipPopulationView = event.target.value; renderHorizontal(currentPayload); };
+    return;
+  }
+  if (tactic === "vertical") {
+    normalizeVerticalAxes();
+    el("analysisControls").innerHTML = `
+      <label>Entrepreneurship analysis population <select id="tacticPopulation">${populationOptions()}</select></label>
+      <label>Matrix rows <select id="verticalRow">${verticalDimensionOptions()}</select></label>
+      <label>Matrix columns <select id="verticalColumn">${verticalDimensionOptions()}</select></label>
+      <label>Cell value <select id="verticalMetric">
+        <option value="share_within_column">Percentage within each column</option>
+        <option value="share_within_row">Percentage within each row</option>
+        <option value="share_of_analyzed">Percentage of analyzed papers</option>
+        <option value="papers">Paper count</option>
+      </select></label>`;
+    el("tacticPopulation").value = population;
+    el("verticalRow").value = verticalRow;
+    el("verticalColumn").value = verticalColumn;
+    el("verticalMetric").value = verticalMetric;
+    el("tacticPopulation").onchange = event => { population = event.target.value; loadCurrent(); };
+    el("verticalRow").onchange = event => {
+      verticalRow = event.target.value;
+      if (verticalRow === verticalColumn) verticalColumn = verticalRow === "level" ? "ai_role" : "level";
+      if (verticalRow !== "level" && verticalColumn !== "level") verticalColumn = "level";
+      renderAnalysisControls();
+      loadCurrent();
+    };
+    el("verticalColumn").onchange = event => {
+      verticalColumn = event.target.value;
+      if (verticalColumn === verticalRow) verticalRow = verticalColumn === "level" ? "ai_role" : "level";
+      if (verticalRow !== "level" && verticalColumn !== "level") verticalRow = "level";
+      renderAnalysisControls();
+      loadCurrent();
+    };
+    el("verticalMetric").onchange = event => { verticalMetric = event.target.value; renderVertical(currentPayload); };
+    return;
+  }
+  el("analysisControls").innerHTML = `
+    <label>Entrepreneurship analysis population <select id="tacticPopulation">${populationOptions()}</select></label>
+    <label>Relationship matrix <select id="structuringPair">${metadata.structuring_pairs.map(item =>
+      `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("")}</select></label>
+    <label>Cell value <select id="structuringMetric">
+      <option value="share_within_column">Percentage within column</option>
+      <option value="share_of_analyzed">Percentage of analyzed papers</option>
+      <option value="papers">Paper count</option>
+    </select></label>
+    <label>Minimum configuration papers <input id="minSupport" type="number" min="1" max="10000" value="${minSupport}"></label>`;
+  el("tacticPopulation").value = population;
+  el("structuringPair").value = structuringPair;
+  el("structuringMetric").value = structuringMetric;
+  el("tacticPopulation").onchange = event => { population = event.target.value; loadCurrent(); };
+  el("structuringPair").onchange = event => { structuringPair = event.target.value; loadCurrent(); };
+  el("structuringMetric").onchange = event => { structuringMetric = event.target.value; renderStructuring(currentPayload); };
+  el("minSupport").onchange = event => { minSupport = Math.max(1, Number(event.target.value) || 1); loadCurrent(); };
+}
+
+function populationOptions() {
+  return metadata.populations.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${item.papers.toLocaleString()})</option>`
+  ).join("");
+}
+
+function selectedGlobalFilter() {
+  return metadata.horizontal_controls.find(item => item.id === filterDimension) || null;
+}
+
+function renderGlobalFilterControls() {
+  if (!metadata.horizontal_controls.some(item => item.id === filterDimension)) filterDimension = "study_status";
+  const filter = selectedGlobalFilter();
+  const values = filter?.values || [];
+  if (filterValue && !values.includes(filterValue)) filterValue = "";
+  el("filterDimension").innerHTML = metadata.horizontal_controls.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)}</option>`
+  ).join("");
+  el("filterDimension").value = filterDimension;
+  el("filterValue").innerHTML = `<option value="">All ${esc((filter?.label || "papers").toLowerCase())} values</option>` + values.map(value =>
+    `<option value="${esc(value)}">${esc(value)}</option>`
+  ).join("");
+  el("filterValue").value = filterValue;
+}
+
+function effectiveStudyStatus() {
+  // Retained for the API's legacy study-status parameter. The dynamic filter
+  // below now handles Study status in exactly the same way as every other
+  // specification dimension, including its "unclear" category.
+  return "all";
+}
+
+function activeControl() {
+  if (!filterValue) return null;
+  return {dimension: filterDimension, value: filterValue};
+}
+
+function verticalDimensionOptions() {
+  return metadata.dimensions.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)}</option>`
+  ).join("");
+}
+
+function normalizeVerticalAxes() {
+  const valid = new Set(metadata.dimensions.map(item => item.id));
+  if (!valid.has(verticalRow)) verticalRow = "ai_role";
+  if (!valid.has(verticalColumn)) verticalColumn = "level";
+  if (verticalRow === verticalColumn) verticalColumn = verticalRow === "level" ? "ai_role" : "level";
+  if (verticalRow !== "level" && verticalColumn !== "level") verticalColumn = "level";
+}
+
+function baseQuery() {
+  const query = {
+    model: codingModel,
+    population,
+    journal_scope: effectiveJournalScope(),
+    study_status: effectiveStudyStatus(),
+    distribution: distributionView,
+  };
+  const control = activeControl();
+  if (control) {
+    query.control_dimension = control.dimension;
+    query.control_value = control.value;
+  }
+  return query;
+}
+
+async function loadCurrent() {
+  cellContexts = [];
+  el("status").className = "status-pill warn";
+  el("status").textContent = "loading";
+  const query = new URLSearchParams(baseQuery());
+  if (tactic === "horizontal") {
+    query.set("dimension", horizontalDimension);
+    currentPayload = await api(`/api/contrasting/horizontal?${query}`);
+    renderHorizontal(currentPayload);
+  } else if (tactic === "vertical") {
+    query.set("row_dimension", verticalRow);
+    query.set("column_dimension", verticalColumn);
+    currentPayload = await api(`/api/contrasting/vertical?${query}`);
+    renderVertical(currentPayload);
+  } else if (tactic === "structuring") {
+    query.set("pair", structuringPair);
+    query.set("min_support", String(minSupport));
+    currentPayload = await api(`/api/contrasting/structuring?${query}`);
+    renderStructuring(currentPayload);
+  }
+  el("selectedView").textContent = distributionView[0].toUpperCase() + distributionView.slice(1);
+  el("selectedAnalysisScope").textContent = tactic === "horizontal"
+    ? `${currentPayload.baseline_label}; ${currentPayload.control_filter_label}`
+      : `${currentPayload.population_label}; ${currentPayload.control_filter_label}`;
+  el("selectedModel").textContent = currentPayload.model_label;
+  el("artifactContext").textContent = `${TACTIC_COPY[tactic].title} · ${currentPayload.model_label}`;
+  el("status").className = "status-pill ok";
+  el("status").textContent = "current dataset";
+  updateLocation();
+}
+
+function renderHorizontal(data) {
+  const categories = orderedHorizontalCategories(data);
+  const baselineByCategory = new Map(data.baseline.categories.map(item => [item.raw_value, item]));
+  const metric = horizontalMetric === "papers" ? "papers" : horizontalMetric === "difference" ? "percentage_point_difference" : "share";
+  const metricLabel = horizontalMetric === "papers" ? "Papers" : horizontalMetric === "difference" ? `Percentage-point difference from ${data.baseline_label}` : "Percentage within domain";
+  const rows = data.groups.map(group => ({
+    label: group.eligible === false ? `${group.label} (no eligible papers)` : group.label,
+    id: group.id,
+    denominator: group.denominator,
+    eligible: group.eligible !== false,
+    values: Object.fromEntries(group.categories.map(item => [item.raw_value, item])),
+  }));
+  const controlFilters = data.control ? {[data.control.column]: data.control.value} : {};
+  el("analysisN").textContent = data.baseline.denominator.toLocaleString();
+  el("analysisNLabel").textContent = `${data.baseline_label} baseline papers`;
+  el("availableGroups").textContent = String(rows.length);
+  el("analysisBody").innerHTML = `<section class="card contrasting-matrix-card">
+    <h2>${esc(data.dimension_label)} across domains${data.journal_scope === "ft50" ? " (FT50-only replication)" : ""}<button class="info-button" id="domainInfoButton" type="button" aria-label="Explain domain definitions" title="Explain domain definitions">i</button></h2>
+    <p class="chart-note"><strong>Comparison baseline:</strong> ${esc(data.baseline_label)}. ${esc(data.comparison_definition)} ${esc(metricLabel)}. Groups with no eligible papers remain visible as not available. Domain memberships can overlap, so rows must not be summed.</p>
+    ${heatmapTable(rows, categories, metric, context => ({
+      title: `${context.row.label}: ${context.category.value}`,
+      domain: context.row.id,
+      filters: {...controlFilters, [data.column]: context.category.raw_value},
+      count: context.item?.papers || 0,
+      analysis: {
+        kind: "horizontal",
+        dimension: data.dimension_label,
+        domain: context.row.label,
+        category: context.category.value,
+        papers: context.item?.papers || 0,
+        denominator: context.row.denominator,
+        share: context.item?.share || 0,
+        baselinePapers: baselineByCategory.get(context.category.raw_value)?.papers || 0,
+        baselineDenominator: data.baseline.denominator,
+        baselineShare: baselineByCategory.get(context.category.raw_value)?.share || 0,
+        difference: context.item?.percentage_point_difference || 0,
+      },
+    }), horizontalMetric === "difference")}
+  </section>
+  ${entrepreneurshipSections(data.entrepreneurship_comparison)}`;
+  el("domainInfoButton").onclick = showDomainInfo;
+  wireCells();
+}
+
+function entrepreneurshipSections(data) {
+  const combined = data.groups.find(group => group.id === "combined") || data.groups[0];
+  const displayedGroups = entrepreneurshipPopulationView === "all"
+    ? data.groups
+    : data.groups.filter(group => group.id === entrepreneurshipPopulationView);
+  const categories = orderedPopulationCategories(displayedGroups, combined);
+  const metric = horizontalMetric === "papers"
+    ? "papers"
+    : horizontalMetric === "difference"
+      ? "percentage_point_difference_from_combined"
+      : "share";
+  const rows = displayedGroups.map(group => ({
+    label: group.id === "combined" ? `${group.label} (union benchmark)` : group.label,
+    id: group.id,
+    denominator: group.denominator,
+    values: Object.fromEntries(group.categories.map(item => [item.raw_value, item])),
+  }));
+  const displayedPopulationIds = new Set(displayedGroups.map(group => group.id));
+  const controlFilters = data.control ? {[data.control.column]: data.control.value} : {};
+  const configurationRows = data.configurations.map((configuration, index) => {
+    const values = configuration.population_values.filter(value => displayedPopulationIds.has(value.population)).map(value => {
+      const context = {
+        title: `Configuration ${index + 1}: ${value.population_label}`,
+        population: value.population,
+        filters: {...controlFilters, ...configuration.filters},
+        count: value.papers,
+        analysis: {
+          kind: "entrepreneurship_configuration",
+          population: value.population_label,
+          papers: value.papers,
+          analyzedN: value.analyzed_n,
+          share: value.share,
+          aiRole: configuration.ai_role,
+          mechanism: configuration.mechanism,
+          level: configuration.level,
+          scope: configuration.scope,
+          processStage: configuration.process_stage,
+        },
+      };
+      return `<td><button class="configuration-cell contrast-click" data-context="${registerCell(context)}" title="Inspect supporting papers"><strong>${Number(value.papers).toLocaleString()}</strong><span>${formatPercent(value.share)}</span></button></td>`;
+    }).join("");
+    return `<tr><td>${index + 1}</td><td>${esc(configuration.ai_role)}</td><td>${esc(configuration.mechanism)}</td><td>${esc(configuration.level)}</td><td>${esc(configuration.scope)}</td><td>${esc(configuration.process_stage)}</td>${values}</tr>`;
+  }).join("");
+  const populationHeaders = displayedGroups.map(group => `<th>${esc(group.label.replace(" entrepreneurship", ""))}</th>`).join("");
+  return `<section class="card contrasting-matrix-card">
+      <h2>${esc(data.dimension_label)} within entrepreneurship</h2>
+      <p class="chart-note">This is the entrepreneurship boundary comparison nested within Horizontal contrasting. ${esc(data.comparison_definition)} Percentages are calculated separately within each displayed population.</p>
+      ${heatmapTable(rows, categories, metric, context => ({
+        title: `${context.row.label}: ${context.category.value}`,
+        population: context.row.id,
+        filters: {...controlFilters, [data.column]: context.category.raw_value},
+        count: context.item?.papers || 0,
+        analysis: {
+          kind: "entrepreneurship",
+          population: context.row.label,
+          category: context.category.value,
+          dimension: data.dimension_label,
+          papers: context.item?.papers || 0,
+          denominator: context.row.denominator,
+          share: context.item?.share || 0,
+          difference: context.item?.percentage_point_difference_from_combined || 0,
+        },
+      }), horizontalMetric === "difference")}
+    </section>
+    <section class="card">
+      <h2>Recurring configurations within entrepreneurship</h2>
+      <p class="chart-note">Configurations contain AI role, mechanism, level, scope, and process stage. Rows shown occur in at least ${Number(data.configuration_min_support).toLocaleString()} Combined entrepreneurship papers. Click any population cell to inspect its papers.</p>
+      <div class="contrast-table-scroll contrast-configurations"><table><thead><tr><th>Rank</th><th>AI role</th><th>Mechanism</th><th>Level</th><th>Scope</th><th>Process stage</th>${populationHeaders}</tr></thead><tbody>${configurationRows || `<tr><td colspan="${6 + displayedGroups.length}">No configuration reaches the selected minimum.</td></tr>`}</tbody></table></div>
+    </section>`;
+}
+
+function orderedPopulationCategories(groups, benchmark) {
+  const ordered = (benchmark?.categories || []).map(item => ({value: item.value, raw_value: item.raw_value}));
+  const seen = new Set(ordered.map(item => item.raw_value));
+  groups.forEach(group => group.categories.forEach(item => {
+    if (!seen.has(item.raw_value)) {
+      ordered.push({value: item.value, raw_value: item.raw_value});
+      seen.add(item.raw_value);
+    }
+  }));
+  return ordered;
+}
+
+function showAnalysisScopeInfo() {
+  const populationLabel = metadata.populations.find(item => item.id === population)?.label || population;
+  el("panel").classList.add("open");
+  el("panelBody").innerHTML = `<h2>Theory-elaboration definitions and implementation</h2>
+    <section class="contrast-interpretation">
+      <p><strong>Controls used by every tactic:</strong> Coding model, a dynamic dimension-and-value filter, and evidence view.</p>
+      <p><strong>Current tactic:</strong> ${esc(TACTIC_COPY[tactic].title)}${tactic === "horizontal" ? `, using ${esc(currentPayload?.control_filter_label || "no additional dimension control")}` : `, using ${esc(populationLabel)}`}.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Horizontal contrasting</h3>
+      <p><strong>Definition:</strong> comparison across contexts while the analytical basis remains broadly comparable. It tests which meanings generalize and which vary when a theoretical construct travels to another context (${fisherAguinisLink("Fisher and Aguinis, 2017, pp. 444-445")}).</p>
+      <p><strong>Implementation here:</strong> the selected specification dimension is compared across registered business domains. The optional comparison-control dimension applies the same category restriction to the corpus baseline, every domain row, and the entrepreneurship boundary comparison. FT50 repeats the domain comparison within a selective-journal corpus.</p>
+      <p><strong>Within entrepreneurship:</strong> Core and Additional entrepreneurship are the journal-set comparison. Combined is their union benchmark, not another independent domain. This comparison is nested under Horizontal contrasting because it tests whether patterns are concentrated in core journals or extend through the broader entrepreneurship literature.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Vertical contrasting</h3>
+      <p><strong>Definition:</strong> comparison across levels of analysis to determine which theoretical meanings remain similar and which change when a construct moves between levels (${fisherAguinisLink("Fisher and Aguinis, 2017, p. 445")}).</p>
+      <p><strong>Implementation here:</strong> one matrix axis must remain Level of analysis. The other axis can be any registered specification dimension. The purpose is not simply to count levels, but to inspect whether AI role, mechanism, technical form, scope, process stage, definition, or study status changes across levels.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Structuring</h3>
+      <p><strong>Definition:</strong> clarification of theoretical relations so that they describe empirical observations more precisely (${fisherAguinisLink("Fisher and Aguinis, 2017, pp. 447-449")}).</p>
+      <p><strong>Implementation here:</strong> pairwise matrices and recurring configurations connect AI role, mechanism, level, scope, and process stage. These are co-occurrence structures. They do not establish temporal sequence, causal direction, or formal propositions.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Boundary of the evidence</h3>
+      <p>All analyses describe what is observable in titles, abstracts, and author keywords. They cannot establish passage-level multiplicity or claims that require full text.</p>
+      <p>FT50 is a Horizontal robustness replication. It is not an extra Vertical or Structuring filter because Additional entrepreneurship contains no FT50 papers.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Methodological reference</h3>
+      <p>${fisherAguinisLink("Fisher, G., & Aguinis, H. (2017). Using Theory Elaboration to Make Theoretical Advancements. Organizational Research Methods, 20(3), 438-464.")}</p>
+    </section>`;
+}
+
+function showDomainInfo() {
+  const method = metadata.domain_methodology || {};
+  const domainCards = metadata.domains.map(domain => {
+    const registry = domain.registry_field
+      ? `<p><strong>Registry:</strong> ${esc(domain.registry_field.replaceAll("_", " "))}</p>`
+      : "";
+    const sources = (domain.source_titles || []).map(source =>
+      `<tr><td>${esc(source.title)}</td><td>${Number(source.papers).toLocaleString()}</td></tr>`
+    ).join("");
+    return `<details class="domain-definition">
+      <summary>${esc(domain.label)} <span>${Number(domain.papers).toLocaleString()} papers | ${Number(domain.source_title_count).toLocaleString()} represented journals</span></summary>
+      <div class="domain-definition-body">
+        <p>${esc(domain.definition)}</p>
+        <p><strong>Assignment type:</strong> ${esc(domain.assignment_type)}</p>
+        ${registry}
+        <div class="domain-source-table"><table><thead><tr><th>Represented journal</th><th>Papers</th></tr></thead><tbody>${sources}</tbody></table></div>
+      </div>
+    </details>`;
+  }).join("");
+  el("panel").classList.add("open");
+  el("panelBody").innerHTML = `<h2>What the domains mean</h2>
+    <section class="contrast-interpretation">
+      <p><strong>Unit:</strong> ${esc(method.unit || "Paper inherited from its source journal")}</p>
+      <p>${esc(method.construction || "")}</p>
+      <p>${esc(method.classification || "")}</p>
+      <p>${esc(method.overlap || "")}</p>
+      <p>${esc(method.unclassified || "")}</p>
+      <p><strong>Combined entrepreneurship</strong> is the union of Core and Additional entrepreneurship. It is an analytical population, not a fourteenth domain.</p>
+    </section>
+    <h3>Registered domains and represented journals</h3>
+    ${domainCards}`;
+}
+
+function orderedHorizontalCategories(data) {
+  const ordered = data.baseline.categories.map(item => ({value: item.value, raw_value: item.raw_value}));
+  const seen = new Set(ordered.map(item => item.raw_value));
+  data.groups.forEach(group => group.categories.forEach(item => {
+    if (!seen.has(item.raw_value)) { ordered.push({value: item.value, raw_value: item.raw_value}); seen.add(item.raw_value); }
+  }));
+  return ordered;
+}
+
+function renderVertical(data) {
+  el("analysisN").textContent = data.analyzed_n.toLocaleString();
+  el("analysisNLabel").textContent = "Matrix-comparable papers";
+  const rows = matrixRows(data);
+  const categories = data.columns.map(value => ({value, raw_value: value === "Missing value" ? "" : value}));
+  el("analysisBody").innerHTML = `<section class="card contrasting-matrix-card">
+    <h2>${esc(data.row_label)} by ${esc(data.column_label)}</h2>
+    <p class="chart-note">One axis is Level of analysis. Change either axis to compare level with any other specification dimension; percentages use the selected cell-value denominator.</p>
+    ${heatmapTable(rows, categories, verticalMetric, context => ({
+      title: `${context.row.label} × ${context.category.value}`,
+      population,
+      filters: {[data.row_column]: context.row.raw_value, [data.column_column]: context.category.raw_value},
+      count: context.item?.papers || 0,
+      analysis: {
+        kind: "vertical",
+        population: data.population_label,
+        rowDimension: data.row_label,
+        rowValue: context.row.label,
+        columnDimension: data.column_label,
+        columnValue: context.category.value,
+        papers: context.item?.papers || 0,
+        analyzedN: data.analyzed_n,
+        shareOfAnalyzed: context.item?.share_of_analyzed || 0,
+        shareWithinRow: context.item?.share_within_row || 0,
+        shareWithinColumn: context.item?.share_within_column || 0,
+      },
+    }))}
+  </section>`;
+  wireCells();
+}
+
+function renderStructuring(data) {
+  const matrix = data.matrix;
+  el("analysisN").textContent = data.configurations.analyzed_n.toLocaleString();
+  el("analysisNLabel").textContent = "Five-field-complete papers";
+  const rows = matrixRows(matrix);
+  const categories = matrix.columns.map(value => ({value, raw_value: value === "Missing value" ? "" : value}));
+  const configurationRows = data.configurations.configurations.map((record, index) => {
+    const context = {
+      title: `Recurring configuration ${index + 1}`,
+      population,
+      filters: record.filters,
+      count: record.papers,
+      analysis: {
+        kind: "configuration",
+        population: data.population_label,
+        papers: record.papers,
+        analyzedN: data.configurations.analyzed_n,
+        share: record.share,
+        aiRole: record.ai_role,
+        mechanism: record.mechanism,
+        level: record.level,
+        scope: record.scope,
+        processStage: record.process_stage,
+      },
+    };
+    return `<tr class="contrast-click" data-context="${registerCell(context)}"><td>${index + 1}</td><td>${esc(record.ai_role)}</td><td>${esc(record.mechanism)}</td><td>${esc(record.level)}</td><td>${esc(record.scope)}</td><td>${esc(record.process_stage)}</td><td>${record.papers.toLocaleString()}</td><td>${(record.share * 100).toFixed(2)}%</td></tr>`;
+  }).join("");
+  el("analysisBody").innerHTML = `<section class="card contrasting-matrix-card">
+      <h2>${esc(data.pair_label)}</h2>
+      ${heatmapTable(rows, categories, structuringMetric, context => ({
+        title: `${context.row.label} × ${context.category.value}`,
+        population,
+        filters: {[matrix.row_column]: context.row.raw_value, [matrix.column_column]: context.category.raw_value},
+        count: context.item?.papers || 0,
+        analysis: {
+          kind: "structuring_matrix",
+          population: data.population_label,
+          rowDimension: matrix.row_label,
+          rowValue: context.row.label,
+          columnDimension: matrix.column_label,
+          columnValue: context.category.value,
+          papers: context.item?.papers || 0,
+          analyzedN: matrix.analyzed_n,
+          shareOfAnalyzed: context.item?.share_of_analyzed || 0,
+          shareWithinRow: context.item?.share_within_row || 0,
+          shareWithinColumn: context.item?.share_within_column || 0,
+        },
+      }))}
+    </section>
+    <section class="card">
+      <h2>Recurring configurations <span class="sub">minimum ${data.configurations.min_support.toLocaleString()} papers</span></h2>
+      <div class="contrast-table-scroll contrast-configurations"><table><thead><tr><th>Rank</th><th>AI role</th><th>Mechanism</th><th>Level</th><th>Scope</th><th>Process stage</th><th>Papers</th><th>Share</th></tr></thead><tbody>${configurationRows || `<tr><td colspan="8">No configuration reaches the selected minimum.</td></tr>`}</tbody></table></div>
+    </section>`;
+  wireCells();
+}
+
+function matrixRows(matrix) {
+  return matrix.rows.map(rowValue => ({
+    label: rowValue,
+    raw_value: rowValue === "Missing value" ? "" : rowValue,
+    denominator: matrix.cells.filter(item => item.row_value === rowValue).reduce((total, item) => total + item.papers, 0),
+    values: Object.fromEntries(matrix.cells.filter(item => item.row_value === rowValue).map(item => [item.column_raw_value, item])),
+  }));
+}
+
+function heatmapTable(rows, categories, metric, contextFactory, diverging = false) {
+  const values = rows.flatMap(row => categories.map(category => Number(row.values[category.raw_value]?.[metric] || 0)));
+  const maximum = Math.max(...values.map(value => Math.abs(value)), 0.000001);
+  const head = categories.map(category => `<th>${esc(category.value)}</th>`).join("");
+  const body = rows.map(row => `<tr><th>${esc(row.label)}<span class="matrix-denominator">${row.eligible === false ? "Not available" : `n = ${(row.denominator || 0).toLocaleString()}`}</span></th>${categories.map(category => {
+    if (row.eligible === false) return `<td><span class="heatmap-unavailable">Not available</span></td>`;
+    const item = row.values[category.raw_value];
+    const value = Number(item?.[metric] || 0);
+    const index = registerCell(contextFactory({row, category, item}));
+    const intensity = Math.min(0.88, 0.12 + Math.abs(value) / maximum * 0.68);
+    const colour = diverging && value < 0 ? `rgba(231,76,60,${intensity})` : `rgba(52,152,219,${intensity})`;
+    const label = metric === "papers" ? Number(value).toLocaleString() : metric === "percentage_point_difference" ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}` : `${(value * 100).toFixed(2)}%`;
+    return `<td><button class="heatmap-cell contrast-click" data-context="${index}" style="background:${colour}" title="${esc(label)}; ${Number(item?.papers || 0).toLocaleString()} papers">${esc(label)}</button></td>`;
+  }).join("")}</tr>`).join("");
+  return `<div class="contrasting-matrix-wrap"><table class="contrasting-matrix"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function registerCell(context) {
+  cellContexts.push(context);
+  return cellContexts.length - 1;
+}
+
+function wireCells() {
+  document.querySelectorAll(".contrast-click").forEach(node => {
+    node.onclick = () => showEvidence(cellContexts[Number(node.dataset.context)]);
+  });
+}
+
+async function showEvidence(context) {
+  activeEvidence = context;
+  const evidenceFilters = {...(context.filters || {})};
+  const control = activeControl();
+  const controlDefinition = selectedGlobalFilter();
+  if (control && controlDefinition?.column) evidenceFilters[controlDefinition.column] = control.value;
+  const query = new URLSearchParams({
+    model: codingModel,
+    journal_scope: effectiveJournalScope(),
+    study_status: effectiveStudyStatus(),
+    filters: JSON.stringify(evidenceFilters),
+    limit: String(evidenceLimit),
+  });
+  if (context.population) query.set("population", context.population);
+  if (context.domain) query.set("domain", context.domain);
+  el("panel").classList.add("open");
+  el("panelBody").innerHTML = `<h2>${esc(context.title)}</h2><p class="muted">Loading evidence papers...</p>`;
+  const result = await api(`/api/contrasting/evidence?${query}`);
+  const options = EVIDENCE_LIMITS.map(limit => `<option value="${limit}" ${limit === evidenceLimit ? "selected" : ""}>${limit === 50000 ? "All" : limit.toLocaleString()}</option>`).join("");
+  el("panelBody").innerHTML = `<h2>${esc(context.title)}</h2>
+    ${contrastInterpretation(context)}
+    <h3 class="contrast-evidence-heading">Supporting papers</h3>
+    <p class="chart-note">Showing ${result.returned_papers.toLocaleString()} of ${result.total_papers.toLocaleString()} papers in this exact cell.</p>
+    <div class="evidence-controls"><label>Papers displayed</label><select id="contrastEvidenceLimit">${options}</select></div>
+    ${result.papers.map(paper => paperInspectionCard(paper, Object.keys(evidenceFilters))).join("") || `<p class="empty-state">No papers satisfy this exact combination.</p>`}`;
+  el("contrastEvidenceLimit").onchange = event => { evidenceLimit = Number(event.target.value); showEvidence(activeEvidence); };
+}
+
+function contrastInterpretation(context) {
+  const analysis = context.analysis || {};
+  const denominator = distributionView === "observed"
+    ? "Observed uses only papers with substantive codes for the dimensions in this comparison."
+    : "Full retains missing and unspecified codes in the selected population.";
+  if (analysis.kind === "horizontal") {
+    const difference = Number(analysis.difference || 0);
+    const direction = difference > 0
+      ? `more common by ${difference.toFixed(2)} percentage points`
+      : difference < 0
+        ? `less common by ${Math.abs(difference).toFixed(2)} percentage points`
+        : "equally common";
+    const baseline = journalScope === "ft50" ? "the complete FT50 baseline" : "the complete corpus baseline";
+    return `<section class="contrast-interpretation">
+      <h3>What is contrasted</h3>
+      <p>The prevalence of <strong>${esc(analysis.category)}</strong> for <strong>${esc(analysis.dimension)}</strong> in <strong>${esc(analysis.domain)}</strong> is compared with ${esc(baseline)}.</p>
+      <div class="contrast-metric-grid">
+        <div><strong>${Number(analysis.papers).toLocaleString()} of ${Number(analysis.denominator).toLocaleString()}</strong><span>${formatPercent(analysis.share)} in the domain</span></div>
+        <div><strong>${Number(analysis.baselinePapers).toLocaleString()} of ${Number(analysis.baselineDenominator).toLocaleString()}</strong><span>${formatPercent(analysis.baselineShare)} in the baseline</span></div>
+      </div>
+      <p><strong>Interpretation:</strong> this category is ${direction} in the selected domain. This is a descriptive compositional contrast. Overlapping domain memberships prevent treating domain rows as independent groups.</p>
+      <p class="contrast-boundary">${esc(denominator)}</p>
+    </section>`;
+  }
+  if (analysis.kind === "entrepreneurship") {
+    const difference = Number(analysis.difference || 0);
+    const direction = difference > 0
+      ? `above Combined by ${difference.toFixed(2)} percentage points`
+      : difference < 0
+        ? `below Combined by ${Math.abs(difference).toFixed(2)} percentage points`
+        : "equal to the Combined benchmark";
+    return `<section class="contrast-interpretation">
+      <h3>What is contrasted</h3>
+      <p><strong>${esc(analysis.category)}</strong> for ${esc(analysis.dimension)} within <strong>${esc(analysis.population)}</strong>.</p>
+      <div class="contrast-metric-grid"><div><strong>${Number(analysis.papers).toLocaleString()} of ${Number(analysis.denominator).toLocaleString()}</strong><span>${formatPercent(analysis.share)} within this population</span></div><div><strong>${difference >= 0 ? "+" : ""}${difference.toFixed(2)}</strong><span>percentage points from Combined</span></div></div>
+      <p><strong>Interpretation:</strong> this category is ${direction}. Core and Additional are the journal-set comparison; Combined is their union benchmark.</p>
+      <p class="contrast-boundary">${esc(denominator)}</p>
+    </section>`;
+  }
+  if (analysis.kind === "entrepreneurship_configuration") {
+    return `<section class="contrast-interpretation">
+      <h3>Configuration in this journal population</h3>
+      <dl class="contrast-definition-list"><dt>AI role</dt><dd>${esc(analysis.aiRole)}</dd><dt>Mechanism</dt><dd>${esc(analysis.mechanism)}</dd><dt>Level</dt><dd>${esc(analysis.level)}</dd><dt>Scope</dt><dd>${esc(analysis.scope)}</dd><dt>Process stage</dt><dd>${esc(analysis.processStage)}</dd></dl>
+      <p><strong>${Number(analysis.papers).toLocaleString()} papers</strong>, or ${formatPercent(analysis.share)} of ${Number(analysis.analyzedN).toLocaleString()} comparable papers in ${esc(analysis.population)}, carry this exact configuration.</p>
+      <p><strong>Interpretation:</strong> compare this prevalence across Core and Additional to determine whether the configuration is concentrated in the core journals or extends through the broader entrepreneurship literature.</p>
+      <p class="contrast-boundary">${esc(denominator)}</p>
+    </section>`;
+  }
+  if (analysis.kind === "vertical" || analysis.kind === "structuring_matrix") {
+    const vertical = analysis.kind === "vertical";
+    return `<section class="contrast-interpretation">
+      <h3>What is contrasted</h3>
+      <p><strong>${esc(analysis.rowValue)}</strong> (${esc(analysis.rowDimension)}) is cross-tabulated with <strong>${esc(analysis.columnValue)}</strong> (${esc(analysis.columnDimension)}) in ${esc(analysis.population)}.</p>
+      <div class="contrast-metric-grid contrast-metric-grid-three">
+        <div><strong>${Number(analysis.papers).toLocaleString()}</strong><span>papers in this cell</span></div>
+        <div><strong>${formatPercent(analysis.shareWithinColumn)}</strong><span>of papers in this ${esc(analysis.columnDimension.toLowerCase())}</span></div>
+        <div><strong>${formatPercent(analysis.shareWithinRow)}</strong><span>of papers with this ${esc(analysis.rowDimension.toLowerCase())}</span></div>
+      </div>
+      <p><strong>Interpretation:</strong> the cell shows how often the two codes occur together. ${vertical ? `Comparing the selected percentages shows whether ${esc(analysis.rowDimension)} or ${esc(analysis.columnDimension)} changes across analytical levels.` : "The co-occurrence identifies a recurring association, not a causal direction or temporal sequence."}</p>
+      <p>${Number(analysis.papers).toLocaleString()} papers represent ${formatPercent(analysis.shareOfAnalyzed)} of the ${Number(analysis.analyzedN).toLocaleString()} papers available for this matrix.</p>
+      <p class="contrast-boundary">${esc(denominator)}</p>
+    </section>`;
+  }
+  if (analysis.kind === "configuration") {
+    return `<section class="contrast-interpretation">
+      <h3>What this configuration contains</h3>
+      <dl class="contrast-definition-list">
+        <dt>AI role</dt><dd>${esc(analysis.aiRole)}</dd><dt>Mechanism</dt><dd>${esc(analysis.mechanism)}</dd>
+        <dt>Level</dt><dd>${esc(analysis.level)}</dd><dt>Scope</dt><dd>${esc(analysis.scope)}</dd>
+        <dt>Process stage</dt><dd>${esc(analysis.processStage)}</dd>
+      </dl>
+      <p><strong>${Number(analysis.papers).toLocaleString()} papers</strong>, or ${formatPercent(analysis.share)} of the ${Number(analysis.analyzedN).toLocaleString()} papers observed on all five fields, share this exact configuration.</p>
+      <p><strong>Interpretation:</strong> this is a recurring co-occurrence pattern. The ordering of fields does not establish a process, temporal sequence, or causal pathway.</p>
+      <p class="contrast-boundary">${esc(denominator)}</p>
+    </section>`;
+  }
+  return "";
+}
+
+function formatPercent(value) { return `${(Number(value || 0) * 100).toFixed(2)}%`; }
+
+function fisherAguinisLink(label) {
+  return `<a href="${FISHER_AGUINIS_URL}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+}
+
+function artifactQuery() {
+  const control = activeControl();
+  return new URLSearchParams({
+    tactic,
+    model: codingModel,
+    population,
+    journal_scope: effectiveJournalScope(),
+    study_status: effectiveStudyStatus(),
+    distribution: distributionView,
+    dimension: horizontalDimension,
+    control_dimension: control?.dimension || "",
+    control_value: control?.value || "",
+    row_dimension: verticalRow,
+    column_dimension: verticalColumn,
+    pair: structuringPair,
+    min_support: String(minSupport),
+  }).toString();
+}
+
+function updateLocation() {
+  const query = new URLSearchParams({tactic, model: codingModel, population, journal_scope: effectiveJournalScope(), filter_dimension: filterDimension, filter_value: filterValue, study_status: effectiveStudyStatus(), distribution: distributionView, dimension: horizontalDimension, horizontal_metric: horizontalMetric, control_dimension: activeControl()?.dimension || "", control_value: activeControl()?.value || "", entrepreneurship_population: entrepreneurshipPopulationView, vertical_row: verticalRow, vertical_column: verticalColumn, vertical_metric: verticalMetric, pair: structuringPair, structuring_metric: structuringMetric, min_support: String(minSupport), evidence_limit: String(evidenceLimit)});
+  window.history.replaceState({}, "", `/contrasting?${query}`);
+}
+
+function effectiveJournalScope() { return tactic === "horizontal" ? journalScope : "all"; }
+
+function closePanel() { el("panel").classList.remove("open"); }
+
+init().catch(error => {
+  el("status").className = "status-pill bad";
+  el("status").textContent = error.message;
+  el("analysisBody").innerHTML = `<section class="card"><p>${esc(error.message)}</p></section>`;
+});
+</script>
+</body>
+</html>

@@ -19,23 +19,36 @@ def service(tmp_path: Path) -> GraphService:
         [
             {"paper_id": "P1", "Title": "AI and new ventures", "Authors": "Obschonka M.; Audretsch D.B.",
              "Source title": "Journal of Business Venturing", "Year": "2020", "Cited by": "10",
+             "Abstract": "Machine learning improves prediction for new ventures.",
              "Author Keywords": "AI; Machine-Learning", "Index Keywords": "Artificial Intelligence; Forecasting",
              "ai_type_form": "machine learning", "ai_role_function": "AI as tool",
+             "ai_type_form_evidence": "Machine learning",
+             "ai_type_form_evidence_type": "stated", "ai_type_form_confidence": "0.98",
+             "ai_role_function_evidence": "used by new ventures",
+             "ai_role_function_evidence_type": "inferred", "ai_role_function_confidence": "0.75",
              "ai_method_or_phenomenon": "phenomenon", "ai_mechanism_analysis": "improves prediction",
+             "level_of_analysis": "venture", "entrepreneurial_process_stage": "venture creation",
+             "scope_conditions": "sector-specific", "definition_construct_clarity": "partial definition",
              "DOI": "10.1/a", "Link": "https://scopus.com/p1",
              "in_query_1": "1", "in_query_2": "0", "in_query_3": "1", "in_query_4": "0"},
             {"paper_id": "P2", "Title": "Predictive analytics for founders", "Authors": "Smith J.",
              "Source title": "Journal of Business Venturing", "Year": "2021", "Cited by": "5",
+             "Abstract": "The authors use machine learning to analyse founders.",
              "Author Keywords": "Machine Learning; Predictive Analytics", "Index Keywords": "Forecasting",
              "ai_type_form": "machine learning", "ai_role_function": "AI as research method",
              "ai_method_or_phenomenon": "method", "ai_mechanism_analysis": "mechanism missing",
+             "level_of_analysis": "individual entrepreneur", "entrepreneurial_process_stage": "process unspecified",
+             "scope_conditions": "scope missing", "definition_construct_clarity": "no definition",
              "DOI": "10.1/b", "Link": "",
              "in_query_1": "1", "in_query_2": "0", "in_query_3": "0", "in_query_4": "0"},
             {"paper_id": "P3", "Title": "Generative AI and venture teams", "Authors": "Doe A.; Roe B.; Lee C.",
              "Source title": "Entrepreneurship Theory and Practice", "Year": "2021", "Cited by": "0",
+             "Abstract": "Generative AI supports learning in venture teams.",
              "Author Keywords": "Generative AI; LLMs", "Index Keywords": "Generative Artificial Intelligence",
              "ai_type_form": "generative AI", "ai_role_function": "AI as actor/agent",
              "ai_method_or_phenomenon": "both", "ai_mechanism_analysis": "supports learning",
+             "level_of_analysis": "founding team", "entrepreneurial_process_stage": "opportunity recognition",
+             "scope_conditions": "high-tech startups", "definition_construct_clarity": "explicit definition, fits claim",
              "DOI": "", "Link": "",
              "in_query_1": "0", "in_query_2": "0", "in_query_3": "0", "in_query_4": "1"},
         ]
@@ -70,17 +83,90 @@ def test_service_prefers_frozen_primary_analysis_dataset(tmp_path):
 def test_performance_rankings(service):
     perf = service.performance("full_corpus")
     assert perf["annual_production"][0]["year"] == 2020
+    assert perf["annual_production"][0]["cumulative_papers"] == 1
+    assert perf["annual_production"][1]["papers"] == 2
+    assert perf["annual_production"][1]["cumulative_papers"] == 3
+    assert perf["trend_reconciliation"]["matches_scope_papers"] is True
+    assert perf["trend_reconciliation"]["final_cumulative_papers"] == 3
+    assert perf["search_cutoff"]["date"] == "2026-07-08"
+    period = next(
+        item
+        for item in perf["publication_growth"]
+        if item["start_year"] == 2020 and item["end_year"] == 2023
+    )
+    assert period["start_cumulative_papers"] == 1
+    assert period["end_cumulative_papers"] == 3
+    assert period["added_papers"] == 2
+    assert period["percent_growth"] == 2.0
     assert perf["most_cited"][0]["paper_id"] == "P1"
     assert perf["most_cited"][0]["citations"] == 10
     top_journal = perf["top_journals"][0]
     assert top_journal["Source title"] == "Journal of Business Venturing"
     assert top_journal["papers"] == 2 and top_journal["citations"] == 15
 
+    annual_papers = service.performance_papers(
+        "full_corpus", 2021, mode="annual", limit=1
+    )
+    assert annual_papers["total_papers"] == 2
+    assert annual_papers["returned_papers"] == 1
+    assert annual_papers["papers"][0]["paper_id"] in {"P2", "P3"}
+    cumulative_papers = service.performance_papers(
+        "full_corpus", 2021, mode="cumulative", limit=100
+    )
+    assert cumulative_papers["total_papers"] == 3
+    assert {item["paper_id"] for item in cumulative_papers["papers"]} == {
+        "P1",
+        "P2",
+        "P3",
+    }
+
 
 def test_performance_is_scope_aware(service):
     q4 = service.performance("query_4")
     assert q4["summary"]["papers"] == 1
+    assert q4["annual_production"][-1]["cumulative_papers"] == 1
     assert q4["most_cited"][0]["paper_id"] == "P3"
+
+    comparison = service.publication_growth_comparison()
+    labels = {item["label"] for item in comparison["views"]}
+    assert "Full corpus (all papers)" in labels
+    assert "Additional entrepreneurship journals" in labels
+    assert comparison["scopes_overlap"] is True
+    assert comparison["search_cutoff"]["label"] == "8 July 2026"
+
+
+def test_performance_trend_preserves_later_dated_records_and_reconciles_total(
+    tmp_path,
+):
+    pd.DataFrame(
+        [
+            {"paper_id": "P1", "Year": "2025", "Cited by": "0"},
+            {"paper_id": "P2", "Year": "2026", "Cited by": "0"},
+            {"paper_id": "P3", "Year": "2027", "Cited by": "0"},
+        ]
+    ).to_csv(tmp_path / "master_corpus.csv", index=False)
+    result = GraphService(processed_dir=tmp_path).performance("full_corpus")
+    assert result["summary"]["papers"] == 3
+    assert result["summary"]["year_max"] == 2027
+    assert [item["year"] for item in result["annual_production"]] == [
+        2025,
+        2026,
+        2027,
+    ]
+    assert (
+        result["annual_production"][-1][
+            "publication_year_after_retrieval_year"
+        ]
+        is True
+    )
+    assert result["annual_production"][-1]["cumulative_papers"] == 3
+    assert (
+        result["trend_reconciliation"][
+            "records_dated_after_retrieval_year"
+        ]
+        == 1
+    )
+    assert result["trend_reconciliation"]["matches_scope_papers"] is True
 
 
 def test_scope_export_is_scope_and_filter_aware(service):
@@ -151,6 +237,13 @@ def test_observed_composition_is_filtered_and_inspectable(service):
         value="machine learning",
     )
     assert [paper["paper_id"] for paper in papers] == ["P2"]
+    assert papers[0]["Abstract"].startswith("The authors use")
+    assert papers[0]["Author Keywords"] == "Machine Learning; Predictive Analytics"
+    inspection = papers[0]["_inspection"]
+    assert inspection["evidence_boundary"] == "Title, abstract, and author keywords"
+    selected = [item for item in inspection["dimensions"] if item["selected"]]
+    assert len(selected) == 1
+    assert selected[0]["column"] == "ai_type_form"
 
     limited = service.observed_composition_evidence(
         "full_corpus",
@@ -160,6 +253,176 @@ def test_observed_composition_is_filtered_and_inspectable(service):
         limit=1,
     )
     assert len(limited) == 1
+
+
+def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
+    model = service.composition_models()[0]["id"]
+
+    metadata = service.theory_contrasting_metadata(model)
+    populations = {item["id"]: item["papers"] for item in metadata["populations"]}
+    assert populations == {"core": 1, "other": 1, "combined": 2}
+    controls = {item["id"]: item for item in metadata["horizontal_controls"]}
+    assert set(controls) == {
+        "study_status",
+        "ai_role",
+        "technical_type",
+        "mechanism",
+        "level",
+        "process_stage",
+        "scope",
+        "definition",
+    }
+    assert controls["study_status"]["values"] == ["both", "method", "phenomenon"]
+    assert controls["technical_type"]["values"] == [
+        "generative AI",
+        "machine learning",
+    ]
+    population_labels = {item["id"]: item["label"] for item in metadata["populations"]}
+    assert population_labels["other"] == "Additional entrepreneurship"
+    core_domain = next(
+        item for item in metadata["domains"] if item["id"] == "core_entrepreneurship"
+    )
+    assert core_domain["assignment_type"] == "Registered journal population"
+    assert core_domain["source_title_count"] == 1
+    assert core_domain["source_titles"][0]["title"] == "Journal of Business Venturing"
+    assert "do not retrieve or add papers" in metadata["domain_methodology"]["construction"]
+
+    construct = service.theory_construct_specification(
+        model, "combined", "all", "all"
+    )
+    assert construct["filtered_papers"] == 2
+
+    horizontal = service.theory_horizontal_contrast(
+        model, "ai_role", "observed", "all", "all"
+    )
+    group_ids = {item["id"] for item in horizontal["groups"]}
+    assert {
+        "core_entrepreneurship",
+        "other_entrepreneurship",
+        "combined_entrepreneurship",
+    }.issubset(group_ids)
+    assert sum(
+        item["papers"]
+        for item in next(
+            group
+            for group in horizontal["groups"]
+            if group["id"] == "combined_entrepreneurship"
+        )["categories"]
+    ) == 2
+
+    controlled_horizontal = service.theory_horizontal_contrast(
+        model,
+        "ai_role",
+        "observed",
+        "all",
+        "all",
+        "study_status",
+        "phenomenon",
+    )
+    assert controlled_horizontal["control"] == {
+        "dimension_id": "study_status",
+        "dimension_label": "Study status",
+        "column": "ai_method_or_phenomenon",
+        "value": "phenomenon",
+    }
+    assert controlled_horizontal["baseline"]["full_n"] == 1
+
+    controlled_type = service.theory_horizontal_contrast(
+        model,
+        "ai_role",
+        "observed",
+        "all",
+        "all",
+        "technical_type",
+        "machine learning",
+    )
+    assert controlled_type["baseline"]["full_n"] == 2
+
+    vertical = service.theory_vertical_contrast(
+        model, "combined", "ai_role", "observed", "all", "all"
+    )
+    assert vertical["analyzed_n"] == 2
+    assert {cell["papers"] for cell in vertical["cells"]} == {0, 1}
+
+    reversed_vertical = service.theory_vertical_contrast(
+        model,
+        "combined",
+        "level",
+        "observed",
+        "all",
+        "all",
+        "technical_type",
+    )
+    assert reversed_vertical["row_dimension"] == "level"
+    assert reversed_vertical["column_dimension"] == "technical_type"
+
+    with pytest.raises(
+        ValueError, match="requires Level of analysis on one axis"
+    ):
+        service.theory_vertical_contrast(
+            model,
+            "combined",
+            "ai_role",
+            "observed",
+            "all",
+            "all",
+            "mechanism",
+        )
+
+    structuring = service.theory_structuring(
+        model,
+        "combined",
+        "ai_role__mechanism",
+        "observed",
+        "all",
+        "all",
+        1,
+    )
+    assert structuring["matrix"]["analyzed_n"] == 2
+    assert structuring["configurations"]["analyzed_n"] == 2
+    assert len(structuring["configurations"]["configurations"]) == 2
+
+    evidence = service.theory_contrasting_evidence(
+        model,
+        domain_id="combined_entrepreneurship",
+        filters={"ai_role_function": "AI as tool"},
+        limit=100,
+    )
+    assert evidence["total_papers"] == 1
+    assert evidence["papers"][0]["paper_id"] == "P1"
+    paper = evidence["papers"][0]
+    selected = [item for item in paper["_inspection"]["dimensions"] if item["selected"]]
+    assert selected[0]["label"] == "AI Role / Function"
+    assert selected[0]["evidence"] == "used by new ventures"
+
+
+def test_ft50_horizontal_replication_uses_ft50_baseline_without_tautology(service):
+    service.papers.loc[service.papers["paper_id"].eq("P1"), "in_query_2"] = "1"
+    service._composition_frames.clear()
+    model = service.composition_models()[0]["id"]
+
+    result = service.theory_horizontal_contrast(
+        model,
+        "ai_role",
+        distribution_view="observed",
+        journal_scope="ft50",
+        study_status="all",
+    )
+
+    assert result["baseline_label"] == "FT50 corpus"
+    assert result["baseline"]["full_n"] == 1
+    assert result["baseline"]["denominator"] == 1
+    assert "also in the FT50 corpus" in result["comparison_definition"]
+    assert "ft50" not in {group["id"] for group in result["groups"]}
+    other = next(
+        group
+        for group in result["groups"]
+        if group["id"] == "other_entrepreneurship"
+    )
+    assert other["label"] == "Additional entrepreneurship"
+    assert other["eligible"] is False
+    assert other["full_n"] == 0
+    assert other["denominator"] == 0
 
 
 def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
@@ -300,7 +563,7 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
         "gpt-4.1-nano-2025-04-14",
         "method",
     )
-    assert "Observed construct composition" in report
+    assert "Construct specification" in report
     assert "GPT-4.1 Nano" in report
     assert "Study-status filter:</strong> Method" in report
     assert "Distribution:</strong> Compare full and observed" in report
@@ -379,6 +642,13 @@ def test_endpoint_handlers_serve_performance_and_report(service):
 
     perf = main.performance("full_corpus")
     assert perf["summary"]["total_citations"] == 15
+    papers = main.performance_papers(
+        "full_corpus", year=2021, mode="annual", limit=100
+    )
+    assert papers["total_papers"] == 2
+    growth = main.publication_growth_comparison()
+    assert growth["search_cutoff"]["date"] == "2026-07-08"
+    assert len(growth["views"]) == 5
 
     keywords = main.keyword_evolution(
         "full_corpus", source="author", series_top_n=10, period_top_n=20
@@ -431,6 +701,140 @@ def test_endpoint_handlers_serve_performance_and_report(service):
         assert exported["paper_id"].tolist() == ["P3"]
 
 
+def test_construct_contrasting_endpoints_and_release_are_reproducible(service):
+    from aecsp.api import main
+
+    main.state["service"] = service
+    model = service.composition_models()[0]["id"]
+
+    metadata = main.theory_contrasting_metadata(model)
+    assert metadata["model"] == model
+
+    horizontal = main.theory_horizontal_contrast(
+        model=model,
+        dimension="ai_role",
+        distribution="observed",
+        journal_scope="all",
+        study_status="all",
+        control_dimension=None,
+        control_value=None,
+    )
+    assert horizontal["dimension_id"] == "ai_role"
+
+    entrepreneurship = service.theory_entrepreneurship_comparison(
+        model, "ai_role", "observed", "all", 1
+    )
+    assert [group["id"] for group in entrepreneurship["groups"]] == [
+        "core",
+        "other",
+        "combined",
+    ]
+    assert entrepreneurship["groups"][2]["comparison_role"] == "Union benchmark"
+    assert entrepreneurship["configurations"]
+    assert len(entrepreneurship["configurations"][0]["population_values"]) == 3
+
+    report = main.theory_contrasting_report(
+        tactic="horizontal",
+        model=model,
+        population="combined",
+        journal_scope="all",
+        study_status="all",
+        distribution="observed",
+        dimension="ai_role",
+        row_dimension="ai_role",
+        column_dimension="level",
+        pair="ai_role__mechanism",
+        min_support=1,
+        control_dimension=None,
+        control_value=None,
+    )
+    assert "Construct contrasting: horizontal" in report
+    assert "Evidence Boundary" in report
+
+    current = main.theory_contrasting_download(
+        bundle="current",
+        tactic="horizontal",
+        model=model,
+        population="combined",
+        journal_scope="all",
+        study_status="all",
+        distribution="observed",
+        dimension="ai_role",
+        row_dimension="ai_role",
+        column_dimension="level",
+        pair="ai_role__mechanism",
+        min_support=1,
+        control_dimension=None,
+        control_value=None,
+    )
+    assert current.media_type.startswith("text/csv")
+    current_rows = pd.read_csv(BytesIO(current.body))
+    assert {"domain", "category", "papers", "share"}.issubset(
+        current_rows.columns
+    )
+
+    entrepreneurship_current = main.theory_contrasting_download(
+        bundle="current",
+        tactic="entrepreneurship",
+        model=model,
+        population="combined",
+        journal_scope="all",
+        study_status="all",
+        distribution="observed",
+        dimension="ai_role",
+        row_dimension="ai_role",
+        column_dimension="level",
+        pair="ai_role__mechanism",
+        min_support=1,
+        control_dimension=None,
+        control_value=None,
+    )
+    entrepreneurship_rows = pd.read_csv(BytesIO(entrepreneurship_current.body))
+    assert set(entrepreneurship_rows["record_type"]) == {
+        "specification_distribution",
+        "recurring_configuration",
+    }
+
+    release = main.theory_contrasting_download(
+        bundle="release",
+        tactic="construct",
+        model=model,
+        population="combined",
+        journal_scope="all",
+        study_status="all",
+        distribution="observed",
+        dimension="ai_role",
+        row_dimension="ai_role",
+        column_dimension="level",
+        pair="ai_role__mechanism",
+        min_support=1,
+        control_dimension=None,
+        control_value=None,
+    )
+    assert release.media_type == "application/zip"
+    with ZipFile(BytesIO(release.body)) as archive:
+        names = set(archive.namelist())
+        assert "construct_specification/entrepreneurship_specification.csv" in names
+        assert "horizontal/all/ai_role.csv" in names
+        assert "within_entrepreneurship/specification/ai_role.csv" in names
+        assert "within_entrepreneurship/recurring_configurations.csv" in names
+        assert "vertical/ai_role_by_level.csv" in names
+        assert "structuring/matrices/ai_role__mechanism.csv" in names
+        assert "structuring/recurring_configurations.csv" in names
+        assert "evidence/filtered_entrepreneurship_papers.csv" in names
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["corpus_papers"] == 3
+        assert manifest["raw_model_records_changed"] is False
+        assert manifest["journal_scope_by_tactic"] == {
+            "construct_specification": "all",
+            "horizontal_contrasting": "all",
+            "vertical_contrasting": "all",
+            "structuring": "all",
+            "within_entrepreneurship": "core, additional, and combined journal sets",
+        }
+        assert all(item["sha256"] for item in manifest["files"])
+
+
 def test_dashboard_entry_pages_are_current_and_not_cached():
     from aecsp.api import main
 
@@ -439,7 +843,9 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
         main.graph_page,
         main.assistant_page,
         main.composition_page,
+        main.contrasting_page,
         main.topic_review_page,
+        main.human_annotation_page,
     ):
         response = handler()
         assert response.headers["cache-control"] == "no-store, max-age=0"
@@ -454,14 +860,16 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
         "knowledge_graph.html",
         "assistant.html",
         "observed_composition.html",
+        "construct_contrasting.html",
         "topic_review.html",
     ):
         html = (main.STATIC_DIR / filename).read_text(encoding="utf-8")
         assert 'href="/composition"' in html
         assert 'href="/topic-review"' in html
         assert 'href="/knowledge-graph"' in html
+        assert 'href="/contrasting"' in html
         assert 'src="/static/citation.js?v=scopus-first-20260716"' in html
-        assert "Observed Composition" in html
+        assert "Construct Specification" in html
 
     topic_review_html = (main.STATIC_DIR / "topic_review.html").read_text(
         encoding="utf-8"
@@ -518,10 +926,157 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'data-topic-download="release"' in topic_review_html
     assert "/api/topic-review/download/" in topic_review_html
     assert "topic-figure-card-wide" not in topic_review_html
+
+    composition_html = (
+        main.STATIC_DIR / "observed_composition.html"
+    ).read_text(encoding="utf-8")
+    assert "<h1>Construct specification</h1>" in composition_html
+    assert "Dataset scope" in composition_html
+    assert "Compare full and observed" in composition_html
+    assert "filtered papers · calculated live" in composition_html
+    assert "Research artifacts" in composition_html
+    assert 'href="/human-annotation"' in composition_html
+    assert "Human-anchored model validation" in composition_html
+    assert "/api/human-annotation/reliability" in composition_html
+    assert 'id="humanRaterControls"' in composition_html
+    assert "Balanced common papers" in composition_html
+    assert "/static/paper_inspection.js" in composition_html
+    assert "paperInspectionCard(paper, [column])" in composition_html
+
+    contrasting_html = (
+        main.STATIC_DIR / "construct_contrasting.html"
+    ).read_text(encoding="utf-8")
+    assert "Construct contrasting" in contrasting_html
+    assert "Horizontal contrasting" in contrasting_html
+    assert "Vertical contrasting" in contrasting_html
+    assert 'data-tactic="entrepreneurship"' not in contrasting_html
+    assert "entrepreneurship boundary comparison nested within Horizontal contrasting" in contrasting_html
+    assert 'id="filterDimension"' in contrasting_html
+    assert 'id="filterValue"' in contrasting_html
+    assert 'id="verticalColumn"' in contrasting_html
+    assert "vertical_column" in contrasting_html
+    assert "Level of analysis remains on one matrix axis" in contrasting_html
+    assert "Structuring" in contrasting_html
+    assert 'id="distributionView"' in contrasting_html
+    assert "/api/contrasting/metadata" in contrasting_html
+    assert 'data-tactic="construct"' not in contrasting_html
+    assert 'const VALID_TACTICS = ["horizontal", "vertical", "structuring"]' in contrasting_html
+    assert "/api/contrasting/construct" not in contrasting_html
+    assert "/api/contrasting/horizontal" in contrasting_html
+    assert "/api/contrasting/vertical" in contrasting_html
+    assert "/api/contrasting/structuring" in contrasting_html
+    assert "/api/contrasting/evidence" in contrasting_html
+    assert "/api/contrasting/report" in contrasting_html
+    assert "/api/contrasting/download/" in contrasting_html
+    assert 'id="artifactMenu"' in contrasting_html
+    assert '<summary class="btn btn-outline">Research artifacts</summary>' in contrasting_html
+    assert '<h2>Research artifacts' not in contrasting_html
+    assert 'class="card contrasting-summary"' not in contrasting_html
+    assert 'class="card contrasting-tabs"' not in contrasting_html
+    assert 'class="contrasting-context-strip"' in contrasting_html
+    assert 'class="card contrasting-workspace-controls"' in contrasting_html
+    assert "/static/paper_inspection.js" in contrasting_html
+    assert "paperInspectionCard(paper, Object.keys(evidenceFilters))" in contrasting_html
+    assert "What is contrasted" in contrasting_html
+    assert "percentage points" in contrasting_html
+    assert "Supporting papers" in contrasting_html
+    assert "descriptive compositional contrast" in contrasting_html
+    assert "not a causal direction or temporal sequence" in contrasting_html
+    assert 'id="populationControl"' not in contrasting_html
+    assert 'id="tacticPopulation"' in contrasting_html
+    assert "function populationOptions()" in contrasting_html
+    assert "selected comparison corpus defines both the baseline" in contrasting_html
+    assert 'id="journalScopeControl"' not in contrasting_html
+    assert 'id="horizontalJournalScope"' in contrasting_html
+    assert "All journals (full-corpus baseline)" in contrasting_html
+    assert "FT50 papers only (FT50 baseline)" in contrasting_html
+    assert "Percentage-point difference from selected baseline" in contrasting_html
+    assert "FT50-only replication" in contrasting_html
+    assert "Groups with no eligible papers remain visible" in contrasting_html
+    assert "heatmap-unavailable" in contrasting_html
+    assert 'id="analysisScopeInfoButton"' in contrasting_html
+    assert 'id="domainInfoButton"' in contrasting_html
+    assert 'id="selectedAnalysisScope"' in contrasting_html
+    assert "function showAnalysisScopeInfo()" in contrasting_html
+    assert 'const FISHER_AGUINIS_URL = "https://doi.org/10.1177/1094428116689707"' in contrasting_html
+    assert 'fisherAguinisLink("Fisher and Aguinis, 2017, pp. 444-445")' in contrasting_html
+    assert "Using Theory Elaboration to Make Theoretical Advancements" in contrasting_html
+    assert "function showDomainInfo()" in contrasting_html
+    assert "What the domains mean" in contrasting_html
+    assert "Entrepreneurship analysis population" in contrasting_html
+    assert 'function effectiveJournalScope()' in contrasting_html
+    assert 'tactic === "horizontal" ? journalScope : "all"' in contrasting_html
+    assert 'id="analysisNLabel"' in contrasting_html
+    assert "Matrix-comparable papers" in contrasting_html
+    assert "Five-field-complete papers" in contrasting_html
+    assert contrasting_html.rstrip().endswith("</html>")
+    assert contrasting_html.count(
+        'el("tacticPopulation").onchange = event => {'
+    ) == 2
+
+    paper_inspection_js = (
+        main.STATIC_DIR / "paper_inspection.js"
+    ).read_text(encoding="utf-8")
+    assert "Why this paper is included" in paper_inspection_js
+    assert "Source evidence" in paper_inspection_js
+    assert "Complete construct profile" in paper_inspection_js
+    assert "Author keywords" in paper_inspection_js
+    assert "Bibliographic and analytical metadata" in paper_inspection_js
+
+    human_annotation_html = (
+        main.STATIC_DIR / "human_annotation.html"
+    ).read_text(encoding="utf-8")
+    assert "Human annotation" in human_annotation_html
+    assert 'id="annotatorId"' in human_annotation_html
+    assert "/api/human-annotation/instrument" in human_annotation_html
+    assert "/api/human-annotation/save" in human_annotation_html
+    assert 'id="evidenceBoundary"' in human_annotation_html
+    assert "fixed blinded paper order" in human_annotation_html
+    assert 'id="instructions"' in human_annotation_html
+    assert 'id="completionRequirements"' in human_annotation_html
+    assert "View all eight dimensions and permitted codes" in human_annotation_html
+    assert "View the full frozen system prompt" in human_annotation_html
+    assert 'id="fullModelPrompt"' in human_annotation_html
+    assert "instrument.full_model_prompt" in human_annotation_html
+    assert "Fingerprint:" not in human_annotation_html
+    assert 'id="protocolFingerprint"' not in human_annotation_html
+    assert "Choose your own unique annotator ID" in human_annotation_html
+    assert 'id="annotatorCollision"' in human_annotation_html
+    assert 'id="confirmResume"' in human_annotation_html
+    assert "Annotator ID already in use: choose another ID" in human_annotation_html
+
+    index_html = (main.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert "Annual and cumulative publication output" in index_html
+    assert "Cumulative papers" in index_html
+    assert "Citations accumulated by publication cohort" not in index_html
+    assert "Cumulative publication growth across dataset views" not in index_html
+    assert 'id="publicationGrowthTable"' not in index_html
+    assert "/performance/papers" in index_html
+    assert "showPublicationPapers(year)" in index_html
+    assert 'id="publicationPaperLimit"' in index_html
+    assert "Show all ${data.total_papers.toLocaleString()}" in index_html
+    assert "The final cumulative point matches all" in index_html
+    assert "publication year recorded in Scopus" in index_html
+    assert "present in the Scopus export downloaded on" in index_html
+    assert "`${a.year} (retrieved ${p.search_cutoff.label})`" in index_html
+    assert "`${a.year} (Scopus year)`" not in index_html
+    assert "minBarLength: 4" in index_html
+    assert "order: 2, yAxisID: \"y\"" in index_html
+    assert "order: 1, yAxisID: \"y1\"" in index_html
+    assert "row.year >= p.search_cutoff.year ? 5 : 1.5" in index_html
+    assert "autoSkip: false" in index_html
+    assert 'class="chart-wrap publication-chart"' in index_html
+    assert index_html.count('class="performance-table-scroll') == 3
+    assert index_html.count("<thead></thead><tbody></tbody>") == 3
+    assert "early access" not in index_html.lower()
+    assert "post-cutoff" not in index_html.lower()
+    assert "2026 is incomplete" not in index_html
     assert '<a href="${source}"' not in topic_review_html
-    assert "cursor: zoom-in" not in (main.STATIC_DIR / "esd.css").read_text(
-        encoding="utf-8"
-    )
+    css = (main.STATIC_DIR / "esd.css").read_text(encoding="utf-8")
+    assert "cursor: zoom-in" not in css
+    assert ".chart-wrap.publication-chart { height: 520px; }" in css
+    assert ".performance-table-scroll {" in css
+    assert "position: sticky;" in css
 
     graph_html = (main.STATIC_DIR / "knowledge_graph.html").read_text(
         encoding="utf-8"
@@ -575,8 +1130,10 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'id="irrRightModel"' not in composition_html
     assert "/composition/irr/matrix" in composition_html
     assert "Full = all successfully coded papers for the selected model" not in composition_html
-    assert "Full distribution (n =" in composition_html
-    assert "Observed distribution (n =" in composition_html
+    assert 'label: "Full"' in composition_html
+    assert 'label: "Observed"' in composition_html
+    assert "categoryValueLabels" not in composition_html
+    assert "toLocaleString()} papers" in composition_html
     assert 'distributionView === "full"' in composition_html
     assert 'distributionView === "observed"' in composition_html
     assert "eight dimensions; six core" in composition_html

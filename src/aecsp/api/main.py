@@ -32,8 +32,13 @@ from pydantic import BaseModel, Field
 
 from aecsp.api.auth import verify_basic_credentials
 from aecsp.api.graph_service import GraphService
-from aecsp.api.report import build_composition_report, build_scope_report
+from aecsp.api.report import (
+    build_composition_report,
+    build_scope_report,
+    build_theory_contrasting_report,
+)
 from aecsp.corpus.scopes import SCOPE_BY_ID
+from aecsp.human_annotation import HumanAnnotationStore
 from aecsp.knowledge_graph.neo4j_reader import GraphQueryError
 from aecsp.specification.llm_coder import load_env
 from aecsp.topics.review import TopicReviewStore
@@ -94,6 +99,15 @@ class TopicFinalizeRequest(BaseModel):
     confirmation: str = Field(max_length=80)
 
 
+class HumanAnnotationSaveRequest(BaseModel):
+    """One resumable, independently identified human paper annotation."""
+
+    annotator_id: str = Field(min_length=2, max_length=40)
+    paper_id: str = Field(min_length=1, max_length=180)
+    annotation: dict[str, object] = Field(default_factory=dict)
+    submit: bool = False
+
+
 def _csv_set(value: str) -> set[str] | None:
     items = {part.strip() for part in value.split(",") if part.strip()}
     return items or None
@@ -133,6 +147,7 @@ async def lifespan(app: FastAPI):
         neo4j_driver=driver, neo4j_database=database
     )
     state["topic_review"] = TopicReviewStore(PROJECT_ROOT)
+    state["human_annotation"] = HumanAnnotationStore(PROJECT_ROOT)
     yield
     if driver is not None:
         driver.close()
@@ -183,6 +198,14 @@ def topic_review_store() -> TopicReviewStore:
     return store
 
 
+def human_annotation_store() -> HumanAnnotationStore:
+    store = state.get("human_annotation")
+    if store is None:
+        store = HumanAnnotationStore(PROJECT_ROOT)
+        state["human_annotation"] = store
+    return store
+
+
 def _dashboard_authentication_enabled() -> bool:
     return os.getenv("ETV_DASHBOARD_REQUIRE_AUTH", "").strip().lower() in {
         "1",
@@ -198,6 +221,17 @@ def _require_authenticated_topic_write() -> None:
             status_code=403,
             detail=(
                 "Topic-review writes are disabled unless dashboard "
+                "authentication is enabled."
+            ),
+        )
+
+
+def _require_authenticated_annotation_write() -> None:
+    if not _dashboard_authentication_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Human-annotation writes are disabled unless dashboard "
                 "authentication is enabled."
             ),
         )
@@ -652,6 +686,26 @@ def performance(scope_id: str) -> dict:
     return service().performance(scope_id)
 
 
+@app.get("/api/scope/{scope_id}/performance/papers")
+def performance_papers(
+    scope_id: str,
+    year: int = Query(..., ge=1800, le=2200),
+    mode: str = Query("annual", pattern="^(annual|cumulative)$"),
+    limit: int = Query(100, ge=1, le=50000),
+) -> dict:
+    try:
+        return service().performance_papers(
+            scope_id, year=year, mode=mode, limit=limit
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/performance/publication-growth")
+def publication_growth_comparison() -> dict:
+    return service().publication_growth_comparison()
+
+
 @app.get("/api/scope/{scope_id}/keywords")
 def keyword_evolution(
     scope_id: str,
@@ -791,6 +845,709 @@ def observed_composition_download(
         study_status,
         distribution,
     )
+
+
+def _theory_result_rows(
+    tactic: str,
+    payload: dict,
+    distribution: str,
+) -> list[dict[str, object]]:
+    """Flatten one theory-elaboration result without recalculating its metrics."""
+
+    if tactic == "construct":
+        rows = []
+        for panel in payload["panels"]:
+            for category in panel["comparison_categories"]:
+                if distribution == "observed" and not category["is_observed"]:
+                    continue
+                rows.append(
+                    {
+                        "population": payload["population_label"],
+                        "dimension": panel["label"],
+                        "column": panel["column"],
+                        "category": category["value"],
+                        "distribution": distribution,
+                        "denominator": panel[
+                            "observed_n" if distribution == "observed" else "full_n"
+                        ],
+                        "papers": category[
+                            "observed_count"
+                            if distribution == "observed"
+                            else "full_count"
+                        ],
+                        "share": category[
+                            "observed_share"
+                            if distribution == "observed"
+                            else "full_share"
+                        ],
+                    }
+                )
+        return rows
+    if tactic == "horizontal":
+        domain_rows = [
+            {
+                "record_type": "domain_comparison",
+                "domain_id": group["id"],
+                "domain": group["label"],
+                "assignment_basis": group["assignment_basis"],
+                "dimension": payload["dimension_label"],
+                "column": payload["column"],
+                "distribution": payload["distribution"],
+                "denominator": group["denominator"],
+                "category": category["value"],
+                "papers": category["papers"],
+                "share": category["share"],
+                "percentage_point_difference_from_corpus": category[
+                    "percentage_point_difference"
+                ],
+            }
+            for group in payload["groups"]
+            for category in group["categories"]
+        ]
+        entrepreneurship_rows = _theory_result_rows(
+            "entrepreneurship",
+            payload["entrepreneurship_comparison"],
+            distribution,
+        )
+        return [*domain_rows, *entrepreneurship_rows]
+    if tactic == "vertical":
+        return [
+            {
+                "population": payload["population_label"],
+                "row_dimension": payload["row_label"],
+                "row_value": cell["row_value"],
+                "column_dimension": payload["column_label"],
+                "column_value": cell["column_value"],
+                **{
+                    key: cell[key]
+                    for key in (
+                        "papers",
+                        "share_of_analyzed",
+                        "share_within_row",
+                        "share_within_column",
+                    )
+                },
+            }
+            for cell in payload["cells"]
+        ]
+    if tactic == "entrepreneurship":
+        specification_rows = [
+            {
+                "record_type": "specification_distribution",
+                "population": group["label"],
+                "comparison_role": group["comparison_role"],
+                "dimension": payload["dimension_label"],
+                "distribution": payload["distribution"],
+                "denominator": group["denominator"],
+                "category": category["value"],
+                "papers": category["papers"],
+                "share": category["share"],
+                "percentage_point_difference_from_combined": category[
+                    "percentage_point_difference_from_combined"
+                ],
+            }
+            for group in payload["groups"]
+            for category in group["categories"]
+        ]
+        configuration_rows = [
+            {
+                "record_type": "recurring_configuration",
+                "population": value["population_label"],
+                "comparison_role": (
+                    "Union benchmark"
+                    if value["population"] == "combined"
+                    else "Journal set"
+                ),
+                "denominator": value["analyzed_n"],
+                "ai_role": configuration["ai_role"],
+                "mechanism": configuration["mechanism"],
+                "level": configuration["level"],
+                "scope": configuration["scope"],
+                "process_stage": configuration["process_stage"],
+                "papers": value["papers"],
+                "share": value["share"],
+            }
+            for configuration in payload["configurations"]
+            for value in configuration["population_values"]
+        ]
+        return [*specification_rows, *configuration_rows]
+    if tactic == "structuring_matrix":
+        matrix = payload["matrix"]
+        return [
+            {
+                "population": payload["population_label"],
+                "matrix": payload["pair_label"],
+                "row_value": cell["row_value"],
+                "column_value": cell["column_value"],
+                **{
+                    key: cell[key]
+                    for key in (
+                        "papers",
+                        "share_of_analyzed",
+                        "share_within_row",
+                        "share_within_column",
+                    )
+                },
+            }
+            for cell in matrix["cells"]
+        ]
+    if tactic == "structuring":
+        return [
+            {
+                "population": payload["population_label"],
+                "distribution": payload["configurations"]["distribution"],
+                "analyzed_papers": payload["configurations"]["analyzed_n"],
+                "minimum_support": payload["configurations"]["min_support"],
+                "ai_role": row["ai_role"],
+                "mechanism": row["mechanism"],
+                "level": row["level"],
+                "scope": row["scope"],
+                "process_stage": row["process_stage"],
+                "papers": row["papers"],
+                "share": row["share"],
+            }
+            for row in payload["configurations"]["configurations"]
+        ]
+    raise ValueError(f"Unknown contrasting tactic: {tactic}")
+
+
+def _theory_payload(
+    tactic: str,
+    model: str,
+    population: str,
+    journal_scope: str,
+    study_status: str,
+    distribution: str,
+    dimension: str,
+    row_dimension: str,
+    column_dimension: str,
+    pair: str,
+    min_support: int,
+    control_dimension: str | None,
+    control_value: str | None,
+) -> dict:
+    svc = service()
+    if tactic == "construct":
+        return svc.theory_construct_specification(
+            model, population, journal_scope, study_status
+        )
+    if tactic == "horizontal":
+        return svc.theory_horizontal_contrast(
+            model,
+            dimension,
+            distribution,
+            journal_scope,
+            study_status,
+            control_dimension,
+            control_value,
+        )
+    if tactic == "vertical":
+        return svc.theory_vertical_contrast(
+            model,
+            population,
+            row_dimension,
+            distribution,
+            journal_scope,
+            study_status,
+            column_dimension,
+            control_dimension,
+            control_value,
+        )
+    if tactic == "entrepreneurship":
+        return svc.theory_entrepreneurship_comparison(
+            model,
+            dimension,
+            distribution,
+            study_status,
+            min_support,
+            control_dimension,
+            control_value,
+        )
+    if tactic == "structuring":
+        return svc.theory_structuring(
+            model,
+            population,
+            pair,
+            distribution,
+            journal_scope,
+            study_status,
+            min_support,
+            control_dimension,
+            control_value,
+        )
+    raise ValueError(f"Unknown contrasting tactic: {tactic}")
+
+
+def _theory_context(
+    tactic: str,
+    model: str,
+    population: str,
+    journal_scope: str,
+    study_status: str,
+    distribution: str,
+) -> dict[str, object]:
+    return {
+        "analysis_tactic": tactic,
+        "coding_model": model,
+        "entrepreneurship_population": population,
+        "journal_scope": journal_scope,
+        "study_status_filter": study_status,
+        "evidence_view": distribution,
+        "evidence_boundary": "title, abstract, and author keywords",
+    }
+
+
+def _theory_release_response(
+    model: str,
+    population: str,
+    journal_scope: str,
+    study_status: str,
+    distribution: str,
+    min_support: int,
+) -> Response:
+    """Build a complete, checksummed release for all available tactics."""
+
+    import pandas as pd
+
+    svc = service()
+    metadata = svc.theory_contrasting_metadata(model)
+    files: dict[str, bytes] = {}
+
+    def add(name: str, content: str | bytes) -> None:
+        files[name] = content.encode("utf-8") if isinstance(content, str) else content
+
+    construct = svc.theory_construct_specification(
+        model, population, "all", study_status
+    )
+    add(
+        "construct_specification/entrepreneurship_specification.csv",
+        pd.DataFrame(
+            _theory_result_rows("construct", construct, distribution)
+        ).to_csv(index=False),
+    )
+    for dimension in metadata["dimensions"]:
+        horizontal = svc.theory_horizontal_contrast(
+            model,
+            dimension["id"],
+            distribution,
+            journal_scope,
+            study_status,
+            None,
+            None,
+        )
+        add(
+            f"horizontal/{journal_scope}/{dimension['id']}.csv",
+            pd.DataFrame(
+                row
+                for row in _theory_result_rows(
+                    "horizontal", horizontal, distribution
+                )
+                if row["record_type"] == "domain_comparison"
+            ).to_csv(index=False),
+        )
+        entrepreneurship = svc.theory_entrepreneurship_comparison(
+            model,
+            dimension["id"],
+            distribution,
+            study_status,
+            min_support,
+            None,
+            None,
+        )
+        entrepreneurship_rows = _theory_result_rows(
+            "entrepreneurship", entrepreneurship, distribution
+        )
+        add(
+            f"within_entrepreneurship/specification/{dimension['id']}.csv",
+            pd.DataFrame(
+                row
+                for row in entrepreneurship_rows
+                if row["record_type"] == "specification_distribution"
+            ).to_csv(index=False),
+        )
+        if dimension["id"] == metadata["dimensions"][0]["id"]:
+            add(
+                "within_entrepreneurship/recurring_configurations.csv",
+                pd.DataFrame(
+                    row
+                    for row in entrepreneurship_rows
+                    if row["record_type"] == "recurring_configuration"
+                ).to_csv(index=False),
+            )
+    for row_dimension in metadata["vertical_row_dimensions"]:
+        if row_dimension == "level":
+            continue
+        vertical = svc.theory_vertical_contrast(
+            model,
+            population,
+            row_dimension,
+            distribution,
+            "all",
+            study_status,
+            "level",
+        )
+        add(
+            f"vertical/{row_dimension}_by_level.csv",
+            pd.DataFrame(
+                _theory_result_rows("vertical", vertical, distribution)
+            ).to_csv(index=False),
+        )
+    structuring_payloads = []
+    for pair_option in metadata["structuring_pairs"]:
+        structuring = svc.theory_structuring(
+            model,
+            population,
+            pair_option["id"],
+            distribution,
+            "all",
+            study_status,
+            min_support,
+        )
+        structuring_payloads.append(structuring)
+        add(
+            f"structuring/matrices/{pair_option['id']}.csv",
+            pd.DataFrame(
+                _theory_result_rows(
+                    "structuring_matrix", structuring, distribution
+                )
+            ).to_csv(index=False),
+        )
+    if structuring_payloads:
+        add(
+            "structuring/recurring_configurations.csv",
+            pd.DataFrame(
+                _theory_result_rows(
+                    "structuring", structuring_payloads[0], distribution
+                )
+            ).to_csv(index=False),
+        )
+    evidence = svc.theory_contrasting_evidence(
+        model,
+        population=population,
+        journal_scope="all",
+        study_status=study_status,
+        limit=50000,
+    )
+    add(
+        "evidence/filtered_entrepreneurship_papers.csv",
+        pd.DataFrame(evidence["papers"]).to_csv(index=False),
+    )
+    context = _theory_context(
+        "all", model, population, "tactic-specific", study_status, distribution
+    )
+    generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    manifest = {
+        **context,
+        "generated_at": generated_at,
+        "model_label": metadata["model_label"],
+        "model_coded_papers": metadata["model_coded_papers"],
+        "corpus_papers": metadata["corpus_papers"],
+        "available_domains": metadata["domains"],
+        "pending_domains": metadata["pending_domains"],
+        "domain_assignment_complete": metadata["domain_assignment_complete"],
+        "journal_scope_by_tactic": {
+            "construct_specification": "all",
+            "horizontal_contrasting": journal_scope,
+            "vertical_contrasting": "all",
+            "structuring": "all",
+            "within_entrepreneurship": "core, additional, and combined journal sets",
+        },
+        "raw_model_records_changed": False,
+        "files": [
+            {
+                "path": name,
+                "bytes": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+            for name, content in sorted(files.items())
+        ],
+    }
+    add("manifest.json", json.dumps(manifest, indent=2))
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        for name, content in sorted(files.items()):
+            archive.writestr(name, content)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="etv_construct_contrasting_{generated_at[:10]}.zip"'
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.get("/api/contrasting/metadata")
+def theory_contrasting_metadata(model: str | None = Query(None)) -> dict:
+    try:
+        return service().theory_contrasting_metadata(model)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/construct")
+def theory_construct_specification(
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    journal_scope: str = Query("all", pattern="^(all|ft50)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+) -> dict:
+    try:
+        return service().theory_construct_specification(
+            model, population, journal_scope, study_status
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/horizontal")
+def theory_horizontal_contrast(
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    dimension: str = Query("ai_role"),
+    distribution: str = Query("observed", pattern="^(full|observed)$"),
+    journal_scope: str = Query("all", pattern="^(all|ft50)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    control_dimension: str | None = Query(None),
+    control_value: str | None = Query(None),
+) -> dict:
+    try:
+        return service().theory_horizontal_contrast(
+            model,
+            dimension,
+            distribution,
+            journal_scope,
+            study_status,
+            control_dimension,
+            control_value,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/vertical")
+def theory_vertical_contrast(
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    row_dimension: str = Query("ai_role"),
+    column_dimension: str = Query("level"),
+    distribution: str = Query("observed", pattern="^(full|observed)$"),
+    journal_scope: str = Query("all", pattern="^(all|ft50)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    control_dimension: str | None = Query(None),
+    control_value: str | None = Query(None),
+) -> dict:
+    try:
+        return service().theory_vertical_contrast(
+            model,
+            population,
+            row_dimension,
+            distribution,
+            journal_scope,
+            study_status,
+            column_dimension,
+            control_dimension,
+            control_value,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/entrepreneurship")
+def theory_entrepreneurship_comparison(
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    dimension: str = Query("ai_role"),
+    distribution: str = Query("observed", pattern="^(full|observed)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    min_support: int = Query(10, ge=1, le=10000),
+    control_dimension: str | None = Query(None),
+    control_value: str | None = Query(None),
+) -> dict:
+    try:
+        return service().theory_entrepreneurship_comparison(
+            model,
+            dimension,
+            distribution,
+            study_status,
+            min_support,
+            control_dimension,
+            control_value,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/structuring")
+def theory_structuring(
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    pair: str = Query("ai_role__mechanism"),
+    distribution: str = Query("observed", pattern="^(full|observed)$"),
+    journal_scope: str = Query("all", pattern="^(all|ft50)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    min_support: int = Query(10, ge=1, le=10000),
+    control_dimension: str | None = Query(None),
+    control_value: str | None = Query(None),
+) -> dict:
+    try:
+        return service().theory_structuring(
+            model,
+            population,
+            pair,
+            distribution,
+            journal_scope,
+            study_status,
+            min_support,
+            control_dimension,
+            control_value,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/evidence")
+def theory_contrasting_evidence(
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    population: str | None = Query(None, pattern="^(core|other|combined)$"),
+    journal_scope: str = Query("all", pattern="^(all|ft50)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    domain: str | None = Query(None),
+    filters: str = Query("{}", max_length=4000),
+    limit: int = Query(100, ge=1, le=50000),
+) -> dict:
+    try:
+        parsed_filters = json.loads(filters)
+        if not isinstance(parsed_filters, dict):
+            raise ValueError("Evidence filters must be a JSON object")
+        return service().theory_contrasting_evidence(
+            model,
+            population=population,
+            journal_scope=journal_scope,
+            study_status=study_status,
+            domain_id=domain,
+            filters={str(key): str(value) for key, value in parsed_filters.items()},
+            limit=limit,
+        )
+    except (json.JSONDecodeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/report", response_class=HTMLResponse)
+def theory_contrasting_report(
+    tactic: str = Query(
+        "construct", pattern="^(construct|horizontal|vertical|structuring|entrepreneurship)$"
+    ),
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    journal_scope: str = Query("all", pattern="^(all|ft50)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    distribution: str = Query("observed", pattern="^(full|observed)$"),
+    dimension: str = Query("ai_role"),
+    row_dimension: str = Query("ai_role"),
+    column_dimension: str = Query("level"),
+    pair: str = Query("ai_role__mechanism"),
+    min_support: int = Query(10, ge=1, le=10000),
+    control_dimension: str | None = Query(None),
+    control_value: str | None = Query(None),
+) -> str:
+    try:
+        payload = _theory_payload(
+            tactic,
+            model,
+            population,
+            journal_scope,
+            study_status,
+            distribution,
+            dimension,
+            row_dimension,
+            column_dimension,
+            pair,
+            min_support,
+            control_dimension,
+            control_value,
+        )
+        rows = _theory_result_rows(tactic, payload, distribution)
+        title = f"Construct contrasting: {tactic.replace('_', ' ')}"
+        return build_theory_contrasting_report(
+            title,
+            _theory_context(
+                tactic,
+                model,
+                population,
+                journal_scope,
+                study_status,
+                distribution,
+            ),
+            rows,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/contrasting/download/{bundle}")
+def theory_contrasting_download(
+    bundle: str,
+    tactic: str = Query(
+        "construct", pattern="^(construct|horizontal|vertical|structuring|entrepreneurship)$"
+    ),
+    model: str = Query("gpt-5.4-mini-2026-03-17"),
+    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    journal_scope: str = Query("all", pattern="^(all|ft50)$"),
+    study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
+    distribution: str = Query("observed", pattern="^(full|observed)$"),
+    dimension: str = Query("ai_role"),
+    row_dimension: str = Query("ai_role"),
+    column_dimension: str = Query("level"),
+    pair: str = Query("ai_role__mechanism"),
+    min_support: int = Query(10, ge=1, le=10000),
+    control_dimension: str | None = Query(None),
+    control_value: str | None = Query(None),
+) -> Response:
+    import pandas as pd
+
+    if bundle not in {"current", "release"}:
+        raise HTTPException(status_code=400, detail=f"Unknown contrasting bundle: {bundle}")
+    try:
+        if bundle == "release":
+            return _theory_release_response(
+                model,
+                population,
+                journal_scope,
+                study_status,
+                distribution,
+                min_support,
+            )
+        payload = _theory_payload(
+            tactic,
+            model,
+            population,
+            journal_scope,
+            study_status,
+            distribution,
+            dimension,
+            row_dimension,
+            column_dimension,
+            pair,
+            min_support,
+            control_dimension,
+            control_value,
+        )
+        rows = _theory_result_rows(tactic, payload, distribution)
+        content = pd.DataFrame(rows).to_csv(index=False)
+        filename = re.sub(r"[^a-z0-9]+", "_", tactic.lower()).strip("_")
+        return Response(
+            content=content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="construct_contrasting_{filename}.csv"'
+                ),
+                "Cache-Control": "no-store",
+            },
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/api/scope/{scope_id}/contrast")
@@ -1036,6 +1793,100 @@ def scope_download(
     )
 
 
+@app.get("/api/human-annotation/instrument")
+def human_annotation_instrument() -> dict:
+    """Return the frozen, model-blind human coding instrument."""
+
+    try:
+        return human_annotation_store().instrument()
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.get("/api/human-annotation/progress")
+def human_annotation_progress(
+    annotator_id: str | None = Query(None, max_length=40),
+) -> dict:
+    """Return independent completion totals for every known annotator."""
+
+    try:
+        return human_annotation_store().progress(annotator_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/human-annotation/paper")
+def human_annotation_paper(
+    annotator_id: str = Query(..., min_length=2, max_length=40),
+    paper_id: str | None = Query(None, max_length=180),
+) -> dict:
+    """Return one blinded paper and the annotator's resumable draft."""
+
+    try:
+        return human_annotation_store().paper(annotator_id, paper_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/human-annotation/save")
+def save_human_annotation(request: HumanAnnotationSaveRequest) -> dict:
+    """Save a draft or completed paper with an append-only audit revision."""
+
+    _require_authenticated_annotation_write()
+    try:
+        return human_annotation_store().save(
+            request.annotator_id,
+            request.paper_id,
+            request.annotation,
+            submit=request.submit,
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/human-annotation/reliability")
+def human_annotation_reliability(
+    annotators: str = Query("", max_length=1_000),
+    models: str = Query("", max_length=2_000),
+) -> dict:
+    """Return multi-human/model IRR on one exact balanced paper intersection."""
+
+    try:
+        return human_annotation_store().reliability(
+            annotator_ids=_csv_set(annotators),
+            model_ids=_csv_set(models),
+        )
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/human-annotation/export")
+def export_human_annotations(
+    annotator_id: str | None = Query(None, max_length=40),
+) -> Response:
+    """Download traceable human codes without exposing model ratings."""
+
+    try:
+        frame = human_annotation_store().export(annotator_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    suffix = f"_{annotator_id}" if annotator_id else "_all"
+    return Response(
+        content=frame.to_csv(index=False),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="human_annotations{suffix}.csv"'
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @app.get("/api/topic-review")
 def topic_review_summary() -> dict:
     """Return review progress across all five independently fitted models."""
@@ -1234,10 +2085,24 @@ def composition_page() -> FileResponse:
     )
 
 
+@app.get("/contrasting")
+def contrasting_page() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "construct_contrasting.html", headers=HTML_NO_CACHE_HEADERS
+    )
+
+
 @app.get("/topic-review")
 def topic_review_page() -> FileResponse:
     return FileResponse(
         STATIC_DIR / "topic_review.html", headers=HTML_NO_CACHE_HEADERS
+    )
+
+
+@app.get("/human-annotation")
+def human_annotation_page() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "human_annotation.html", headers=HTML_NO_CACHE_HEADERS
     )
 
 

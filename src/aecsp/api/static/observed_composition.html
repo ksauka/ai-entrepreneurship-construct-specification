@@ -3,19 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Observed Construct Composition</title>
+<title>Construct Specification</title>
 <link rel="stylesheet" href="/static/esd.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
+<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
 </head>
 <body>
 <div class="container composition-container">
   <header class="app-header">
-    <h1>Observed construct composition</h1>
-    <p>What the retrieved literature studies among papers where each construct dimension is observable.</p>
+    <h1>Construct specification</h1>
+    <p>How the retrieved literature specifies AI across the eight coded dimensions, with full and observed distributions shown separately.</p>
     <nav class="nav-links">
       <a class="nav-link" href="/">Analytics Dashboard</a>
-      <a class="nav-link active" href="/composition">Observed Composition</a>
+      <a class="nav-link active" href="/composition">Construct Specification</a>
+      <a class="nav-link" href="/contrasting">Construct Contrasting</a>
       <a class="nav-link" href="/topic-review">Topic Review</a>
       <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
       <a class="nav-link" href="/assistant">Assistant</a>
@@ -65,7 +67,10 @@
 
   <section class="card">
     <h2>Model inter-rater reliability <span class="sub">eight dimensions; six core</span></h2>
-    <div class="toolbar"><span id="irrStatus" class="status-pill warn">loading</span></div>
+    <div class="toolbar">
+      <span id="irrStatus" class="status-pill warn">loading</span>
+      <a class="btn btn-outline" href="/human-annotation">Open human annotation</a>
+    </div>
     <p class="chart-note">Each cell compares a model pair on its exact common-paper intersection in the selected dataset scope. The study-status filter is not applied because study status is itself one of the rated dimensions.</p>
     <div class="grid-2 irr-matrix-grid">
       <div class="irr-matrix-card">
@@ -83,6 +88,42 @@
         <thead><tr><th>Model pair</th><th>Common papers</th><th>Dimension</th><th>Use</th><th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff alpha</th></tr></thead>
         <tbody id="irrRows"></tbody>
       </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Human-anchored model validation <span class="sub">23-paper probability-sample overlap</span></h2>
+    <p class="chart-note">Every selected human and model is restricted to the same completed paper IDs. Human-human reliability appears when at least two annotators have independently completed overlapping papers.</p>
+    <div class="toolbar">
+      <span id="humanIrrStatus" class="status-pill warn">loading</span>
+      <button class="btn btn-outline" id="refreshHumanIrr" type="button">Recalculate selected raters</button>
+      <a class="btn btn-outline" href="/api/human-annotation/export">Download human annotations</a>
+    </div>
+    <div id="humanRaterControls" class="human-rater-controls"></div>
+    <div id="humanIrrEmpty" class="empty-state" hidden></div>
+    <div id="humanIrrResults" hidden>
+      <div class="stat-grid human-validation-stats">
+        <div class="stat-tile"><div class="n" id="humanSampleN">0</div><div class="l">Target papers</div></div>
+        <div class="stat-tile"><div class="n" id="humanBalancedN">0</div><div class="l">Balanced common papers</div></div>
+        <div class="stat-tile"><div class="n" id="humanRaterN">0</div><div class="l">Selected raters</div></div>
+        <div class="stat-tile"><div class="n" id="humanReleaseState">–</div><div class="l">Analysis state</div></div>
+      </div>
+      <div class="grid-2 irr-matrix-grid">
+        <div class="irr-matrix-card">
+          <h3>Mean exact agreement</h3>
+          <div class="irr-matrix-wrap" id="humanAgreementMatrix"></div>
+        </div>
+        <div class="irr-matrix-card">
+          <h3>Mean nominal Krippendorff alpha</h3>
+          <div class="irr-matrix-wrap" id="humanAlphaMatrix"></div>
+        </div>
+      </div>
+      <div class="topic-review-table-wrap">
+        <table class="composition-table">
+          <thead><tr><th>Rater pair</th><th>Balanced papers</th><th>Dimension</th><th>Use</th><th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff alpha</th></tr></thead>
+          <tbody id="humanIrrRows"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 </div>
@@ -160,8 +201,9 @@ async function init() {
   document.querySelectorAll("[data-composition-download]").forEach(button => {
     button.onclick = () => downloadCompositionBundle(button.dataset.compositionDownload);
   });
+  el("refreshHumanIrr").onclick = () => renderHumanIrr(true);
   updateLocation();
-  await Promise.all([render(), renderIrr()]);
+  await Promise.all([render(), renderIrr(), renderHumanIrr()]);
 }
 
 function updateLocation() {
@@ -246,6 +288,91 @@ function irrCellColour(value, metric) {
   }
   const bounded = Math.max(0, Math.min(1, value));
   return `rgba(47,158,114,${(0.12 + bounded * 0.76).toFixed(2)})`;
+}
+
+async function renderHumanIrr(useSelection = false) {
+  el("humanIrrStatus").className = "status-pill warn";
+  el("humanIrrStatus").textContent = "calculating";
+  const query = new URLSearchParams();
+  if (useSelection) {
+    const selected = [...document.querySelectorAll("[data-human-rater]:checked")];
+    const humans = selected.filter(input => input.dataset.raterType === "human")
+      .map(input => input.dataset.rawId);
+    const models = selected.filter(input => input.dataset.raterType === "model")
+      .map(input => input.dataset.rawId);
+    if (!humans.length) {
+      showHumanIrrEmpty("Select at least one completed human annotator.");
+      return;
+    }
+    if (!models.length) {
+      showHumanIrrEmpty("Select at least one model for human-model comparison.");
+      return;
+    }
+    query.set("annotators", humans.join(","));
+    query.set("models", models.join(","));
+  }
+  const data = await api(`/api/human-annotation/reliability?${query}`);
+  renderHumanRaterControls(data.available_raters, useSelection);
+  const availableHumans = data.available_raters.filter(item =>
+    item.type === "human" && item.available_papers > 0
+  );
+  if (!availableHumans.length) {
+    showHumanIrrEmpty("No human has completed a paper yet. Open Human Annotation to begin.");
+    return;
+  }
+  if (data.raters.length < 2 || !data.pairs.length) {
+    showHumanIrrEmpty("Select at least two raters with completed common papers.");
+    return;
+  }
+  el("humanIrrEmpty").hidden = true;
+  el("humanIrrResults").hidden = false;
+  el("humanSampleN").textContent = data.sample_papers.toLocaleString();
+  el("humanBalancedN").textContent = data.balanced_common_papers.toLocaleString();
+  el("humanRaterN").textContent = data.raters.length.toLocaleString();
+  el("humanReleaseState").textContent = data.provisional ? "Provisional" : "Complete";
+  const matrixData = {models: data.raters, pairs: data.pairs};
+  el("humanAgreementMatrix").innerHTML =
+    irrMatrixMarkup(matrixData, "mean_percent_agreement", true);
+  el("humanAlphaMatrix").innerHTML =
+    irrMatrixMarkup(matrixData, "mean_krippendorff_alpha", false);
+  el("humanIrrRows").innerHTML = data.pairs.flatMap(pair =>
+    pair.dimensions.map(item =>
+      `<tr><td>${esc(pair.left_label)} / ${esc(pair.right_label)}</td>` +
+      `<td>${pair.intersection_papers.toLocaleString()}</td>` +
+      `<td>${esc(item.label)}</td><td><span class="pill">${esc(item.classification)}</span></td>` +
+      `<td>${item.comparable_papers.toLocaleString()}</td>` +
+      `<td>${item.percent_agreement === null ? "Not estimable" : `${(item.percent_agreement * 100).toFixed(2)}%`}</td>` +
+      `<td>${item.krippendorff_alpha === null ? "Not estimable" : item.krippendorff_alpha.toFixed(2)}</td></tr>`
+    )
+  ).join("");
+  el("humanIrrStatus").className = `status-pill ${data.provisional ? "warn" : "ok"}`;
+  el("humanIrrStatus").textContent =
+    `${data.raters.length} raters: ${data.balanced_common_papers} balanced papers`;
+}
+
+function renderHumanRaterControls(raters, preserveExisting) {
+  const existing = new Set(
+    preserveExisting
+      ? [...document.querySelectorAll("[data-human-rater]:checked")].map(input => input.value)
+      : []
+  );
+  el("humanRaterControls").innerHTML = raters.map(item => {
+    const checked = preserveExisting ? existing.has(item.id) : item.default_selected;
+    const rawId = item.id.replace(/^(human|model)::/, "");
+    return `<label class="human-rater-option">` +
+      `<input type="checkbox" data-human-rater data-rater-type="${esc(item.type)}" ` +
+      `data-raw-id="${esc(rawId)}" value="${esc(item.id)}" ${checked ? "checked" : ""} />` +
+      `<span><strong>${esc(item.label)}</strong><small>${item.available_papers} of ${item.target_papers} papers</small></span>` +
+      `</label>`;
+  }).join("");
+}
+
+function showHumanIrrEmpty(message) {
+  el("humanIrrResults").hidden = true;
+  el("humanIrrEmpty").hidden = false;
+  el("humanIrrEmpty").textContent = message;
+  el("humanIrrStatus").className = "status-pill warn";
+  el("humanIrrStatus").textContent = "human coding pending";
 }
 
 function compositionArtifactQuery() {
@@ -345,8 +472,10 @@ function renderPanelChart(panel, index) {
   const datasets = [];
   if (distributionView !== "observed") {
     datasets.push({
-      label: `Full distribution (n = ${panel.full_n.toLocaleString()})`,
+      label: "Full",
+      distribution: "full",
       data: chartCategories.map(item => Number((item.full_share * 100).toFixed(2))),
+      counts: chartCategories.map(item => item.full_count),
       backgroundColor: "#9aa9b8",
       borderColor: "#7d8c9b",
       borderWidth: 1,
@@ -354,8 +483,10 @@ function renderPanelChart(panel, index) {
   }
   if (distributionView !== "full") {
     datasets.push({
-      label: `Observed distribution (n = ${panel.observed_n.toLocaleString()})`,
+      label: "Observed",
+      distribution: "observed",
       data: chartCategories.map(item => item.observed_share === null ? null : Number((item.observed_share * 100).toFixed(2))),
+      counts: chartCategories.map(item => item.observed_share === null ? null : item.observed_count),
       backgroundColor: "#327bd3",
       borderColor: "#2569b8",
       borderWidth: 1,
@@ -375,7 +506,10 @@ function renderPanelChart(panel, index) {
       maintainAspectRatio: false,
       plugins: {
         legend: {display: distributionView === "compare", position: "bottom"},
-        tooltip: {callbacks: {label: item => `${item.dataset.label}: ${item.raw.toFixed(2)}%`}},
+        tooltip: {callbacks: {label: item => {
+          const count = item.dataset.counts[item.dataIndex];
+          return `${item.dataset.label}: ${Number(count).toLocaleString()} papers (${item.raw.toFixed(2)}%)`;
+        }}},
       },
       scales: {
         x: {
@@ -391,7 +525,8 @@ function renderPanelChart(panel, index) {
       onClick: (_event, elements) => {
         if (!elements.length) return;
         const category = chartCategories[elements[0].index];
-        const count = distributionView === "observed" ? category.observed_count : category.full_count;
+        const dataset = datasets[elements[0].datasetIndex];
+        const count = dataset.counts[elements[0].index];
         showEvidence(panel.column, category.raw_value, panel.label, count);
       },
     },
@@ -437,7 +572,7 @@ async function showEvidence(column, value, panelLabel, count) {
     `<p class="chart-note">${displaySummary}</p>` +
     `<div class="evidence-controls"><label for="compositionEvidenceLimit">Papers displayed</label>` +
     `<select id="compositionEvidenceLimit">${limitOptions}</select></div>` +
-    papers.map(paperEvidenceItem).join("");
+    papers.map(paper => paperInspectionCard(paper, [column])).join("");
   el("compositionEvidenceLimit").onchange = event => {
     evidenceLimit = Number.parseInt(event.target.value, 10);
     updateLocation();

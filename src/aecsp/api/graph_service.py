@@ -24,6 +24,9 @@ from aecsp.analytics.agreement import (
     pairwise_percent_agreement,
 )
 from aecsp.analytics.keyword_trends import (
+    SEARCH_CUTOFF_DATE,
+    SEARCH_CUTOFF_LABEL,
+    SEARCH_CUTOFF_YEAR,
     analyze_keyword_evolution,
     keyword_evidence_mask,
     search_keyword_series,
@@ -33,6 +36,17 @@ from aecsp.analytics.observed_composition import (
     analyze_observed_composition,
     observed_composition_evidence_mask,
 )
+from aecsp.analytics.theory_contrasting import (
+    DIMENSIONS as THEORY_DIMENSIONS,
+    STRUCTURING_PAIRS,
+    VERTICAL_ROW_DIMENSIONS,
+    dimension_column,
+    distribution as theory_distribution,
+    filter_study_status,
+    recurring_configurations,
+    relationship_matrix,
+)
+from aecsp.corpus.business_domains import REGISTERED_QUERY_DOMAIN_RULES
 from aecsp.corpus.scopes import DATASET_SCOPES, STRICT_AI_ENT_SCOPE, scope_frame
 from aecsp.knowledge_graph.neo4j_reader import (
     GraphQueryError,
@@ -40,6 +54,7 @@ from aecsp.knowledge_graph.neo4j_reader import (
     graph_node_id,
 )
 from aecsp.specification.schema import (
+    AI_STUDY_STATUS_FIELD,
     AI_STUDY_STATUS_COLUMN,
     SPECIFICATION_COLUMNS,
     SPECIFICATION_DIMENSIONS,
@@ -88,17 +103,56 @@ DISPLAY_IRR_DIMENSIONS = tuple(
 EVIDENCE_COLUMNS = [
     "paper_id",
     "Title",
+    "Abstract",
+    "Author Keywords",
+    "Index Keywords",
     "Authors",
     "Source title",
     "Year",
+    "Cited by",
     "DOI",
     "Link",
     "query_sources",
     "bertopic_topic_label",
     AI_STUDY_STATUS_COLUMN,
     *DIMENSION_COLUMNS,
+    "ai_mechanism_analysis",
+    "ai_mechanism_logic",
+    "theories_mentioned",
+    "needs_full_text",
     SPECIFICATION_PROBLEM_COLUMN,
 ]
+
+INSPECTION_DIMENSIONS = (AI_STUDY_STATUS_FIELD, *SPECIFICATION_DIMENSIONS)
+DIMENSION_EVIDENCE_COLUMNS = tuple(
+    field
+    for dimension in SPECIFICATION_DIMENSIONS
+    for field in (
+        f"{dimension.column}_evidence",
+        f"{dimension.column}_evidence_type",
+        f"{dimension.column}_confidence",
+    )
+)
+SCOPE_LABEL_BY_ID = {scope.id: scope.label for scope in DATASET_SCOPES}
+
+THEORY_POPULATIONS = (
+    ("core", "Core entrepreneurship"),
+    ("other", "Additional entrepreneurship"),
+    ("combined", "Combined entrepreneurship"),
+)
+
+PENDING_ASJC_DOMAIN_LABELS = {
+    "innovation": "Innovation",
+    "strategy": "Strategy",
+    "marketing": "Marketing",
+    "information_systems": "Information systems",
+    "finance": "Finance",
+    "operations": "Operations",
+    "organization_studies": "Organization studies",
+    "environmental_and_sustainability": "Environmental and sustainability",
+    "ethics_and_corporate_social_responsibility": "Ethics and CSR",
+    "tourism": "Tourism",
+}
 
 
 def _short_title(title: object, width: int = 42) -> str:
@@ -325,6 +379,75 @@ class GraphService:
     def _composition_scope(self, scope_id: str, model: str) -> tuple[pd.DataFrame, int]:
         corpus_scope_n = len(self._scope(scope_id))
         return scope_frame(self._composition_model_frame(model), scope_id), corpus_scope_n
+
+    def _paper_inspection_records(
+        self,
+        frame: pd.DataFrame,
+        selected_columns: tuple[str, ...] = (),
+        limit: int = 100,
+    ) -> list[dict]:
+        """Build evidence-first paper records for the two construct views."""
+
+        selected = set(selected_columns)
+        available_columns = list(
+            dict.fromkeys(
+                column
+                for column in (*EVIDENCE_COLUMNS, *DIMENSION_EVIDENCE_COLUMNS)
+                if column in frame.columns
+            )
+        )
+        records = []
+        for _, row in frame.head(limit).iterrows():
+            record = {column: row.get(column, "") for column in available_columns}
+            query_ids = [
+                value.strip()
+                for value in re.split(r"[;,]", str(row.get("query_sources", "")))
+                if value.strip()
+            ]
+            dimensions = []
+            for dimension in INSPECTION_DIMENSIONS:
+                value_column = dimension.column
+                if (
+                    dimension.column == "ai_mechanism"
+                    and "ai_mechanism_analysis" in frame.columns
+                ):
+                    value_column = "ai_mechanism_analysis"
+                dimensions.append(
+                    {
+                        "column": value_column,
+                        "source_column": dimension.column,
+                        "label": dimension.label,
+                        "question": dimension.question,
+                        "diagnosis": dimension.diagnosis,
+                        "value": row.get(value_column, row.get(dimension.column, "")),
+                        "evidence": row.get(f"{dimension.column}_evidence", ""),
+                        "evidence_type": row.get(
+                            f"{dimension.column}_evidence_type", ""
+                        ),
+                        "confidence": row.get(
+                            f"{dimension.column}_confidence", ""
+                        ),
+                        "selected": bool(
+                            {value_column, dimension.column}.intersection(selected)
+                        ),
+                    }
+                )
+            record["_inspection"] = {
+                "evidence_boundary": "Title, abstract, and author keywords",
+                "dataset_views": [
+                    SCOPE_LABEL_BY_ID.get(query_id, query_id)
+                    for query_id in query_ids
+                ],
+                "dimensions": dimensions,
+                "mechanism_logic": row.get("ai_mechanism_logic", ""),
+                "theories_mentioned": row.get("theories_mentioned", ""),
+                "needs_full_text": row.get("needs_full_text", ""),
+                "specification_problem": row.get(
+                    SPECIFICATION_PROBLEM_COLUMN, ""
+                ),
+            }
+            records.append(record)
+        return records
 
     def composition_export(
         self,
@@ -595,15 +718,71 @@ class GraphService:
         }
 
         annual = []
-        if (years > 0).any():
+        valid_trend_year = years > 0
+        if valid_trend_year.any():
             work = frame.assign(_y=years, _c=citations)
-            for year, sub in work[work["_y"] > 0].groupby("_y"):
+            grouped = {
+                int(year): sub
+                for year, sub in work[valid_trend_year].groupby("_y")
+            }
+            cumulative_papers = 0
+            first_year = min(grouped)
+            last_year = max(grouped)
+            for year in range(first_year, last_year + 1):
+                sub = grouped.get(year)
+                papers = len(sub) if sub is not None else 0
+                cohort_citations = int(sub["_c"].sum()) if sub is not None else 0
+                cumulative_papers += papers
                 annual.append({
-                    "year": int(year),
-                    "papers": len(sub),
-                    "citations": int(sub["_c"].sum()),
+                    "year": year,
+                    "papers": papers,
+                    "cumulative_papers": cumulative_papers,
+                    "citations": cohort_citations,
+                    "publication_year_after_retrieval_year": (
+                        year > SEARCH_CUTOFF_YEAR
+                    ),
                 })
-            annual.sort(key=lambda r: r["year"])
+
+        cumulative_by_year = {
+            row["year"]: row["cumulative_papers"] for row in annual
+        }
+
+        def cumulative_at(year: int) -> int:
+            eligible = [
+                value
+                for current_year, value in cumulative_by_year.items()
+                if current_year <= year
+            ]
+            return max(eligible, default=0)
+
+        growth_periods = (
+            (2000, SEARCH_CUTOFF_YEAR),
+            (2010, 2020),
+            (2020, 2023),
+            (2023, SEARCH_CUTOFF_YEAR),
+        )
+        publication_growth = []
+        for start_year, end_year in growth_periods:
+            start_count = cumulative_at(start_year)
+            end_count = cumulative_at(end_year)
+            added = end_count - start_count
+            publication_growth.append(
+                {
+                    "start_year": start_year,
+                    "end_year": end_year,
+                    "start_cumulative_papers": start_count,
+                    "end_cumulative_papers": end_count,
+                    "added_papers": added,
+                    "percent_growth": (
+                        round(added / start_count, 6)
+                        if start_count > 0
+                        else None
+                    ),
+                    "end_is_retrieval_year": (
+                        end_year == SEARCH_CUTOFF_YEAR
+                    ),
+                }
+            )
 
         top_journals = self._top_counts(frame, "Source title", citations, top_n)
         top_authors = self._top_authors(frame, top_n)
@@ -615,11 +794,119 @@ class GraphService:
                 "Current cumulative citations grouped by publication year; "
                 "this is publication-cohort impact, not citations received during each year."
             ),
+            "publication_trend_definition": (
+                "Annual papers are publication counts for each year. "
+                "Cumulative papers are the running total through that year."
+            ),
+            "growth_definition": (
+                "Cumulative growth equals (end cumulative papers minus start "
+                "cumulative papers) divided by start cumulative papers. It is "
+                "not annual publication-output growth."
+            ),
+            "search_cutoff": {
+                "date": SEARCH_CUTOFF_DATE.isoformat(),
+                "label": SEARCH_CUTOFF_LABEL,
+                "year": SEARCH_CUTOFF_YEAR,
+            },
+            "trend_reconciliation": {
+                "scope_papers": len(frame),
+                "valid_year_papers": int(valid_trend_year.sum()),
+                "invalid_year": int((years.isna() | (years <= 0)).sum()),
+                "records_dated_after_retrieval_year": int(
+                    (years > SEARCH_CUTOFF_YEAR).sum()
+                ),
+                "final_cumulative_papers": (
+                    annual[-1]["cumulative_papers"] if annual else 0
+                ),
+                "matches_scope_papers": (
+                    bool(annual)
+                    and annual[-1]["cumulative_papers"] == len(frame)
+                ),
+            },
             "summary": summary,
             "annual_production": annual,
+            "publication_growth": publication_growth,
             "top_journals": top_journals,
             "top_authors": top_authors,
             "most_cited": most_cited,
+        }
+
+    def performance_papers(
+        self,
+        scope_id: str,
+        year: int,
+        mode: str = "annual",
+        limit: int = 100,
+    ) -> dict:
+        """Return the papers behind one annual or cumulative chart point."""
+
+        if mode not in {"annual", "cumulative"}:
+            raise ValueError("Publication-paper mode must be annual or cumulative")
+        frame = self._scope(scope_id).copy()
+        years = self._numeric(frame, "Year")
+        if mode == "annual":
+            subset = frame[years == year].copy()
+        else:
+            subset = frame[(years > 0) & (years <= year)].copy()
+        subset["_year_sort"] = self._numeric(subset, "Year")
+        subset["_citation_sort"] = self._numeric(subset, "Cited by")
+        subset["_title_sort"] = (
+            subset["Title"].astype(str)
+            if "Title" in subset.columns
+            else pd.Series("", index=subset.index)
+        )
+        subset = subset.sort_values(
+            ["_year_sort", "_citation_sort", "_title_sort"],
+            ascending=[False, False, True],
+            kind="stable",
+        )
+        columns = list(
+            dict.fromkeys(
+                column
+                for column in [*EVIDENCE_COLUMNS, "Cited by"]
+                if column in subset.columns
+            )
+        )
+        return {
+            "scope": scope_id,
+            "year": year,
+            "mode": mode,
+            "total_papers": len(subset),
+            "returned_papers": min(limit, len(subset)),
+            "papers": subset[columns].head(limit).to_dict("records"),
+            "search_cutoff": {
+                "date": SEARCH_CUTOFF_DATE.isoformat(),
+                "label": SEARCH_CUTOFF_LABEL,
+                "year": SEARCH_CUTOFF_YEAR,
+            },
+        }
+
+    def publication_growth_comparison(self) -> dict:
+        """Compare cumulative publication growth across every dataset view."""
+
+        rows = []
+        for scope in self.scopes():
+            performance = self.performance(scope["id"])
+            rows.append(
+                {
+                    "scope": scope["id"],
+                    "label": scope["label"],
+                    "papers": scope["papers"],
+                    "growth": performance["publication_growth"],
+                }
+            )
+        return {
+            "search_cutoff": {
+                "date": SEARCH_CUTOFF_DATE.isoformat(),
+                "label": SEARCH_CUTOFF_LABEL,
+                "year": SEARCH_CUTOFF_YEAR,
+            },
+            "growth_definition": (
+                "Cumulative growth equals (end cumulative papers minus start "
+                "cumulative papers) divided by start cumulative papers."
+            ),
+            "scopes_overlap": True,
+            "views": rows,
         }
 
     # ---- keyword evolution --------------------------------------------
@@ -661,11 +948,17 @@ class GraphService:
             year=year,
         )
         subset = frame[mask]
-        columns = [
-            column
-            for column in [*EVIDENCE_COLUMNS, "Author Keywords", "Index Keywords"]
-            if column in subset.columns
-        ]
+        columns = list(
+            dict.fromkeys(
+                column
+                for column in [
+                    *EVIDENCE_COLUMNS,
+                    "Author Keywords",
+                    "Index Keywords",
+                ]
+                if column in subset.columns
+            )
+        )
         return subset[columns].head(limit).to_dict("records")
 
     def keyword_search(
@@ -725,8 +1018,800 @@ class GraphService:
             value=value,
         )
         subset = frame[mask]
-        columns = [column for column in EVIDENCE_COLUMNS if column in subset.columns]
-        return subset[columns].head(limit).to_dict("records")
+        return self._paper_inspection_records(
+            subset,
+            selected_columns=(column,),
+            limit=limit,
+        )
+
+    # ---- theory elaboration and construct contrasting -----------------
+    def _theory_population_frame(
+        self,
+        frame: pd.DataFrame,
+        population: str,
+    ) -> pd.DataFrame:
+        """Return one registered entrepreneurship population."""
+
+        if population not in {item[0] for item in THEORY_POPULATIONS}:
+            raise ValueError(f"Unknown entrepreneurship population: {population}")
+        for column in ("in_query_3", "in_query_4"):
+            if column not in frame.columns:
+                return frame.iloc[0:0].copy()
+        core = pd.to_numeric(frame["in_query_3"], errors="coerce").fillna(0).eq(1)
+        other = pd.to_numeric(frame["in_query_4"], errors="coerce").fillna(0).eq(1)
+        mask = core if population == "core" else other
+        if population == "combined":
+            mask = core | other
+        return frame.loc[mask].copy()
+
+    def _theory_journal_scope_frame(
+        self,
+        frame: pd.DataFrame,
+        journal_scope: str,
+    ) -> pd.DataFrame:
+        """Apply the FT50 robustness restriction when requested."""
+
+        if journal_scope not in {"all", "ft50"}:
+            raise ValueError(f"Unknown journal scope: {journal_scope}")
+        if journal_scope == "all":
+            return frame.copy()
+        if "in_query_2" not in frame.columns:
+            return frame.iloc[0:0].copy()
+        mask = pd.to_numeric(frame["in_query_2"], errors="coerce").fillna(0).eq(1)
+        return frame.loc[mask].copy()
+
+    def _theory_domain_assignments(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """Load registered domains plus any reviewed ASJC-domain aggregation.
+
+        The optional ASJC-derived table deliberately has the same long schema
+        as the registered query-domain assignments. Until it exists, the API
+        reports those domains as pending instead of inventing memberships.
+        """
+
+        rows = []
+        for rule in REGISTERED_QUERY_DOMAIN_RULES:
+            flag = rule["flag_column"]
+            if flag not in frame.columns:
+                continue
+            mask = pd.to_numeric(frame[flag], errors="coerce").fillna(0).eq(1)
+            selected = frame.loc[mask, ["paper_id"]].copy()
+            selected["domain_id"] = rule["domain_id"]
+            selected["domain_label"] = rule["domain_label"]
+            selected["assignment_basis"] = rule["query_id"]
+            rows.append(selected)
+
+        derived_path = (
+            self.processed_dir
+            / "analysis/theory_elaboration/domains/business_domain_assignments.csv"
+        )
+        if derived_path.exists():
+            derived = pd.read_csv(
+                derived_path, dtype=str, keep_default_na=False
+            ).fillna("")
+            required = {"paper_id", "domain_id", "domain_label", "assignment_basis"}
+            if not required.issubset(derived.columns):
+                raise ValueError(
+                    "Reviewed business-domain assignments are missing required columns"
+                )
+            derived = derived[
+                ["paper_id", "domain_id", "domain_label", "assignment_basis"]
+            ].copy()
+            derived = derived[derived["paper_id"].isin(set(frame["paper_id"]))]
+            rows.append(derived)
+
+        if not rows:
+            return pd.DataFrame(
+                columns=["paper_id", "domain_id", "domain_label", "assignment_basis"]
+            )
+        assignments = pd.concat(rows, ignore_index=True)
+        return assignments.drop_duplicates(["paper_id", "domain_id"]).reset_index(
+            drop=True
+        )
+
+    def theory_contrasting_metadata(self, model: str | None = None) -> dict:
+        """Describe available populations, domains, dimensions and model coverage."""
+
+        selected_model = model or resolve_primary_model()
+        frame = self._composition_model_frame(selected_model)
+        assignments = self._theory_domain_assignments(frame)
+        domains = []
+        query_domain_definitions = {
+            "ft50": (
+                "Papers from source titles in the registered FT50 journal set."
+            ),
+            "core_entrepreneurship": (
+                "Papers from the registered leading entrepreneurship journal set."
+            ),
+            "other_entrepreneurship": (
+                "Papers from the registered additional entrepreneurship journal set."
+            ),
+        }
+        for domain_id, group in assignments.groupby("domain_id", sort=False):
+            assignment_basis = str(group["assignment_basis"].iloc[0])
+            paper_ids = set(group["paper_id"])
+            source_counts = (
+                frame.loc[frame["paper_id"].isin(paper_ids), "Source title"]
+                .astype(str)
+                .str.strip()
+                .loc[lambda values: values.ne("")]
+                .value_counts()
+            )
+            query_defined = str(domain_id) in query_domain_definitions
+            registry_field = (
+                assignment_basis.removeprefix("journal_registry:")
+                if assignment_basis.startswith("journal_registry:")
+                else ""
+            )
+            domains.append(
+                {
+                    "id": str(domain_id),
+                    "label": str(group["domain_label"].iloc[0]),
+                    "papers": int(group["paper_id"].nunique()),
+                    "assignment_basis": assignment_basis,
+                    "assignment_type": (
+                        "Registered journal population"
+                        if query_defined
+                        else "Reviewed journal-domain registry"
+                    ),
+                    "definition": query_domain_definitions.get(
+                        str(domain_id),
+                        (
+                            "Papers inherit this domain from their Scopus source "
+                            "title through the reviewed journal-domain registry."
+                        ),
+                    ),
+                    "registry_field": registry_field,
+                    "source_title_count": int(len(source_counts)),
+                    "source_titles": [
+                        {"title": str(title), "papers": int(count)}
+                        for title, count in source_counts.items()
+                    ],
+                    "available": True,
+                }
+            )
+        available_ids = {item["id"] for item in domains}
+        pending = [
+            {"id": domain_id, "label": label, "available": False}
+            for domain_id, label in PENDING_ASJC_DOMAIN_LABELS.items()
+            if domain_id not in available_ids
+        ]
+        populations = []
+        for population_id, label in THEORY_POPULATIONS:
+            population_frame = self._theory_population_frame(frame, population_id)
+            populations.append(
+                {
+                    "id": population_id,
+                    "label": label,
+                    "papers": len(population_frame),
+                }
+            )
+        pair_options = [
+            {"id": f"{left}__{right}", "label": label}
+            for left, right, label in STRUCTURING_PAIRS
+        ]
+        horizontal_controls = []
+        for definition in THEORY_DIMENSIONS:
+            control_column = dimension_column(frame, definition["id"])
+            values = []
+            if control_column in frame.columns:
+                values = sorted(
+                    value
+                    for value in frame[control_column]
+                    .astype(str)
+                    .str.strip()
+                    .unique()
+                    if value
+                )
+            horizontal_controls.append(
+                {
+                    "id": definition["id"],
+                    "label": definition["label"],
+                    "column": control_column,
+                    "values": values,
+                }
+            )
+        return {
+            "model": selected_model,
+            "model_label": MODEL_DISPLAY_NAMES.get(selected_model, selected_model),
+            "model_coded_papers": len(frame),
+            "corpus_papers": len(self.papers),
+            "populations": populations,
+            "domains": domains,
+            "pending_domains": pending,
+            "dimensions": [
+                {key: definition[key] for key in ("id", "label", "column")}
+                for definition in THEORY_DIMENSIONS
+            ],
+            "vertical_row_dimensions": list(VERTICAL_ROW_DIMENSIONS),
+            "horizontal_controls": horizontal_controls,
+            "structuring_pairs": pair_options,
+            "journal_scopes": [
+                {"id": "all", "label": "All journals"},
+                {"id": "ft50", "label": "FT50 robustness subset"},
+            ],
+            "domain_methodology": {
+                "unit": "Paper inherited from its source journal",
+                "construction": (
+                    "Domains classify papers already present in the 22,345-paper "
+                    "corpus. They do not retrieve or add papers."
+                ),
+                "classification": (
+                    "FT50, Core entrepreneurship, and Additional entrepreneurship "
+                    "use registered journal populations. The remaining business "
+                    "domains use reviewed journal-domain registries informed by "
+                    "Scopus ASJC source classifications."
+                ),
+                "overlap": (
+                    "Domain membership is multi-label. A journal, and therefore a "
+                    "paper, may belong to more than one domain; rows must not be summed."
+                ),
+                "unclassified": (
+                    "Papers whose source journal is not represented in a registered "
+                    "domain remain outside these domain rows but remain in the baseline."
+                ),
+            },
+            "domain_assignment_complete": not pending,
+        }
+
+    def theory_construct_specification(
+        self,
+        model: str,
+        population: str,
+        journal_scope: str = "all",
+        study_status: str = "all",
+    ) -> dict:
+        """Return existing specification results for an entrepreneurship population."""
+
+        frame = self._composition_model_frame(model)
+        frame = self._theory_population_frame(frame, population)
+        frame = self._theory_journal_scope_frame(frame, journal_scope)
+        result = analyze_observed_composition(frame, study_status=study_status)
+        population_label = dict(THEORY_POPULATIONS)[population]
+        result.update(
+            {
+                "model": model,
+                "model_label": MODEL_DISPLAY_NAMES.get(model, model),
+                "population": population,
+                "population_label": population_label,
+                "journal_scope": journal_scope,
+            }
+        )
+        return result
+
+    def theory_horizontal_contrast(
+        self,
+        model: str,
+        dimension_id: str,
+        distribution_view: str = "observed",
+        journal_scope: str = "all",
+        study_status: str = "all",
+        control_dimension: str | None = None,
+        control_value: str | None = None,
+    ) -> dict:
+        """Compare one specification dimension across available domains."""
+
+        frame = self._composition_model_frame(model)
+        frame = self._theory_journal_scope_frame(frame, journal_scope)
+        frame, control = self._theory_controlled_frame(
+            frame, control_dimension, control_value
+        )
+        assignments = self._theory_domain_assignments(frame)
+        baseline = theory_distribution(
+            frame, dimension_id, distribution_view, study_status
+        )
+        baseline_shares = {
+            item["raw_value"]: item["share"] for item in baseline["categories"]
+        }
+        metadata = self.theory_contrasting_metadata(model)
+        groups = []
+        for domain_id, assigned in assignments.groupby("domain_id", sort=False):
+            # Under an FT50-only replication, the FT50 group is identical to
+            # the comparison baseline and therefore contains no contrast.
+            if journal_scope == "ft50" and str(domain_id) == "ft50":
+                continue
+            domain_frame = frame[frame["paper_id"].isin(set(assigned["paper_id"]))]
+            result = theory_distribution(
+                domain_frame, dimension_id, distribution_view, study_status
+            )
+            for category in result["categories"]:
+                category["percentage_point_difference"] = round(
+                    (category["share"] - baseline_shares.get(category["raw_value"], 0.0))
+                    * 100,
+                    4,
+                )
+            groups.append(
+                {
+                    "id": str(domain_id),
+                    "label": str(assigned["domain_label"].iloc[0]),
+                    "assignment_basis": str(assigned["assignment_basis"].iloc[0]),
+                    "eligible": True,
+                    "eligibility_note": "",
+                    **result,
+                }
+            )
+
+        # Keep registered rows visible when a restricted comparison corpus has
+        # no intersecting papers. Absence is analytically meaningful and must
+        # not look like a missing domain definition.
+        group_ids = {group["id"] for group in groups}
+        for domain in metadata["domains"]:
+            domain_id = str(domain["id"])
+            if journal_scope == "ft50" and domain_id == "ft50":
+                continue
+            if domain_id in group_ids:
+                continue
+            groups.append(
+                {
+                    "id": domain_id,
+                    "label": str(domain["label"]),
+                    "assignment_basis": str(domain.get("assignment_basis", "")),
+                    "eligible": False,
+                    "eligibility_note": (
+                        "No papers from this group occur in the selected "
+                        "comparison corpus."
+                    ),
+                    **theory_distribution(
+                        frame.iloc[0:0],
+                        dimension_id,
+                        distribution_view,
+                        study_status,
+                    ),
+                }
+            )
+
+        domain_order = {
+            str(domain["id"]): index
+            for index, domain in enumerate(metadata["domains"])
+            if not (journal_scope == "ft50" and str(domain["id"]) == "ft50")
+        }
+        groups.sort(key=lambda group: domain_order.get(group["id"], len(domain_order)))
+
+        combined_ids = set(
+            assignments.loc[
+                assignments["domain_id"].isin(
+                    ["core_entrepreneurship", "other_entrepreneurship"]
+                ),
+                "paper_id",
+            ]
+        )
+        if combined_ids:
+            combined = theory_distribution(
+                frame[frame["paper_id"].isin(combined_ids)],
+                dimension_id,
+                distribution_view,
+                study_status,
+            )
+            for category in combined["categories"]:
+                category["percentage_point_difference"] = round(
+                    (category["share"] - baseline_shares.get(category["raw_value"], 0.0))
+                    * 100,
+                    4,
+                )
+            groups.append(
+                {
+                    "id": "combined_entrepreneurship",
+                    "label": "Combined entrepreneurship",
+                    "assignment_basis": "union of core and other entrepreneurship",
+                    "eligible": True,
+                    "eligibility_note": "",
+                    **combined,
+                }
+            )
+        return {
+            "model": model,
+            "model_label": MODEL_DISPLAY_NAMES.get(model, model),
+            "dimension_id": dimension_id,
+            "dimension_label": baseline["dimension_label"],
+            "column": baseline["column"],
+            "distribution": distribution_view,
+            "journal_scope": journal_scope,
+            "study_status": study_status,
+            "control": control,
+            "control_filter_label": (
+                f"{control['dimension_label']} = {control['value']}"
+                if control
+                else "No additional dimension control"
+            ),
+            "baseline_label": (
+                "FT50 corpus" if journal_scope == "ft50" else "Full corpus"
+            ),
+            "comparison_definition": (
+                "Every domain row contains only papers that are also in the "
+                "FT50 corpus and is compared with all eligible FT50 papers."
+                if journal_scope == "ft50"
+                else "Every domain row is compared with all eligible papers "
+                "in the full corpus."
+            ),
+            "baseline": baseline,
+            "groups": groups,
+            "pending_domains": metadata["pending_domains"],
+            "overlap_warning": (
+                "Domain memberships can overlap; domain counts must not be summed."
+            ),
+            "entrepreneurship_comparison": self.theory_entrepreneurship_comparison(
+                model,
+                dimension_id,
+                distribution_view,
+                study_status,
+                min_support=10,
+                control_dimension=control_dimension,
+                control_value=control_value,
+            ),
+        }
+
+    def _theory_controlled_frame(
+        self,
+        frame: pd.DataFrame,
+        control_dimension: str | None,
+        control_value: str | None,
+    ) -> tuple[pd.DataFrame, dict | None]:
+        """Apply one optional registered specification control consistently."""
+
+        dimension_id = str(control_dimension or "").strip()
+        value = str(control_value or "").strip()
+        if bool(dimension_id) != bool(value):
+            raise ValueError(
+                "Comparison control dimension and control value must be selected together"
+            )
+        if not dimension_id:
+            return frame, None
+        definition = next(
+            (
+                item
+                for item in THEORY_DIMENSIONS
+                if item["id"] == dimension_id
+            ),
+            None,
+        )
+        if definition is None:
+            raise ValueError(f"Unknown comparison control dimension: {dimension_id}")
+        column = dimension_column(frame, dimension_id)
+        if column not in frame.columns:
+            raise ValueError(
+                f"{definition['label']} is unavailable for this model"
+            )
+        values = frame[column].astype(str).str.strip()
+        if value not in set(values):
+            raise ValueError(
+                f"Unknown {definition['label'].lower()} control value: {value}"
+            )
+        return frame.loc[values.eq(value)].copy(), {
+            "dimension_id": dimension_id,
+            "dimension_label": definition["label"],
+            "column": column,
+            "value": value,
+        }
+
+    def theory_vertical_contrast(
+        self,
+        model: str,
+        population: str,
+        row_dimension: str = "ai_role",
+        distribution_view: str = "observed",
+        journal_scope: str = "all",
+        study_status: str = "all",
+        column_dimension: str = "level",
+        control_dimension: str | None = None,
+        control_value: str | None = None,
+    ) -> dict:
+        """Return a selectable specification-dimension-by-level matrix."""
+
+        if row_dimension not in VERTICAL_ROW_DIMENSIONS:
+            raise ValueError(f"Unknown vertical row dimension: {row_dimension}")
+        if column_dimension not in VERTICAL_ROW_DIMENSIONS:
+            raise ValueError(
+                f"Unknown vertical column dimension: {column_dimension}"
+            )
+        if row_dimension == column_dimension:
+            raise ValueError("Vertical matrix axes must use different dimensions")
+        if "level" not in {row_dimension, column_dimension}:
+            raise ValueError(
+                "Vertical contrasting requires Level of analysis on one axis"
+            )
+        frame = self._composition_model_frame(model)
+        frame, control = self._theory_controlled_frame(
+            frame, control_dimension, control_value
+        )
+        frame = self._theory_population_frame(frame, population)
+        frame = self._theory_journal_scope_frame(frame, journal_scope)
+        result = relationship_matrix(
+            frame,
+            row_dimension,
+            column_dimension,
+            distribution_view,
+            study_status,
+        )
+        result.update(
+            {
+                "model": model,
+                "model_label": MODEL_DISPLAY_NAMES.get(model, model),
+                "population": population,
+                "population_label": dict(THEORY_POPULATIONS)[population],
+                "journal_scope": journal_scope,
+                "study_status": study_status,
+                "control": control,
+                "control_filter_label": (
+                    f"{control['dimension_label']} = {control['value']}"
+                    if control
+                    else "No additional dimension filter"
+                ),
+            }
+        )
+        return result
+
+    def theory_entrepreneurship_comparison(
+        self,
+        model: str,
+        dimension_id: str = "ai_role",
+        distribution_view: str = "observed",
+        study_status: str = "all",
+        min_support: int = 10,
+        control_dimension: str | None = None,
+        control_value: str | None = None,
+    ) -> dict:
+        """Compare specification and configurations across entrepreneurship sets."""
+
+        frame = self._composition_model_frame(model)
+        frame, control = self._theory_controlled_frame(
+            frame, control_dimension, control_value
+        )
+        population_frames = {
+            population_id: self._theory_population_frame(frame, population_id)
+            for population_id, _ in THEORY_POPULATIONS
+        }
+        distributions = {
+            population_id: theory_distribution(
+                population_frame,
+                dimension_id,
+                distribution_view,
+                study_status,
+            )
+            for population_id, population_frame in population_frames.items()
+        }
+        combined = distributions["combined"]
+        combined_shares = {
+            category["raw_value"]: category["share"]
+            for category in combined["categories"]
+        }
+        groups = []
+        for population_id, population_label in THEORY_POPULATIONS:
+            result = distributions[population_id]
+            for category in result["categories"]:
+                category["percentage_point_difference_from_combined"] = round(
+                    (
+                        category["share"]
+                        - combined_shares.get(category["raw_value"], 0.0)
+                    )
+                    * 100,
+                    4,
+                )
+            groups.append(
+                {
+                    "id": population_id,
+                    "label": population_label,
+                    "comparison_role": (
+                        "Union benchmark" if population_id == "combined" else "Journal set"
+                    ),
+                    **result,
+                }
+            )
+
+        population_configurations = {
+            population_id: recurring_configurations(
+                population_frame,
+                distribution_view,
+                study_status,
+                min_support=1,
+            )
+            for population_id, population_frame in population_frames.items()
+        }
+
+        def configuration_key(record: dict) -> tuple[str, ...]:
+            return tuple(
+                str(record[dimension_id])
+                for dimension_id in (
+                    "ai_role",
+                    "mechanism",
+                    "level",
+                    "scope",
+                    "process_stage",
+                )
+            )
+
+        configuration_indexes = {
+            population_id: {
+                configuration_key(record): record
+                for record in result["configurations"]
+            }
+            for population_id, result in population_configurations.items()
+        }
+        configurations = []
+        for combined_record in population_configurations["combined"][
+            "configurations"
+        ]:
+            if combined_record["papers"] < min_support:
+                continue
+            key = configuration_key(combined_record)
+            population_values = []
+            for population_id, population_label in THEORY_POPULATIONS:
+                record = configuration_indexes[population_id].get(key)
+                population_values.append(
+                    {
+                        "population": population_id,
+                        "population_label": population_label,
+                        "papers": int(record["papers"]) if record else 0,
+                        "share": float(record["share"]) if record else 0.0,
+                        "analyzed_n": population_configurations[population_id][
+                            "analyzed_n"
+                        ],
+                    }
+                )
+            configurations.append(
+                {
+                    **{
+                        dimension_id: combined_record[dimension_id]
+                        for dimension_id in (
+                            "ai_role",
+                            "mechanism",
+                            "level",
+                            "scope",
+                            "process_stage",
+                        )
+                    },
+                    "filters": combined_record["filters"],
+                    "population_values": population_values,
+                }
+            )
+
+        return {
+            "model": model,
+            "model_label": MODEL_DISPLAY_NAMES.get(model, model),
+            "dimension_id": dimension_id,
+            "dimension_label": combined["dimension_label"],
+            "column": combined["column"],
+            "distribution": distribution_view,
+            "study_status": study_status,
+            "control": control,
+            "control_filter_label": (
+                f"{control['dimension_label']} = {control['value']}"
+                if control
+                else "No additional dimension control"
+            ),
+            "benchmark_label": "Combined entrepreneurship",
+            "comparison_definition": (
+                "Core and Additional entrepreneurship are disjoint registered "
+                "journal sets. Combined entrepreneurship is their union and is "
+                "reported as a benchmark, not as an independent third tier."
+            ),
+            "groups": groups,
+            "configuration_dimensions": [
+                "ai_role",
+                "mechanism",
+                "level",
+                "scope",
+                "process_stage",
+            ],
+            "configuration_denominators": {
+                population_id: result["analyzed_n"]
+                for population_id, result in population_configurations.items()
+            },
+            "configuration_min_support": min_support,
+            "configurations": configurations,
+        }
+
+    def theory_structuring(
+        self,
+        model: str,
+        population: str,
+        pair_id: str = "ai_role__mechanism",
+        distribution_view: str = "observed",
+        journal_scope: str = "all",
+        study_status: str = "all",
+        min_support: int = 10,
+        control_dimension: str | None = None,
+        control_value: str | None = None,
+    ) -> dict:
+        """Return pairwise structure and recurring five-dimension configurations."""
+
+        pairs = {
+            f"{left}__{right}": (left, right, label)
+            for left, right, label in STRUCTURING_PAIRS
+        }
+        if pair_id not in pairs:
+            raise ValueError(f"Unknown structuring matrix: {pair_id}")
+        frame = self._composition_model_frame(model)
+        frame, control = self._theory_controlled_frame(
+            frame, control_dimension, control_value
+        )
+        frame = self._theory_population_frame(frame, population)
+        frame = self._theory_journal_scope_frame(frame, journal_scope)
+        left, right, label = pairs[pair_id]
+        matrix = relationship_matrix(
+            frame, left, right, distribution_view, study_status
+        )
+        configurations = recurring_configurations(
+            frame,
+            distribution_view,
+            study_status,
+            min_support=min_support,
+        )
+        return {
+            "model": model,
+            "model_label": MODEL_DISPLAY_NAMES.get(model, model),
+            "population": population,
+            "population_label": dict(THEORY_POPULATIONS)[population],
+            "journal_scope": journal_scope,
+            "study_status": study_status,
+            "pair_id": pair_id,
+            "pair_label": label,
+            "matrix": matrix,
+            "configurations": configurations,
+            "agency_operationalisation": (
+                "AI role and observed mechanism jointly represent observable agency allocation; "
+                "agency configuration is not an independently coded variable."
+            ),
+            "sequence_inference_permitted": False,
+            "control": control,
+            "control_filter_label": (
+                f"{control['dimension_label']} = {control['value']}"
+                if control
+                else "No additional dimension filter"
+            ),
+        }
+
+    def theory_contrasting_evidence(
+        self,
+        model: str,
+        population: str | None = None,
+        journal_scope: str = "all",
+        study_status: str = "all",
+        domain_id: str | None = None,
+        filters: dict[str, str] | None = None,
+        limit: int = 100,
+    ) -> dict:
+        """Return papers behind a construct-contrasting bar, cell or configuration."""
+
+        frame = self._composition_model_frame(model)
+        if population:
+            frame = self._theory_population_frame(frame, population)
+        frame = self._theory_journal_scope_frame(frame, journal_scope)
+        frame = filter_study_status(frame, study_status)
+        if domain_id:
+            assignments = self._theory_domain_assignments(frame)
+            paper_ids = set(
+                assignments.loc[assignments["domain_id"].eq(domain_id), "paper_id"]
+            )
+            if domain_id == "combined_entrepreneurship":
+                paper_ids = set(
+                    assignments.loc[
+                        assignments["domain_id"].isin(
+                            ["core_entrepreneurship", "other_entrepreneurship"]
+                        ),
+                        "paper_id",
+                    ]
+                )
+            frame = frame[frame["paper_id"].isin(paper_ids)]
+        allowed_columns = {
+            dimension_column(frame, definition["id"])
+            for definition in THEORY_DIMENSIONS
+        }
+        for column, value in (filters or {}).items():
+            if column not in allowed_columns:
+                raise ValueError(f"Unsupported evidence filter: {column}")
+            if column not in frame.columns:
+                frame = frame.iloc[0:0]
+                break
+            frame = frame[frame[column].astype(str).str.strip().eq(str(value))]
+        total = len(frame)
+        return {
+            "total_papers": total,
+            "returned_papers": min(total, limit),
+            "papers": self._paper_inspection_records(
+                frame,
+                selected_columns=tuple((filters or {}).keys()),
+                limit=limit,
+            ),
+        }
 
     def _numeric(self, frame: pd.DataFrame, column: str) -> pd.Series:
         if column not in frame.columns:

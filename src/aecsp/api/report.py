@@ -79,7 +79,7 @@ def build_composition_report(
     study_status: str,
     distribution: str = "compare",
 ) -> str:
-    """Return a filter-aware observed-composition and IRR report."""
+    """Return a filter-aware construct-specification and IRR report."""
 
     distribution_labels = {
         "compare": "Compare full and observed",
@@ -100,7 +100,7 @@ def build_composition_report(
     status_label = "All papers" if study_status == "all" else study_status.capitalize()
     coverage = composition["model_coverage_share"] * 100
     body = (
-        "<h2>Observed construct composition</h2>"
+        "<h2>Construct specification</h2>"
         f"<p><strong>Dataset:</strong> {html.escape(scope_label)}<br />"
         f"<strong>Coding model:</strong> {html.escape(composition['model_label'])}<br />"
         f"<strong>Study-status filter:</strong> {html.escape(status_label)}<br />"
@@ -228,7 +228,51 @@ def build_composition_report(
         "dominant categories can produce high raw agreement. Human coding remains "
         "the accuracy anchor.</p>"
     )
-    return _document(f"{scope_label}: observed composition", body)
+    return _document(f"{scope_label}: construct specification", body)
+
+
+def build_theory_contrasting_report(
+    title: str,
+    context: dict[str, object],
+    rows: list[dict[str, object]],
+) -> str:
+    """Return a printable report for one filtered construct-contrasting view."""
+
+    context_rows = "".join(
+        f"<tr><th>{html.escape(str(key).replace('_', ' ').title())}</th>"
+        f"<td>{html.escape(str(value))}</td></tr>"
+        for key, value in context.items()
+    )
+    if rows:
+        columns = list(dict.fromkeys(key for row in rows for key in row))
+        head = "".join(
+            f"<th>{html.escape(str(column).replace('_', ' ').title())}</th>"
+            for column in columns
+        )
+        body_rows = "".join(
+            "<tr>"
+            + "".join(
+                f"<td>{html.escape(str(row.get(column, '')))}</td>"
+                for column in columns
+            )
+            + "</tr>"
+            for row in rows
+        )
+        result_table = f"<table><thead><tr>{head}</tr></thead><tbody>{body_rows}</tbody></table>"
+    else:
+        result_table = "<p>No rows are available under the selected filters.</p>"
+    content = (
+        f"<h2>{html.escape(title)}</h2>"
+        "<h3>Analysis context</h3>"
+        f"<table>{context_rows}</table>"
+        "<h3>Results</h3>"
+        f"{result_table}"
+        "<h2>Interpretation boundary</h2>"
+        "<p>Results describe title, abstract, and author-keyword evidence. "
+        "Domain memberships may overlap and must not be summed. Structuring "
+        "outputs describe recurring co-occurrences rather than causal sequences.</p>"
+    )
+    return _document(title, content)
 
 
 def _format_metric(value: float | None, percent: bool = False) -> str:

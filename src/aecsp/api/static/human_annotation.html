@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Human Annotation</title>
+<link rel="stylesheet" href="/static/esd.css" />
+</head>
+<body>
+<div class="container composition-container">
+  <header class="app-header">
+    <h1>Human annotation</h1>
+    <p>Independent expert coding of the audited probability-sample overlap.</p>
+    <nav class="nav-links">
+      <a class="nav-link" href="/">Analytics Dashboard</a>
+      <a class="nav-link" href="/composition">Construct Specification</a>
+      <a class="nav-link" href="/contrasting">Construct Contrasting</a>
+      <a class="nav-link active" href="/human-annotation">Human Annotation</a>
+      <a class="nav-link" href="/topic-review">Topic Review</a>
+      <a class="nav-link" href="/knowledge-graph">Knowledge Graph</a>
+      <a class="nav-link" href="/assistant">Assistant</a>
+    </nav>
+  </header>
+
+  <section class="card">
+    <h2>Coding instructions <span class="sub" id="sampleLabel">loading</span></h2>
+    <p><strong>Evidence boundary:</strong> <span id="evidenceBoundary"></span>.</p>
+    <div class="human-protocol-grid">
+      <section>
+        <h3>Core coding rules</h3>
+        <ol class="human-instructions" id="instructions"></ol>
+      </section>
+      <section>
+        <h3>Before completing each paper</h3>
+        <ol class="human-instructions" id="completionRequirements"></ol>
+      </section>
+    </div>
+    <details class="human-protocol-details">
+      <summary>View all eight dimensions and permitted codes</summary>
+      <div id="instrumentReference" class="human-instrument-reference"></div>
+    </details>
+    <details class="human-protocol-details">
+      <summary>View the full frozen system prompt</summary>
+      <p id="fullPromptNote" class="chart-note"></p>
+      <p class="human-protocol-meta">
+        <strong>Protocol:</strong> <span id="protocolId"></span>
+      </p>
+      <pre id="fullModelPrompt" class="human-full-prompt"></pre>
+    </details>
+    <p class="chart-note">Choose your own unique annotator ID. Each ID has a separate saved record. All annotators receive the same fixed blinded paper order so partial completion retains the largest possible common-paper set. Do not share an ID between annotators.</p>
+    <div class="toolbar human-start-toolbar">
+      <label>Annotator ID
+        <input id="annotatorId" type="text" maxlength="40" placeholder="e.g. coder_01" autocomplete="off" />
+      </label>
+      <button class="btn" id="startAnnotation" type="button">Start annotation</button>
+      <button class="btn btn-outline" id="downloadOwn" type="button" disabled>Download my annotations</button>
+      <span id="annotationStatus" class="status-pill warn">enter annotator ID</span>
+    </div>
+    <div id="annotatorCollision" class="human-id-warning" hidden>
+      <strong>This annotator ID is already in use.</strong>
+      <p>Choose a different ID. If these are your own earlier annotations, confirm below to resume them.</p>
+      <label><input id="confirmResume" type="checkbox" /> I am resuming my own existing annotations.</label>
+    </div>
+  </section>
+
+  <section class="card" id="paperWorkspace" hidden>
+    <div class="human-paper-header">
+      <div>
+        <h2 id="paperTitle"></h2>
+        <p class="sub" id="paperMeta"></p>
+      </div>
+      <div class="human-progress">
+        <strong id="progressCount"></strong>
+        <div class="human-progress-track"><span id="progressBar"></span></div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn btn-outline" id="previousPaper" type="button">Previous</button>
+      <label>Paper
+        <select id="paperSelector"></select>
+      </label>
+      <button class="btn btn-outline" id="nextPaper" type="button">Next</button>
+      <span id="paperState" class="status-pill warn">draft</span>
+    </div>
+    <div class="human-source">
+      <h3>Author keywords</h3>
+      <p id="paperKeywords"></p>
+      <h3>Abstract</h3>
+      <p id="paperAbstract"></p>
+    </div>
+    <div id="dimensionForms" class="human-dimension-grid"></div>
+    <section class="human-annotation-extra">
+      <h3>Mechanism logic</h3>
+      <p class="chart-note">Required when a substantive mechanism is selected. State what AI does that changes the outcome in the paper's own terms.</p>
+      <textarea id="mechanismLogic" rows="3"></textarea>
+      <h3>Needs full text</h3>
+      <div id="needsFullText" class="human-check-grid"></div>
+      <h3>Annotator notes</h3>
+      <textarea id="annotatorNotes" rows="3"></textarea>
+    </section>
+    <div class="human-save-bar">
+      <button class="btn btn-outline" id="saveDraft" type="button">Save draft</button>
+      <button class="btn" id="submitPaper" type="button">Complete paper and continue</button>
+    </div>
+  </section>
+</div>
+
+<script>
+const api = async (path, options = {}) => {
+  const response = await fetch(path, options);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+  return body;
+};
+const el = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>"]/g, character => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;",
+}[character]));
+let instrument;
+let current;
+let annotatorId = "";
+
+async function init() {
+  instrument = await api("/api/human-annotation/instrument");
+  el("sampleLabel").textContent = `${instrument.sample_label}: ${instrument.sample_papers} papers`;
+  el("evidenceBoundary").textContent = instrument.evidence_boundary;
+  el("instructions").innerHTML = instrument.instructions.map(item => `<li>${esc(item)}</li>`).join("");
+  el("completionRequirements").innerHTML = instrument.completion_requirements
+    .map(item => `<li>${esc(item)}</li>`).join("");
+  el("instrumentReference").innerHTML = instrument.dimensions
+    .map(instrumentReferenceMarkup).join("");
+  el("fullPromptNote").textContent = instrument.full_prompt_note;
+  el("protocolId").textContent = instrument.model_protocol_label;
+  el("fullModelPrompt").textContent = instrument.full_model_prompt;
+  el("dimensionForms").innerHTML = instrument.dimensions.map(dimensionMarkup).join("");
+  el("needsFullText").innerHTML = instrument.dimensions.map(item =>
+    `<label><input type="checkbox" value="${esc(item.column)}" /> ${esc(item.label)}</label>`
+  ).join("");
+  el("annotatorId").value = localStorage.getItem("etv_human_annotator_id") || "";
+  el("annotatorId").oninput = clearAnnotatorCollision;
+  el("confirmResume").onchange = () => {
+    if (el("confirmResume").checked) {
+      el("startAnnotation").textContent = "Resume my annotations";
+    } else {
+      el("startAnnotation").textContent = "Start annotation";
+    }
+  };
+  el("startAnnotation").onclick = start;
+  el("saveDraft").onclick = () => save(false);
+  el("submitPaper").onclick = () => save(true);
+  el("paperSelector").onchange = event => loadPaper(event.target.value);
+  el("previousPaper").onclick = () => move(-1);
+  el("nextPaper").onclick = () => move(1);
+  el("downloadOwn").onclick = () => {
+    window.location.assign(`/api/human-annotation/export?annotator_id=${encodeURIComponent(annotatorId)}`);
+  };
+}
+
+function instrumentReferenceMarkup(item) {
+  return `<section class="human-reference-dimension">
+    <div class="human-dimension-title">
+      <h3>${esc(item.label)}</h3><span class="pill">${esc(item.classification)}</span>
+    </div>
+    <p><strong>Coding question:</strong> ${esc(item.question)}</p>
+    ${item.diagnosis ? `<p><strong>What it diagnoses:</strong> ${esc(item.diagnosis)}</p>` : ""}
+    <p><strong>Permitted codes:</strong> ${item.allowed_values
+      .map(value => `<span class="human-code-chip">${esc(value)}</span>`).join(" ")}</p>
+  </section>`;
+}
+
+function dimensionMarkup(item) {
+  const options = item.allowed_values.map(value =>
+    `<option value="${esc(value)}">${esc(value)}</option>`
+  ).join("");
+  return `<section class="human-dimension" data-column="${esc(item.column)}">
+    <div class="human-dimension-title">
+      <h3>${esc(item.label)}</h3><span class="pill">${esc(item.classification)}</span>
+    </div>
+    <p>${esc(item.question)}</p>
+    <label>Evidence
+      <textarea class="human-evidence" rows="3" placeholder="Short quote or close paraphrase; may be empty only when evidence type is absent"></textarea>
+    </label>
+    <div class="human-field-row">
+      <label>Evidence type
+        <select class="human-evidence-type">
+          <option value="">Select</option>
+          ${instrument?.evidence_types?.map(value => `<option value="${value}">${value}</option>`).join("") || ""}
+        </select>
+      </label>
+      <label>Code
+        <select class="human-code"><option value="">Select</option>${options}</select>
+      </label>
+      <label>Confidence
+        <input class="human-confidence" type="number" min="0" max="1" step="0.05" placeholder="0.00 to 1.00" />
+      </label>
+    </div>
+  </section>`;
+}
+
+async function start() {
+  try {
+    annotatorId = el("annotatorId").value.trim();
+    if (!annotatorId) return setStatus("Enter an annotator ID", false);
+    const progress = await api(
+      `/api/human-annotation/progress?annotator_id=${encodeURIComponent(annotatorId)}`
+    );
+    const existing = progress.annotators[0]?.started_papers || 0;
+    if (existing > 0 && !el("confirmResume").checked) {
+      el("annotatorCollision").hidden = false;
+      el("startAnnotation").textContent = "Start annotation";
+      return setStatus("Annotator ID already in use: choose another ID", false);
+    }
+    localStorage.setItem("etv_human_annotator_id", annotatorId);
+    clearAnnotatorCollision();
+    el("downloadOwn").disabled = false;
+    await loadPaper();
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+function clearAnnotatorCollision() {
+  el("annotatorCollision").hidden = true;
+  el("confirmResume").checked = false;
+  el("startAnnotation").textContent = "Start annotation";
+}
+
+async function loadPaper(paperId = "") {
+  setStatus("loading paper", false);
+  const query = new URLSearchParams({annotator_id: annotatorId});
+  if (paperId) query.set("paper_id", paperId);
+  current = await api(`/api/human-annotation/paper?${query}`);
+  el("paperWorkspace").hidden = false;
+  el("paperTitle").textContent = current.paper.Title;
+  el("paperMeta").textContent = `${current.paper["Source title"]} (${current.paper.Year})`;
+  el("paperKeywords").textContent = current.paper["Author Keywords"] || "No author keywords recorded.";
+  el("paperAbstract").textContent = current.paper.Abstract || "No abstract recorded.";
+  renderNavigation();
+  applyAnnotation(current.annotation);
+  renderProgress(current.progress);
+  el("paperState").className = `status-pill ${current.is_complete ? "ok" : "warn"}`;
+  el("paperState").textContent = current.is_complete ? "completed" : "draft";
+  setStatus(`Paper ${current.position} of ${current.total}`, true);
+  window.scrollTo({top: 0, behavior: "smooth"});
+}
+
+function renderNavigation() {
+  el("paperSelector").innerHTML = current.navigation.map(item =>
+    `<option value="${esc(item.paper_id)}" ${item.paper_id === current.paper.paper_id ? "selected" : ""}>` +
+    `Paper ${item.position}${item.complete ? " (completed)" : ""}</option>`
+  ).join("");
+  el("previousPaper").disabled = current.position <= 1;
+  el("nextPaper").disabled = current.position >= current.total;
+}
+
+function move(delta) {
+  const target = current.navigation[current.position - 1 + delta];
+  if (target) loadPaper(target.paper_id);
+}
+
+function applyAnnotation(annotation = {}) {
+  const dimensions = annotation.dimensions || {};
+  document.querySelectorAll(".human-dimension").forEach(section => {
+    const entry = dimensions[section.dataset.column] || {};
+    section.querySelector(".human-evidence").value = entry.evidence || "";
+    section.querySelector(".human-evidence-type").value = entry.evidence_type || "";
+    section.querySelector(".human-code").value = entry.code || "";
+    section.querySelector(".human-confidence").value =
+      entry.confidence === null || entry.confidence === undefined ? "" : entry.confidence;
+  });
+  el("mechanismLogic").value = annotation.ai_mechanism_logic || "";
+  const needs = new Set(annotation.needs_full_text || []);
+  el("needsFullText").querySelectorAll("input").forEach(input => {
+    input.checked = needs.has(input.value);
+  });
+  el("annotatorNotes").value = annotation.annotator_notes || "";
+}
+
+function collectAnnotation() {
+  const dimensions = {};
+  document.querySelectorAll(".human-dimension").forEach(section => {
+    const confidence = section.querySelector(".human-confidence").value;
+    dimensions[section.dataset.column] = {
+      evidence: section.querySelector(".human-evidence").value,
+      evidence_type: section.querySelector(".human-evidence-type").value,
+      code: section.querySelector(".human-code").value,
+      confidence: confidence === "" ? null : Number(confidence),
+    };
+  });
+  return {
+    dimensions,
+    ai_mechanism_logic: el("mechanismLogic").value,
+    needs_full_text: [...el("needsFullText").querySelectorAll("input:checked")].map(input => input.value),
+    annotator_notes: el("annotatorNotes").value,
+  };
+}
+
+async function save(submit) {
+  try {
+    setStatus(submit ? "validating completed paper" : "saving draft", false);
+    const result = await api("/api/human-annotation/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        annotator_id: annotatorId,
+        paper_id: current.paper.paper_id,
+        annotation: collectAnnotation(),
+        submit,
+      }),
+    });
+    renderProgress(result.progress);
+    setStatus(submit ? "paper completed" : "draft saved", true);
+    await loadPaper(submit ? "" : current.paper.paper_id);
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+function renderProgress(progress) {
+  const row = progress.annotators.find(item => item.annotator_id === annotatorId) || {
+    completed_papers: 0, target_papers: instrument.sample_papers,
+  };
+  const share = row.target_papers ? row.completed_papers / row.target_papers : 0;
+  el("progressCount").textContent = `${row.completed_papers} of ${row.target_papers} completed`;
+  el("progressBar").style.width = `${(share * 100).toFixed(2)}%`;
+}
+
+function setStatus(message, ok) {
+  el("annotationStatus").className = `status-pill ${ok ? "ok" : "warn"}`;
+  el("annotationStatus").textContent = message;
+}
+
+init().catch(error => setStatus(error.message, false));
+</script>
+</body>
+</html>
