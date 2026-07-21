@@ -1,0 +1,356 @@
+taxonomy:
+  id: scopus-asjc-with-legacy-domains-v4-draft
+  title: Scopus ASJC source classification and derived business-domain taxonomy
+  status: active_current_corpus_assignments_built
+  created_on: "2026-07-20"
+  assignment_levels:
+    - scopus_source_inherited_by_paper
+    - registered_query_membership_for_ft50_and_entrepreneurship_domains
+    - registered_journal_domain_membership_for_represented_sources
+  assignment_mode: multilabel
+  primary_domain_required: false
+  unmapped_value: Unclassified
+
+source_registry:
+  path: configs/legacy_taxonomies/domains_custom_10_fields_2025-09-08.py
+  checksum_sha256: 9c0bf3ae81c86afa0bc600072bb745b9957894ebae0fdd1cfe6484c365960237
+  object: FIELDS
+  inverse_object: JOURNAL_TO_FIELDS
+  display_object: PRETTY_FIELD_NAME
+  classifier: classify_journal
+  registered_field_count: 10
+  journal_membership_count: 339
+  unique_normalized_journal_count: 292
+  filter_helpers:
+    - source_projects/esd_platform/src/data/fields.py::attach_fields
+    - source_projects/esd_platform/src/data/fields.py::filter_by_fields
+  filter_helpers_checksum_sha256: d9921e199e01c440b361d36b05c5907c9146976289c6ff3e290747b21679a58d
+  status: historical_custom_baseline_superseded_for_asjc_assignment
+  migration_rule: >
+    Preserve this registry for provenance and comparison with the earlier
+    platform. Do not describe its hand-curated fields as official Scopus ASJC
+    assignments.
+
+historical_asjc_aligned_registry:
+  path: configs/legacy_taxonomies/domains_asjc_aligned_14_fields_2025-09-19.py
+  checksum_sha256: d66cac6c22624b7e750f39f49c38aacae26ddc22b7f8f47ef836ad57a7497d91
+  registered_field_count: 14
+  journal_membership_count: 223
+  unique_normalized_journal_count: 211
+  status: historical_asjc_informed_manual_crosswalk
+  limitation: >
+    The field names and comments were aligned with selected ASJC categories,
+    but the assignments were manually encoded by journal title and were not a
+    complete export of official source-level ASJC records.
+
+official_scopus_asjc:
+  publisher: Elsevier
+  product: Scopus
+  release: June 2026
+  path: data/external/scopus/ext_list_Jun_2026.xlsx
+  checksum_sha256: bf759453843e09b691c75ef2ba9b8a661bead678276134d248c47d56be991b9d
+  download_url: https://downloads.ctfassets.net/o78em1y1w4i4/7xtaTxNiNcWRTeZkV86eNy/710bfd3c7f7c7c9c88eeb3638ba4be43/ext_list_Jun_2026.xlsx
+  classification_unit: Scopus source
+  identifier_match: ISSN_or_EISSN
+  assignment_mode: multilabel
+  reviewed_overrides:
+    path: configs/scopus_asjc_reviewed_overrides.csv
+    checksum_sha256: cf1470e42ad375f024c3cc90d76b0c5feca70fe011c5261daedcad2fcc176055
+    rule: >
+      A unique title-only or ISSN-only candidate is never accepted
+      automatically. Every non-exact source pair must identify one official
+      Scopus source record in this reviewed table. Raw workbook ASJC values
+      remain in the crosswalk when a reviewed correction is needed.
+  inheritance_rule: >
+    Each paper inherits every ASJC code assigned to its matched Scopus source
+    in the official June 2026 source list, except for one documented source-row
+    metadata anomaly whose raw and reviewed classifications are both retained.
+  matching_priority:
+    - exact_normalized_source_title_and_issn
+    - reviewed_non_exact_source_override
+    - review_required_for_title_only_or_issn_only_suggestion
+    - unresolved
+  outputs:
+    source_crosswalk: data/processed/analysis/theory_elaboration/asjc/scopus_asjc_source_crosswalk.csv
+    paper_assignments: data/processed/analysis/theory_elaboration/asjc/paper_asjc_assignments.csv
+    paper_assignments_long: data/processed/analysis/theory_elaboration/asjc/paper_asjc_assignments_long.csv
+    manifest: data/processed/analysis/theory_elaboration/asjc/asjc_assignment_manifest.json
+  temporal_limitation: >
+    These are the official source classifications in the June 2026 release.
+    They are not historical ASJC assignments reconstructed separately for
+    every publication year.
+
+purpose:
+  platform_filtering: Preserve the journal-domain filters used by the earlier methodological platform.
+  horizontal_contrasting: Compare the same AI specification dimensions across the registered journal domains.
+  non_purpose:
+    - Treating Query 1 as a business domain.
+    - Treating query membership other than the explicitly registered Query 2, Query 3 and Query 4 domains as a business domain.
+    - Assigning domains from automatic topic labels.
+    - Reclassifying papers from their abstract when the registered filter is explicitly journal based.
+
+legacy_fields:
+  Entrepreneurship_and_Innovation:
+    display_name: Entrepreneurship & Innovation
+    registered_journals_in_legacy_source: 22
+  Environmental_and_Sustainability:
+    display_name: Environmental & Sustainability
+    registered_journals_in_legacy_source: 6
+  Ethics_and_Corporate_Social_Responsibility:
+    display_name: Ethics & CSR
+    registered_journals_in_legacy_source: 7
+  Tourism:
+    display_name: Tourism
+    registered_journals_in_legacy_source: 18
+  Information_Systems:
+    display_name: Information Systems
+    registered_journals_in_legacy_source: 36
+  Strategy_and_Management:
+    display_name: Strategy & Management
+    registered_journals_in_legacy_source: 34
+  Supply_Chain_Operations_Management:
+    display_name: Supply Chain & Operations
+    registered_journals_in_legacy_source: 33
+  Management:
+    display_name: Management
+    registered_journals_in_legacy_source: 76
+  Finance:
+    display_name: Finance
+    registered_journals_in_legacy_source: 63
+  Marketing:
+    display_name: Marketing
+    registered_journals_in_legacy_source: 44
+
+final_analytical_domains:
+  count: 13
+  domains:
+    - ft50
+    - core_entrepreneurship
+    - other_entrepreneurship
+    - innovation
+    - strategy
+    - marketing
+    - information_systems
+    - finance
+    - operations
+    - organization_studies
+    - environmental_and_sustainability
+    - ethics_and_corporate_social_responsibility
+    - tourism
+
+required_theory_contrast_coverage:
+  ft50:
+    basis: in_query_2
+    display_name: FT50
+    current_corpus_papers: 438
+  core_entrepreneurship:
+    basis: in_query_3
+    display_name: Core entrepreneurship
+    current_corpus_papers: 646
+  other_entrepreneurship:
+    basis: in_query_4
+    display_name: Additional entrepreneurship
+    current_corpus_papers: 986
+  innovation:
+    legacy_source: Technology_and_Innovation_Management
+    refinement: use_the_asjc_aligned_innovation_journal_registry
+  strategy:
+    legacy_source: Strategy_and_Management
+    refinement: retain_registered_multilabel_membership
+  marketing:
+    legacy_source: Marketing
+    refinement: none
+  information_systems:
+    legacy_source: Management_Information_Systems
+    refinement: none
+  finance:
+    legacy_source: Finance_and_Financial_Economics
+    refinement: none
+  operations:
+    legacy_source: Supply_Chain_and_Operations
+    refinement: none
+  organization_studies:
+    legacy_source: Organizational_Behavior_and_Human_Resource_Management
+    refinement: retain_registered_multilabel_membership
+  additional_registered_domains:
+    - Environmental_and_Sustainability
+    - Ethics_CSR_and_Governance
+    - Tourism_Leisure_Hospitality
+
+current_corpus_domain_construction:
+  status: complete
+  construction_rule: >
+    Use the preserved journal-domain registries as filters over source titles
+    represented in the existing corpus. No new papers are searched for or
+    added to populate a domain.
+  aliases: configs/business_domain_journal_aliases.csv
+  assignments: data/processed/analysis/theory_elaboration/domains/business_domain_assignments.csv
+  represented_sources: data/processed/analysis/theory_elaboration/domains/business_domain_source_titles.csv
+  manifest: data/processed/analysis/theory_elaboration/domains/business_domain_manifest.json
+  registered_domain_count: 10
+  combined_with_query_defined_domains: 13
+
+registered_query_domain_construction:
+  status: approved_by_user_2026-07-20
+  reason: >
+    FT50 remains a distinct analytical domain defined by registered Query 2.
+    The historical registry combines entrepreneurship and innovation, so the
+    design separately defines core entrepreneurship through Query 3 and other
+    entrepreneurship through Query 4, while retaining innovation as an
+    ASJC-derived domain.
+  domains:
+    ft50:
+      display_name: FT50
+      basis: in_query_2
+      source_scope_label: FT50 journals
+      current_corpus_papers: 438
+      current_corpus_source_titles: 37
+    core_entrepreneurship:
+      display_name: Core entrepreneurship
+      basis: in_query_3
+      source_scope_label: Leading entrepreneurship journals
+      current_corpus_papers: 646
+      current_corpus_source_titles: 15
+    other_entrepreneurship:
+      display_name: Additional entrepreneurship
+      basis: in_query_4
+      source_scope_label: Additional entrepreneurship journals
+      current_corpus_papers: 986
+      current_corpus_source_titles: 13
+  pairwise_overlap_papers:
+    ft50_and_core_entrepreneurship: 212
+    ft50_and_other_entrepreneurship: 0
+    core_and_other_entrepreneurship: 0
+  assignment_level: paper
+  interpretation: >
+    These are corpus-specific domains defined by the registered search design.
+    They are not official ASJC categories. FT50 can overlap another domain;
+    Core and Additional entrepreneurship are disjoint registered populations.
+  prohibited_basis:
+    - automatic topic label
+    - model-assigned AI specification code
+    - undocumented keyword rule
+  outputs:
+    paper_assignments: data/processed/analysis/theory_elaboration/domains/registered_query_domain_assignments.csv
+    source_title_summary: data/processed/analysis/theory_elaboration/domains/registered_query_domain_source_titles.csv
+    manifest: data/processed/analysis/theory_elaboration/domains/registered_query_domain_manifest.json
+
+normalization:
+  legacy_rule: lowercase_and_collapse_whitespace
+  punctuation_stripping: false
+  journal_aliases_required: true
+  alias_examples_requiring_audit:
+    - legacy_title: Journal of Innovation & Knowledge
+      current_title: Journal of Innovation and Knowledge
+    - legacy_title: Technology Analysis & Strategic Management
+      current_title: Technology Analysis and Strategic Management
+  rule: >
+    Preserve exact Scopus source titles in outputs. Resolve title variants
+    through an explicit, reviewed alias table; do not use fuzzy matching or
+    silently strip punctuation.
+
+assignment_rules:
+  - A journal may belong to more than one field, exactly as in the legacy registry.
+  - A paper inherits every registered field of its source journal.
+  - No arbitrary primary field is used in the horizontal contrast.
+  - Multi-label incidence uses unique papers as its denominator, so field percentages may sum above 100 percent.
+  - Query membership is reported separately except for the explicitly registered Query 2 FT50, Query 3 Core entrepreneurship and Query 4 Additional entrepreneurship domains.
+  - FT50 is a separate analytical domain and may overlap Core entrepreneurship.
+  - Unmapped titles remain Unclassified until a reviewed crosswalk revision is approved.
+  - Every alias, addition, deletion, and split decision retains its reviewer, rationale, date, and taxonomy version.
+
+current_corpus_audit:
+  audited_on: "2026-07-20"
+  primary_dataset: data/processed/analysis/primary_analysis_dataset.csv
+  papers: 22345
+  distinct_source_title_strings: 558
+  unique_normalized_source_titles: 554
+  legacy_fields: 10
+  source_title_strings_mapped: 226
+  source_title_strings_unclassified: 332
+  normalized_source_titles_mapped: 223
+  normalized_source_titles_unclassified: 331
+  papers_unclassified: 5243
+  papers_unclassified_percent: 23.46
+  papers_with_multiple_legacy_fields: 2002
+  status: baseline_only_not_final
+  implication: >
+    This section records only the coverage of the historical custom 10-field
+    taxonomy. It is retained for provenance and must not be confused with the
+    official Scopus ASJC assignment audit below.
+
+official_asjc_corpus_audit:
+  audited_on: "2026-07-20"
+  primary_dataset: data/processed/analysis/primary_analysis_dataset.csv
+  papers: 22345
+  distinct_source_title_issn_pairs: 640
+  source_pairs_matched_by_issn_and_title: 634
+  source_pairs_with_reviewed_override: 6
+  papers_matched_by_issn_and_title: 22199
+  papers_with_reviewed_override: 146
+  papers_with_asjc_assignment: 22345
+  papers_with_asjc_assignment_percent: 100.00
+  paper_asjc_links: 72734
+  distinct_asjc_codes: 111
+  unresolved_papers: 0
+  identifier_conflict_source_pairs: 1
+  status: complete_with_reviewed_matching_exceptions
+  exception_rule: >
+    The six title-only or ISSN-only suggestions were accepted only through the
+    reviewed override register. Journal of Information Technology source ID
+    12815 has an internally inconsistent June 2026 workbook row. The raw
+    workbook ASJC value 1700 is preserved as official_asjc_codes, while the
+    reviewed final codes 1408, 1710 and 3309 are recorded in asjc_codes.
+
+required_crosswalk_fields:
+  - source_title
+  - normalized_source_title
+  - matched_legacy_title
+  - legacy_fields
+  - theory_contrast_domains
+  - alias_applied
+  - assignment_status
+  - reviewer_id
+  - review_note
+  - taxonomy_id
+
+review:
+  status_values:
+    - inherited
+    - alias_confirmed
+    - added
+    - revised
+    - unresolved
+  mandatory_review_conditions:
+    - source_title_unclassified
+    - journal_alias_required
+    - innovation_split_unresolved
+    - legacy_membership_changed
+    - new_journal_added
+  double_review:
+    required_for:
+      - innovation_split
+      - legacy_membership_changed
+      - new_journal_added
+    resolution: adjudication_record
+
+artifacts:
+  migrated_registry: configs/business_domain_journals.yaml
+  journal_aliases: configs/business_domain_journal_aliases.yaml
+  journal_crosswalk: data/processed/analysis/theory_elaboration/business_domain_crosswalk.csv
+  assignment_audit: data/processed/analysis/theory_elaboration/domain_audit.csv
+  registered_query_domain_assignments: data/processed/analysis/theory_elaboration/domains/registered_query_domain_assignments.csv
+  registered_query_domain_source_titles: data/processed/analysis/theory_elaboration/domains/registered_query_domain_source_titles.csv
+  registered_query_domain_manifest: data/processed/analysis/theory_elaboration/domains/registered_query_domain_manifest.json
+  analysis_protocol: configs/theory_elaboration_analysis.yaml
+
+freeze:
+  approved_by: null
+  approved_on: null
+  source_registry_checksum_sha256: 9c0bf3ae81c86afa0bc600072bb745b9957894ebae0fdd1cfe6484c365960237
+  historical_asjc_aligned_registry_checksum_sha256: d66cac6c22624b7e750f39f49c38aacae26ddc22b7f8f47ef836ad57a7497d91
+  official_scopus_source_list_checksum_sha256: bf759453843e09b691c75ef2ba9b8a661bead678276134d248c47d56be991b9d
+  reviewed_source_overrides_checksum_sha256: cf1470e42ad375f024c3cc90d76b0c5feca70fe011c5261daedcad2fcc176055
+  migrated_registry_checksum_sha256: null
+  alias_table_checksum_sha256: null
+  crosswalk_checksum_sha256: null

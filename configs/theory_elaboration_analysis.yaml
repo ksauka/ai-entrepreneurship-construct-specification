@@ -1,0 +1,219 @@
+protocol:
+  id: domain-contrasting-v1-draft
+  title: Domain-contrasting analysis of completed construct specifications
+  status: registered_for_current_corpus_analysis
+  created_on: "2026-07-20"
+  requested_by: Minika
+  scope: domain_contrasting_only
+  approval_required: true
+
+analytical_boundary:
+  completed_input:
+    analysis: construct_specification
+    status: completed_on_full_corpus
+    action: use_existing_results_without_recoding
+    population: full_corpus
+    papers: 22345
+    dimensions: 8
+  next_analyses:
+    - construct_specification_by_entrepreneurship_population
+    - horizontal_domain_contrasting
+    - vertical_role_and_mechanism_by_level
+    - recurring_configuration_analysis
+  excluded_from_current_protocol:
+    - repeat_construct_specification_by_domain
+    - new_claim_level_coding
+    - new_full_text_coding
+    - sequence_analysis
+    - causal_path_analysis
+  interpretation_rule: >
+    Domain differences are descriptive associations in the retrieved corpus.
+    They do not establish temporal sequence, causal direction or a process
+    pathway.
+
+provenance:
+  parent_instrument:
+    display_name: System Prompt V3
+    internal_id: spec-v3
+    status: frozen_immutable
+    schema_source: src/aecsp/specification/schema.py
+    prompt_source: src/aecsp/specification/llm_coder.py
+  primary_dataset:
+    path: data/processed/analysis/primary_analysis_dataset.csv
+    expected_papers: 22345
+    mutation_policy: never_modify
+  domain_taxonomy:
+    path: configs/business_domain_taxonomy.yaml
+    required_domain_count: 13
+    required_status_for_final_analysis: approved_frozen
+    official_classification_source: data/external/scopus/ext_list_Jun_2026.xlsx
+    official_classification_system: Scopus All Science Journal Classification Codes
+    reviewed_source_overrides: configs/scopus_asjc_reviewed_overrides.csv
+    asjc_manifest: data/processed/analysis/theory_elaboration/asjc/asjc_assignment_manifest.json
+    registered_query_domain_manifest: data/processed/analysis/theory_elaboration/domains/registered_query_domain_manifest.json
+    business_domain_manifest: data/processed/analysis/theory_elaboration/domains/business_domain_manifest.json
+
+unit:
+  id: abstract_observable_paper
+  definition: One publication coded from its title, abstract and author keywords.
+  stable_key: paper_id
+  multiplicity: one_record_per_paper_per_model
+  evidence_boundary:
+    - title
+    - abstract
+    - author_keywords
+  permitted_inference: description_of_the_retrieved_corpus
+  prohibited_inference:
+    - full_text_absence
+    - claim_level_multiplicity
+    - causal_sequence
+
+domains:
+  count: 13
+  assignment_mode: multilabel
+  primary_domain: none
+  overlap_rule: retain_and_disclose
+  query_derived:
+    ft50:
+      display_name: FT50
+      filter: in_query_2 == true
+      expected_papers: 438
+    core_entrepreneurship:
+      display_name: Core entrepreneurship
+      filter: in_query_3 == true
+      expected_papers: 646
+    other_entrepreneurship:
+      display_name: Additional entrepreneurship
+      filter: in_query_4 == true
+      expected_papers: 986
+    expected_pairwise_overlaps:
+      ft50_and_core_entrepreneurship: 212
+      ft50_and_other_entrepreneurship: 0
+      core_and_other_entrepreneurship: 0
+  journal_registry_derived:
+    status: complete_for_current_corpus
+    construction_rule: >
+      Apply the preserved journal-domain registries to source titles represented
+      in the existing 22,345-paper corpus. Do not retrieve or add papers.
+    assignment_path: data/processed/analysis/theory_elaboration/domains/business_domain_assignments.csv
+    source_title_audit: data/processed/analysis/theory_elaboration/domains/business_domain_source_titles.csv
+    manifest: data/processed/analysis/theory_elaboration/domains/business_domain_manifest.json
+    domains:
+      - innovation
+      - strategy
+      - marketing
+      - information_systems
+      - finance
+      - operations
+      - organization_studies
+      - environmental_and_sustainability
+      - ethics_and_corporate_social_responsibility
+      - tourism
+  non_domain_scope:
+    query_1: Broad business and management journal retrieval scope
+
+dimensions:
+  count: 8
+  fields:
+    - ai_method_or_phenomenon
+    - ai_role_function
+    - ai_type_form
+    - ai_mechanism_analysis
+    - level_of_analysis
+    - entrepreneurial_process_stage
+    - scope_conditions
+    - definition_construct_clarity
+  mechanism_rule:
+    analysis_field: ai_mechanism_analysis
+    raw_field: ai_mechanism_raw
+    empty_logic_action: mechanism_missing
+    raw_cache_mutation: prohibited
+
+analysis_register:
+  status: ready_for_traceable_execution
+  comparison:
+    id: domain_contrasting
+    baseline: full_corpus
+    groups: all_13_domains
+    unit: abstract_observable_paper
+    dimensions: all_8_registered_dimensions
+    views:
+      full:
+        denominator: all_successfully_coded_papers_in_the_domain
+        includes_unspecified_or_missing_categories: true
+      observed:
+        denominator: papers_with_a_substantive_code_for_the_dimension_in_the_domain
+        includes_unspecified_or_missing_categories: false
+    summaries:
+      - paper_count
+      - disclosed_denominator
+      - percentage
+      - absolute_percentage_point_difference_from_full_corpus
+    decimal_places: 2
+    paper_drilldown_required: true
+    overlap_warning_required: true
+  denominator_rules:
+    one_paper_one_code_per_dimension: true
+    domain_membership: multilabel
+    domain_percentages_may_sum_above_100_percent: true
+    domain_counts_must_not_be_summed: true
+  statistical_rules:
+    primary_purpose: descriptive_comparison
+    independence_tests_across_overlapping_domains: prohibited
+    statistical_significance_as_substantive_importance: prohibited
+    rare_cells:
+      machine_readable_outputs: retain_all
+      display: show_count_and_denominator
+  narrative_rules:
+    lead_with: observed_composition_within_each_domain
+    diagnostic_layer: unspecified_and_missing_rates
+    prohibited_language:
+      - sequence
+      - pathway
+      - progression
+      - causes
+      - leads_to
+
+outputs:
+  status: current_traceable_outputs
+  required_tables:
+    - domain_dimension_full_distributions
+    - domain_dimension_observed_distributions
+    - domain_vs_full_corpus_percentage_point_contrasts
+    - domain_membership_and_overlap_audit
+  required_figures:
+    - domain_composition_small_multiples
+    - domain_contrast_heatmaps
+  required_metadata:
+    - protocol_id
+    - protocol_status
+    - dataset_path
+    - dataset_checksum
+    - domain_taxonomy_id
+    - domain_taxonomy_checksum
+    - domain_id
+    - domain_assignment_basis
+    - dimension
+    - view
+    - denominator
+    - paper_count
+    - generated_at
+    - output_status
+
+platform_parity:
+  required: true
+  source_of_truth: frozen_analysis_tables
+  javascript_recalculation_of_manuscript_statistics: prohibited
+  every_aggregate_requires:
+    - api_endpoint
+    - platform_view
+    - downloadable_source_table
+    - paper_drilldown
+    - parity_test
+  reader_access: read_only
+
+freeze:
+  approved_by: null
+  approved_on: null
+  domain_taxonomy_checksum_sha256: null
+  protocol_checksum_sha256: null
