@@ -93,10 +93,10 @@ def parse_result_line(item: dict[str, Any]) -> tuple[dict[str, Any] | None, str 
 
 def estimate_cost(
     papers: int,
-    input_tokens: float = 1444.6,
-    output_tokens: float = 1578.6,
+    input_tokens: float = 1439.23,
+    output_tokens: float = 710.87,
 ) -> float:
-    """Estimate Batch cost from the 50-paper 3.1 Pro pilot.
+    """Estimate Batch cost from the completed probability-sample run.
 
     Output includes both visible response tokens and billable thinking tokens.
     """

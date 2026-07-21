@@ -42,6 +42,7 @@ DEFAULT_TARGET = PROJECT_ROOT / "data/interim/proprietary_validation/proprietary
 CACHE_ROOT = PROJECT_ROOT / "data/interim/spec_cache"
 PROCESSED = PROJECT_ROOT / "data/processed"
 TERMINAL = {"JOB_STATE_SUCCEEDED", "JOB_STATE_FAILED", "JOB_STATE_CANCELLED", "JOB_STATE_EXPIRED"}
+MAX_TIER_1_SAFE_DIRECT_PAPERS = 2_500
 
 
 def sha256(path: Path) -> str:
@@ -64,6 +65,15 @@ def provider_fingerprint(model: str) -> str:
         "generation_config": generation_config(),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def ensure_direct_batch_size(papers: int) -> None:
+    if papers > MAX_TIER_1_SAFE_DIRECT_PAPERS:
+        raise SystemExit(
+            f"Refusing one Gemini job for {papers:,} uncached papers. Use "
+            "scripts/run_gemini_full_batch.py so Tier 1 queue safety does not "
+            "depend on the account tier."
+        )
 
 
 def load_papers(target: Path) -> list[dict[str, str]]:
@@ -93,6 +103,7 @@ def prepare(model: str, papers: list[dict[str, str]], cache_dir: Path, target: P
     batch_dir = target_batch_dir(cache_dir, target)
     batch_dir.mkdir(parents=True, exist_ok=True)
     todo = [paper for paper in papers if not (cache_dir / cache_key(paper["paper_id"])).exists()]
+    ensure_direct_batch_size(len(todo))
     input_path = batch_dir / "requests.jsonl"
     with input_path.open("w", encoding="utf-8") as handle:
         for paper in todo:
@@ -121,6 +132,33 @@ def load_state(path: Path) -> dict:
 
 def save_state(path: Path, state: dict) -> None:
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def ensure_validation_gate(cache_dir: Path, batch_dir: Path, model: str) -> bool:
+    """Reuse a passed gate only when the complete provider fingerprint matches."""
+
+    fingerprint = provider_fingerprint(model)
+    local_path = batch_dir / "live_validation_gate.json"
+    local = load_state(local_path)
+    if local.get("passed") and local.get("provider_fingerprint") == fingerprint:
+        return True
+
+    batches_root = cache_dir / "gemini_batches"
+    if not batches_root.exists():
+        return False
+    for candidate in sorted(batches_root.glob("*/live_validation_gate.json")):
+        if candidate == local_path:
+            continue
+        gate = load_state(candidate)
+        if gate.get("passed") and gate.get("provider_fingerprint") == fingerprint:
+            batch_dir.mkdir(parents=True, exist_ok=True)
+            reused = dict(gate)
+            reused["reused_at"] = datetime.now().isoformat()
+            reused["reused_from"] = str(candidate.relative_to(cache_dir))
+            local_path.write_text(json.dumps(reused, indent=2), encoding="utf-8")
+            print(f"Reused validated Gemini request gate from {candidate.parent.name}")
+            return True
+    return False
 
 
 def progress_line(label: str, completed: int, total: int, failures: int = 0) -> str:
@@ -243,9 +281,7 @@ def main() -> None:
             raise SystemExit("`run` may submit PAID work. Re-run with --yes.")
         if not state.get("job_name"):
             prepare(args.model, papers, cache_dir, target)
-            gate_path = batch_dir / "live_validation_gate.json"
-            gate = load_state(gate_path)
-            if gate.get("provider_fingerprint") != provider_fingerprint(args.model) or not gate.get("passed"):
+            if not ensure_validation_gate(cache_dir, batch_dir, args.model):
                 validate_one(client, types, args.model, papers[0], batch_dir)
             uploaded = client.files.upload(
                 file=str(batch_dir / "requests.jsonl"),
@@ -270,9 +306,7 @@ def main() -> None:
     if args.command == "submit":
         if not args.yes:
             raise SystemExit("`submit` is PAID. Re-run with --yes after reviewing preview.")
-        gate_path = batch_dir / "live_validation_gate.json"
-        gate = load_state(gate_path)
-        if not gate.get("passed") or gate.get("provider_fingerprint") != provider_fingerprint(args.model):
+        if not ensure_validation_gate(cache_dir, batch_dir, args.model):
             raise SystemExit("Run the one-paper `validate --yes` gate successfully before Batch submission.")
         if state.get("job_name"):
             raise SystemExit(f"A job is already recorded: {state['job_name']}")

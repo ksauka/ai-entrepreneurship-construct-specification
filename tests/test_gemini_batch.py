@@ -6,6 +6,7 @@ from pathlib import Path
 
 from aecsp.specification.gemini_batch import (
     custom_id_for,
+    estimate_cost,
     generation_config,
     parse_result_line,
     request_line,
@@ -75,3 +76,35 @@ def test_job_success_never_infers_paper_success_without_counts():
         state = State()
         completion_stats = None
     assert module.completion_counts(Job(), 50) == (0, 0)
+
+
+def test_direct_runner_refuses_an_unchunked_full_target():
+    module = load_script()
+    import pytest
+
+    with pytest.raises(SystemExit, match="run_gemini_full_batch.py"):
+        module.ensure_direct_batch_size(2_501)
+    module.ensure_direct_batch_size(2_500)
+
+
+def test_probability_sample_cost_calibration_is_current():
+    expected = 20_069 * (
+        1_439.23 * 1.00 + 710.87 * 6.00
+    ) / 1_000_000
+    assert estimate_cost(20_069) == expected
+
+
+def test_validation_gate_can_be_reused_only_for_same_fingerprint(tmp_path):
+    module = load_script()
+    cache = tmp_path / "cache"
+    source = cache / "gemini_batches" / "pilot" / "live_validation_gate.json"
+    source.parent.mkdir(parents=True)
+    source.write_text(json.dumps({
+        "passed": True,
+        "provider_fingerprint": module.provider_fingerprint(module.DEFAULT_MODEL),
+    }))
+    target = cache / "gemini_batches" / "full"
+    assert module.ensure_validation_gate(cache, target, module.DEFAULT_MODEL)
+    reused = json.loads((target / "live_validation_gate.json").read_text())
+    assert reused["passed"] is True
+    assert reused["reused_from"].endswith("pilot/live_validation_gate.json")
