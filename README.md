@@ -16,7 +16,7 @@ Their role is now reference and migration material. New implementation should ha
 
 ## Project Purpose
 
-ETV_V2 represents each paper as a query-aware, topic-aware, and specification-coded node in a knowledge graph. The platform should let a researcher inspect how AI is specified across journals, authors, topics, search-query subsets, VOS clusters, years, and individual papers, then identify convergence, divergence, construct contrast, and recurring specification failures. The July 2026 source searches are recorded as Query 1 = 29,294 records, Query 2 = 818 records, Query 3 = 1,097 records, and Query 4 = 1,509 records before merge and deduplication.
+ETV_V2 represents each paper as a query-aware, topic-aware, and specification-coded node in a knowledge graph. The platform lets a researcher inspect how AI is specified across journals, authors, topics, search-query subsets, business domains, years, and individual papers, then examine construct composition and contrast with traceable evidence. The July 2026 source searches are recorded as Query 1 = 29,294 records, Query 2 = 818 records, Query 3 = 1,097 records, and Query 4 = 1,509 records before merge and deduplication.
 
 Type/form uses two separate paper-level columns. `ai_method_or_phenomenon`
 identifies whether AI is the phenomenon studied, a research method, both, or
@@ -35,11 +35,10 @@ ETV_V2/
     interim/               # Deduplicated and enriched working datasets.
     processed/             # Master analytical CSVs and graph-ready exports.
     exports/vosviewer/     # VOSviewer files for full corpus and query subsets.
-  docs/                    # New architecture and platform documentation.
   scripts/                 # Thin command-line entrypoints.
   source_projects/         # Full copied source projects, kept as reference.
   src/aecsp/
-    api/                   # Future FastAPI surface borrowed from esd_platform.
+    api/                   # FastAPI routes, authentication, reports, and UI.
     analytics/             # Construct convergence, divergence, and contrast.
     corpus/                # Query import, merge, dedup, validation, provenance.
     knowledge_graph/       # New KG schema and builders.
@@ -53,6 +52,10 @@ ETV_V2/
 
 ## Pipeline
 
+Operational research documentation, execution records, manuscript material,
+and the detailed runbook are maintained locally under `docs/` and are
+deliberately excluded from Git. The root README is the only tracked document.
+
 ```text
 Stage 0     - Import Scopus exports from Query 1-4
 Stage 0.5   - Merge, deduplicate, and preserve query provenance
@@ -64,6 +67,7 @@ Stage 2A.5  - Run full multi-model specification coding for reliability
 Stage 2A    - Grid-search, review, then run BERTopic and keyphrase extraction
 Stage 2B    - Build knowledge graph for theory elaboration
 Stage 3     - Serve analytics and visualization
+Stage 4     - Classify domains and run theory-elaboration contrasts
 ```
 
 ## Core Knowledge Graph
@@ -109,7 +113,8 @@ is unavailable, the page shows a bounded dataframe seed rather than failing.
 Neo4j loading uses administrative credentials, but the web application accepts
 only separate `NEO4J_APP_USER` credentials. A genuine database-enforced reader
 role requires Neo4j Enterprise; Community Edition has no roles. Exact setup,
-load, verification, and fallback commands are in `docs/RUNBOOK.md`.
+load, verification, and fallback commands are retained in the local operational
+runbook.
 
 ## Current Contracts
 
@@ -134,13 +139,19 @@ completed the frozen proprietary validation target, probability-sample IRR is
 built, and the canonical full study dataset is
 `data/processed/analysis/primary_analysis_dataset.csv` (22,345 papers).
 
-Five-scope topic optimization and final training are complete. Stage 4 uses the
+Five-scope topic optimization and final training are complete. Topic analysis uses the
 53-topic Full Corpus model and the independently fitted 50-, 13-, 6-, and
-8-topic Query 1-4 models. The next gate is researcher interpretation of all 130
-scope-topic labels through the authenticated `/topic-review` page. Topic names
+8-topic Query 1-4 models. Official ASJC assignment, reviewed business-domain
+membership, and the Construct Specification and Construct Contrasting platform
+views are implemented. A tier-independent, sequential 11-shard Gemini
+full-corpus plan is prepared offline; no full provider batch has been
+submitted. The next release gates are full-corpus Claude/Gemini budget approval,
+final theory-elaboration tables, human
+annotation, and researcher interpretation of all 130 scope-topic labels.
+Topic names
 can be inspected, renamed, revised, and approved in the platform using their top
-terms and centroid-nearest papers. `docs/RUNBOOK.md` is the authoritative
-execution order.
+terms and centroid-nearest papers. The local operational runbook is the
+authoritative execution order.
 
 Saved labels update the Topic nodes in the existing Knowledge Graph without
 changing the stable `scope:topic_id` identity. Select the same scope in the
@@ -151,14 +162,21 @@ checksummed release for the selected scope.
 
 ## Dashboard and Supervisor Sharing
 
-Run the local dashboard through the environment-aware launcher:
+The managed user services normally start with WSL. Retrieve the current public
+Quick Tunnel URL with:
+
+```bash
+bash scripts/dashboard_url.sh 60
+```
+
+For manual local development only, run the environment-aware launcher:
 
 ```bash
 bash scripts/serve_dashboard.sh
 ```
 
 Open `http://127.0.0.1:8321`. The launcher binds to localhost by default and
-does not expose the application publicly. The standalone observed-composition
+does not expose the application publicly. The Construct Specification
 view is available at `http://127.0.0.1:8321/composition`; it recalculates every
 panel from the active dataset after applying the selected dataset scope and
 study-status filter.

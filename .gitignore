@@ -37,6 +37,7 @@ data/interim/spec_cache/
 *.doc
 *.docx
 *.xlsx
+*.pptx
 .claude/
 reports/
 
