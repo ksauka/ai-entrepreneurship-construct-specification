@@ -332,13 +332,16 @@ private destination:
 bash scripts/backup_review_host.sh /path/to/private-drive
 ```
 
-The script copies the required processed data, topic artifacts, and writable
-SQLite stores; creates an offline Git bundle; records the exact commit; generates
+The script stores the required processed data, topic artifacts, and
+transactionally consistent writable SQLite stores in a portable runtime
+archive; creates an offline Git bundle; records the exact commit; generates
 SHA-256 checksums; and encrypts the administrator/reviewer credentials and
-Cloudflare tunnel token with GPG/AES256. Use `--include-project-env` only if the
-desktop also needs the private Neo4j or provider settings from `.env`. The GPG
-passphrase must be stored separately. An encrypted bundle may be transferred
-through Google Drive; unencrypted credentials and tunnel tokens must not be.
+Cloudflare tunnel token with GPG/AES256. The archive avoids dependence on Unix
+ownership metadata when the destination is a Windows-mounted removable drive.
+Use `--include-project-env` only if the desktop also needs the private Neo4j or
+provider settings from `.env`. The GPG passphrase must be stored separately. An
+encrypted bundle may be transferred through Google Drive; unencrypted
+credentials and tunnel tokens must not be.
 
 On the Linux desktop, place the checkout at `~/projects/ETV_V2` and reproduce
 the serving environment:

@@ -39,12 +39,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-for required in SHA256SUMS CODE_COMMIT repository.bundle runtime; do
+for required in SHA256SUMS CODE_COMMIT repository.bundle; do
   if [[ ! -e "$BUNDLE_ROOT/$required" ]]; then
     echo "Bundle item is missing: $required" >&2
     exit 1
   fi
 done
+if [[ ! -f "$BUNDLE_ROOT/runtime.tar" && ! -d "$BUNDLE_ROOT/runtime" ]]; then
+  echo "Bundle item is missing: runtime.tar (or legacy runtime directory)" >&2
+  exit 1
+fi
 
 (
   cd "$BUNDLE_ROOT"
@@ -70,7 +74,14 @@ if [[ -n "$(git -C "$PROJECT_ROOT" status --porcelain)" ]]; then
   exit 1
 fi
 
-rsync -a "$BUNDLE_ROOT/runtime/" "$PROJECT_ROOT/"
+if [[ -f "$BUNDLE_ROOT/runtime.tar" ]]; then
+  tar -xf "$BUNDLE_ROOT/runtime.tar" -C "$PROJECT_ROOT"
+else
+  # Compatibility with directory-style bundles created before runtime archives
+  # were introduced. Do not copy removable-drive ownership metadata.
+  rsync -rlt --no-perms --no-owner --no-group \
+    "$BUNDLE_ROOT/runtime/" "$PROJECT_ROOT/"
+fi
 
 if [[ "$RESTORE_SECRETS" -eq 1 && -f "$BUNDLE_ROOT/host-secrets.tar.gz.gpg" ]]; then
   SECRET_STAGE="$(mktemp -d)"

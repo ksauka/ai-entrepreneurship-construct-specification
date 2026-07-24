@@ -9,8 +9,10 @@ Usage:
   bash scripts/backup_review_host.sh DESTINATION [--no-secrets] [--include-project-env]
 
 The destination may be a mounted flash drive or a private local directory.
-Runtime data are copied as ordinary files. Host credentials and the tunnel
-token are encrypted into one GPG/AES256 archive unless --no-secrets is used.
+Runtime data are stored in a portable tar archive so Windows-mounted drives do
+not need to support Unix ownership or permission metadata. Host credentials and
+the tunnel token are encrypted into one GPG/AES256 archive unless --no-secrets
+is used.
 EOF
 }
 
@@ -80,13 +82,24 @@ for relative_path in "${RUNTIME_PATHS[@]}"; do
   fi
 done
 
-mkdir -p "$BUNDLE_ROOT/runtime"
+mkdir -p "$BUNDLE_ROOT"
 git -C "$PROJECT_ROOT" bundle create "$BUNDLE_ROOT/repository.bundle" --all
 git -C "$PROJECT_ROOT" rev-parse HEAD > "$BUNDLE_ROOT/CODE_COMMIT"
 
+RUNTIME_STAGE="$(mktemp -d)"
+SECRET_STAGE=""
+cleanup() {
+  rm -rf "$RUNTIME_STAGE"
+  if [[ -n "$SECRET_STAGE" ]]; then
+    rm -rf "$SECRET_STAGE"
+  fi
+}
+trap cleanup EXIT
+mkdir -p "$RUNTIME_STAGE/runtime"
+
 (
   cd "$PROJECT_ROOT"
-  rsync -aR --info=progress2 "${RUNTIME_PATHS[@]}" "$BUNDLE_ROOT/runtime/"
+  rsync -aR --info=progress2 "${RUNTIME_PATHS[@]}" "$RUNTIME_STAGE/runtime/"
 )
 
 # Replace copied SQLite files with transactionally consistent online backups.
@@ -105,10 +118,12 @@ with sqlite3.connect(source) as source_db, sqlite3.connect(target) as target_db:
 }
 backup_sqlite \
   "$PROJECT_ROOT/data/interim/human_validation/human_annotations.sqlite3" \
-  "$BUNDLE_ROOT/runtime/data/interim/human_validation/human_annotations.sqlite3"
+  "$RUNTIME_STAGE/runtime/data/interim/human_validation/human_annotations.sqlite3"
 backup_sqlite \
   "$PROJECT_ROOT/data/interim/theory_elaboration/targeted_reading.sqlite3" \
-  "$BUNDLE_ROOT/runtime/data/interim/theory_elaboration/targeted_reading.sqlite3"
+  "$RUNTIME_STAGE/runtime/data/interim/theory_elaboration/targeted_reading.sqlite3"
+
+tar -C "$RUNTIME_STAGE/runtime" -cf "$BUNDLE_ROOT/runtime.tar" .
 
 SECRETS_INCLUDED="no"
 if [[ "$INCLUDE_SECRETS" -eq 1 ]]; then
@@ -121,7 +136,6 @@ if [[ "$INCLUDE_SECRETS" -eq 1 ]]; then
     exit 1
   fi
   SECRET_STAGE="$(mktemp -d)"
-  trap 'rm -rf "$SECRET_STAGE"' EXIT
   mkdir -p "$SECRET_STAGE/etv-dashboard"
   install -m 0600 "$AUTH_FILE" "$SECRET_STAGE/etv-dashboard/auth.env"
   install -m 0600 "$TOKEN_FILE" "$SECRET_STAGE/etv-dashboard/tunnel.token"
@@ -137,7 +151,9 @@ if [[ "$INCLUDE_SECRETS" -eq 1 ]]; then
   gpg --symmetric --cipher-algo AES256 \
     --output "$BUNDLE_ROOT/host-secrets.tar.gz.gpg" \
     "$SECRET_STAGE/host-secrets.tar.gz"
-  chmod 600 "$BUNDLE_ROOT/host-secrets.tar.gz.gpg"
+  # Windows-mounted removable drives may not implement chmod. The archive is
+  # encrypted; apply restrictive permissions where the destination supports it.
+  chmod 600 "$BUNDLE_ROOT/host-secrets.tar.gz.gpg" 2>/dev/null || true
   SECRETS_INCLUDED="encrypted"
 fi
 
