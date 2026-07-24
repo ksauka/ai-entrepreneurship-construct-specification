@@ -83,11 +83,24 @@ else
     "$BUNDLE_ROOT/runtime/" "$PROJECT_ROOT/"
 fi
 
-if [[ "$RESTORE_SECRETS" -eq 1 && -f "$BUNDLE_ROOT/host-secrets.tar.gz.gpg" ]]; then
+if [[ "$RESTORE_SECRETS" -eq 1 &&
+      ( -f "$BUNDLE_ROOT/host-secrets.tar.gz.enc" ||
+        -f "$BUNDLE_ROOT/host-secrets.tar.gz.gpg" ) ]]; then
   SECRET_STAGE="$(mktemp -d)"
   trap 'rm -rf "$SECRET_STAGE"' EXIT
-  gpg --decrypt "$BUNDLE_ROOT/host-secrets.tar.gz.gpg" |
-    tar -xzf - -C "$SECRET_STAGE"
+  if [[ -f "$BUNDLE_ROOT/host-secrets.tar.gz.enc" ]]; then
+    if ! command -v openssl >/dev/null 2>&1; then
+      echo "openssl is required to decrypt host credentials." >&2
+      exit 1
+    fi
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 250000 \
+      -in "$BUNDLE_ROOT/host-secrets.tar.gz.enc" |
+      tar -xzf - -C "$SECRET_STAGE"
+  else
+    # Backward compatibility with GPG-encrypted bundles.
+    gpg --decrypt "$BUNDLE_ROOT/host-secrets.tar.gz.gpg" |
+      tar -xzf - -C "$SECRET_STAGE"
+  fi
   mkdir -p "$HOME/.config/etv-dashboard"
   chmod 700 "$HOME/.config/etv-dashboard"
   install -m 0600 \
