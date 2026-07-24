@@ -1255,10 +1255,14 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
         response = handler()
         assert response.headers["cache-control"] == "no-store, max-age=0"
 
-    redirect = main.legacy_graph_page()
-    assert redirect.status_code == 307
-    assert redirect.headers["location"] == "/knowledge-graph"
-    assert redirect.headers["cache-control"] == "no-store, max-age=0"
+    for redirect in (
+        main.legacy_graph_page(),
+        main.graph_page(),
+        main.graph_static_page(),
+    ):
+        assert redirect.status_code == 307
+        assert redirect.headers["location"] == "/"
+        assert redirect.headers["cache-control"] == "no-store, max-age=0"
 
     targeted_redirect = main.targeted_reading_page()
     assert targeted_redirect.status_code == 307
@@ -1267,7 +1271,6 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
 
     for filename in (
         "index.html",
-        "knowledge_graph.html",
         "assistant.html",
         "observed_composition.html",
         "construct_contrasting.html",
@@ -1276,7 +1279,7 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
         html = (main.STATIC_DIR / filename).read_text(encoding="utf-8")
         assert 'href="/composition"' in html
         assert 'href="/topic-review"' in html
-        assert 'href="/knowledge-graph"' in html
+        assert 'href="/knowledge-graph"' not in html
         assert 'href="/contrasting"' in html
         assert 'src="/static/citation.js?v=scopus-first-20260716"' in html
         assert "Construct Specification" in html

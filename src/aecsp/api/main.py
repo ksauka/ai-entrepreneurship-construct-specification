@@ -2885,17 +2885,34 @@ def index() -> FileResponse:
 
 @app.get("/graph")
 def legacy_graph_page() -> RedirectResponse:
+    """Keep the unfinished Knowledge Graph outside the active review workflow."""
+
     return RedirectResponse(
-        "/knowledge-graph",
+        "/",
         status_code=307,
         headers=HTML_NO_CACHE_HEADERS,
     )
 
 
 @app.get("/knowledge-graph")
-def graph_page() -> FileResponse:
-    return FileResponse(
-        STATIC_DIR / "knowledge_graph.html", headers=HTML_NO_CACHE_HEADERS
+def graph_page() -> RedirectResponse:
+    """Retain the implementation while hiding its unfinished public workspace."""
+
+    return RedirectResponse(
+        "/",
+        status_code=307,
+        headers=HTML_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/static/knowledge_graph.html", include_in_schema=False)
+def graph_static_page() -> RedirectResponse:
+    """Prevent bypassing the hidden workspace through its static HTML path."""
+
+    return RedirectResponse(
+        "/",
+        status_code=307,
+        headers=HTML_NO_CACHE_HEADERS,
     )
 
 

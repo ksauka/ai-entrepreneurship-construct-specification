@@ -34,6 +34,7 @@ data/interim/spec_cache/
 *.md
 !/README.md
 !docs/DESKTOP_FAILOVER_SETUP.md
+!docs/PIPELINE.md
 *.txt
 !deploy/review-host-requirements.txt
 *.doc

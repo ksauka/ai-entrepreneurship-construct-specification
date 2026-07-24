@@ -24,14 +24,9 @@ The verified bundle is:
 ETV_DESKTOP_BACKUP/etv-review-host-20260724T181710Z
 ```
 
-It records:
-
-```text
-Branch: stage-2a
-Commit: a4e70c418a97fe3293f11f89e85a29215af01c74
-Source host: kudzy
-Secrets: encrypted
-```
+`BUNDLE_INFO` and `CODE_COMMIT` inside the bundle record the exact branch,
+commit, source host, and encryption state. Always verify against those files
+rather than copying a commit hash from an earlier version of this guide.
 
 Keep the encryption passphrase separate from the flash drive.
 
@@ -103,13 +98,14 @@ git clone -b stage-2a \
   ~/projects/ETV_V2
 
 cd ~/projects/ETV_V2
-git rev-parse HEAD
-```
 
-The commit must be:
+EXPECTED_COMMIT="$(tr -d '[:space:]' < "$BUNDLE/CODE_COMMIT")"
+CURRENT_COMMIT="$(git rev-parse HEAD)"
 
-```text
-a4e70c418a97fe3293f11f89e85a29215af01c74
+printf 'Bundle commit:  %s\n' "$EXPECTED_COMMIT"
+printf 'Desktop commit: %s\n' "$CURRENT_COMMIT"
+
+test "$CURRENT_COMMIT" = "$EXPECTED_COMMIT"
 ```
 
 If `~/projects/ETV_V2` already exists, stop and inspect that checkout instead of
