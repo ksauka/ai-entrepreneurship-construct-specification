@@ -260,6 +260,35 @@ def _clamp(value: Any, low: float, high: float) -> float | None:
     return min(high, max(low, number))
 
 
+def sanitize_lone_surrogates(value: Any) -> Any:
+    """Replace invalid standalone UTF-16 surrogate code points recursively.
+
+    Local model output can occasionally contain an escaped lone surrogate.
+    Python's JSON parser preserves it in memory, but UTF-8 CSV and JSON
+    writers cannot encode it. Replacing only those invalid code points with
+    the Unicode replacement character preserves every valid character and
+    keeps a successful coding record usable.
+    """
+
+    if isinstance(value, str):
+        return "".join(
+            "\N{REPLACEMENT CHARACTER}"
+            if 0xD800 <= ord(character) <= 0xDFFF
+            else character
+            for character in value
+        )
+    if isinstance(value, dict):
+        return {
+            key: sanitize_lone_surrogates(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [sanitize_lone_surrogates(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(sanitize_lone_surrogates(item) for item in value)
+    return value
+
+
 def flatten_profile(raw: dict[str, Any]) -> dict[str, Any]:
     """Nested response -> flat cache/CSV record with predictable columns.
 
@@ -421,7 +450,9 @@ def code_paper(
         raise RuntimeError(
             f"Structured response exceeded {max_output_tokens} output tokens"
         )
-    coded = flatten_profile(json.loads(completion.choices[0].message.content))
+    coded = sanitize_lone_surrogates(
+        flatten_profile(json.loads(completion.choices[0].message.content))
+    )
     coded["paper_id"] = paper["paper_id"]
     coded["coding_model"] = model
     # Actual token usage per paper: lets the reproducibility appendix report

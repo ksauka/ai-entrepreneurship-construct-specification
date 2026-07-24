@@ -48,8 +48,7 @@ def _paper_link(row: dict) -> str | None:
 def build_scope_report(service, scope_id: str) -> str:
     """Return a full HTML document reporting on one dataset scope."""
 
-    scope = SCOPE_BY_ID.get(scope_id)
-    scope_label = scope.label if scope else scope_id
+    scope_label = service.scope_label(scope_id)
     overview = service.scope_overview(scope_id)
     n = overview["paper_count"]
 
@@ -191,7 +190,10 @@ def build_composition_report(
             ),
             None,
         )
-        return _format_metric(pair[metric] if pair else None, percent=percent)
+        value = pair[metric] if pair else None
+        if not percent and "alpha" in metric:
+            return _format_alpha(value)
+        return _format_metric(value, percent=percent)
 
     def matrix_rows(metric: str, percent: bool) -> str:
         return "".join(
@@ -209,33 +211,55 @@ def build_composition_report(
         f"{html.escape(pair['right_label'])}</td>"
         f"<td>{pair['intersection_papers']:,}</td>"
         f"<td>{html.escape(str(row['label']))}</td>"
-        f"<td>{html.escape(str(row['classification']))}</td>"
+        f"<td>{html.escape(str(row['classification']))} dimension</td>"
         f"<td>{row['comparable_papers']:,}</td>"
         f"<td>{_format_metric(row['percent_agreement'], percent=True)}</td>"
-        f"<td>{_format_metric(row['krippendorff_alpha'])}</td></tr>"
+        f"<td>{_format_alpha(row['krippendorff_alpha'])}</td>"
+        f"<td>{_format_metric(row['observability_percent_agreement'], percent=True)}</td>"
+        f"<td>{_format_alpha(row['observability_krippendorff_alpha'])}</td>"
+        f"<td>{row['jointly_observed_papers']:,}</td>"
+        f"<td>{_format_metric(row['observed_category_percent_agreement'], percent=True)}</td>"
+        f"<td>{_format_alpha(row['observed_category_krippendorff_alpha'])}</td></tr>"
         for pair in irr["pairs"]
         for row in pair["dimensions"]
     )
     body += (
         "<h2>Model inter-rater reliability</h2>"
-        f"<p>All {len(irr['pairs']):,} available model pairs are compared on their "
-        "exact common-paper intersections. IRR uses the selected dataset scope but is not restricted "
+        f"<p>All {len(irr['pairs']):,} available model pairs are compared on one "
+        f"balanced intersection of {irr['balanced_common_papers']:,} papers shared by every "
+        f"displayed model within the {html.escape(str(irr.get('reference_label') or 'reference-model'))} "
+        f"successful-paper cohort (n = {irr['reference_cohort_papers']:,}). IRR uses the selected dataset scope but is not restricted "
         "by the study-status filter because study status is itself a rated dimension.</p>"
         "<h3>Mean exact agreement across six dimensions</h3>"
         f"<table><tr><th>Model</th>{matrix_head}</tr>"
         f"{matrix_rows('mean_percent_agreement', True)}</table>"
-        "<h3>Mean nominal Krippendorff alpha across six dimensions</h3>"
+        "<h3>Mean pairwise nominal Krippendorff’s α across six dimensions</h3>"
         f"<table><tr><th>Model</th>{matrix_head}</tr>"
         f"{matrix_rows('mean_krippendorff_alpha', False)}</table>"
-        "<p>The matrix means are orientation summaries across the six validated "
-        "core dimensions. The table reports all eight displayed dimensions; "
-        "process stage and definition clarity are marked exploratory.</p>"
-        "<table><tr><th>Model pair</th><th>Common papers</th><th>Dimension</th><th>Use</th>"
-        "<th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff alpha</th></tr>"
+        "<p>The matrix means are orientation summaries across the six core dimensions: "
+        "study status, technical AI type, AI role, mechanism, level of analysis, and scope conditions. "
+        "The table reports all eight displayed dimensions. Process stage and definition clarity are "
+        "marked exploratory for different empirical reasons. Process-stage models disagree primarily about "
+        "whether a stage is observable; definition clarity remains weak both at detecting a definitional "
+        "signal and at classifying its form. They remain available as dimension-level results but are not "
+        "included in the heatmap averages. Definition clarity records only the signal observable in the "
+        "title, abstract, or author keywords and is not a verdict on full-paper quality.</p>"
+        "<p><strong>Agreement layers:</strong> All-category agreement retains missing or unspecified "
+        "values as categories. Evidence-presence agreement asks whether both models find substantive "
+        "evidence. Category agreement where both found evidence then compares their substantive "
+        "category choices within that common-evidence subset. Every α coefficient below is pairwise "
+        "nominal Krippendorff’s α.</p>"
+        "<table><tr><th>Model pair</th><th>Balanced papers</th><th>Dimension</th><th>Analytical status</th>"
+        "<th>All balanced papers</th><th>All-category exact agreement</th>"
+        "<th>All-category pairwise nominal Krippendorff’s α</th>"
+        "<th>Evidence-presence exact agreement</th>"
+        "<th>Evidence-presence pairwise nominal Krippendorff’s α</th>"
+        "<th>Both found evidence</th><th>Category exact agreement where both found evidence</th>"
+        "<th>Category pairwise nominal Krippendorff’s α where both found evidence</th></tr>"
         f"{irr_rows}</table>"
         "<h2>Interpretation boundary</h2>"
         "<p>Model agreement measures consistency, not accuracy. Exact agreement "
-        "must be interpreted together with nominal Krippendorff alpha because "
+        "must be interpreted together with nominal Krippendorff α because "
         "dominant categories can produce high raw agreement. Human coding remains "
         "the accuracy anchor.</p>"
     )
@@ -290,6 +314,17 @@ def _format_metric(value: float | None, percent: bool = False) -> str:
     if value is None:
         return "Not estimable"
     return f"{value * 100:.2f}%" if percent else f"{value:.2f}"
+
+
+def _format_alpha(value: float | None) -> str:
+    """Format a bounded coefficient without a leading zero (APA style)."""
+
+    if value is None:
+        return "Not estimable"
+    text = f"{value:.2f}"
+    if text.startswith("-0"):
+        return f"-{text[2:]}"
+    return text[1:] if text.startswith("0") else text
 
 
 def _intro(scope_label: str, n: int) -> str:

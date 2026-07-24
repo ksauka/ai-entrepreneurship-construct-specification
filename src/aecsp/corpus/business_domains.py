@@ -14,7 +14,7 @@ REGISTERED_QUERY_DOMAIN_RULES: tuple[dict[str, str], ...] = (
     },
     {
         "domain_id": "core_entrepreneurship",
-        "domain_label": "Core entrepreneurship",
+        "domain_label": "Leading entrepreneurship journals",
         "query_id": "query_3",
         "flag_column": "in_query_3",
     },
@@ -92,7 +92,7 @@ def build_registered_query_domain_assignments(
 ) -> pd.DataFrame:
     """Build FT50 and the two registered entrepreneurship domains.
 
-    FT50 can overlap either entrepreneurship domain. Core and other
+    FT50 can overlap either entrepreneurship domain. Leading and Additional
     entrepreneurship must remain disjoint because Queries 3 and 4 define two
     separate registered journal populations.
     """

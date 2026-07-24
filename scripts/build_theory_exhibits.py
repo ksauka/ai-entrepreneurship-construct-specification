@@ -38,15 +38,24 @@ def role_by_domain_with_ent(d):
     merged = d.merge(dom, on="paper_id", how="inner")
     frames = [merged[["paper_id", "ai_role_function", "domain_label"]]]
     q2, q3, q4 = _truthy(d["in_query_2"]), _truthy(d["in_query_3"]), _truthy(d["in_query_4"])
-    for mask, label in [(q3, "Core entrepr."), (q4, "Other entrepr."),
-                        (q3 | q4, "Combined entrepr."), (q2, "FT50")]:
+    for mask, label in [
+        (q3, "Leading entrepreneurship journals"),
+        (q4, "Additional entrepreneurship"),
+        (q3 | q4, "Combined entrepreneurship"),
+        (q2, "FT50 restriction"),
+    ]:
         sub = d[mask][["paper_id", "ai_role_function"]].copy()
         sub["domain_label"] = label
         frames.append(sub)
     allrows = pd.concat(frames, ignore_index=True)
     allrows = allrows[~allrows["ai_role_function"].str.strip().isin(ROLE_EXCLUDE)]
     ct = pd.crosstab(allrows["ai_role_function"].str.strip(), allrows["domain_label"])
-    ent_cols = ["Core entrepr.", "Other entrepr.", "Combined entrepr.", "FT50"]
+    ent_cols = [
+        "Leading entrepreneurship journals",
+        "Additional entrepreneurship",
+        "Combined entrepreneurship",
+        "FT50 restriction",
+    ]
     biz = [c for c in ct.columns if c not in ent_cols]
     biz = ct[biz].sum().sort_values(ascending=False).index.tolist()
     ct = ct.reindex(columns=biz + [c for c in ent_cols if c in ct.columns])
@@ -67,7 +76,10 @@ def role_by_domain_with_ent(d):
             if not np.isnan(v):
                 ax.text(j, i, f"{v:.0f}", ha="center", va="center",
                         color="white" if v > np.nanmax(data) * 0.6 else "black", fontsize=8)
-    ax.set_title("Horizontal contrast: AI role composition by domain, entrepreneurship at right (column %)", fontsize=10)
+    ax.set_title(
+        "Horizontal contrast: AI role composition by domain, with all entrepreneurship populations retained at right (column %)",
+        fontsize=10,
+    )
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="Share within domain (%)")
     fig.tight_layout(); fig.savefig(FIG / "horizontal_role_by_domain_with_ent.png", bbox_inches="tight"); plt.close(fig)
     print("wrote horizontal_role_by_domain_with_ent.png")
@@ -78,8 +90,8 @@ def framework_figure():
         ("Construct specification", "What does each study mean by AI?"),
         ("Horizontal contrasting", "Does that meaning change across business domains?"),
         ("Vertical contrasting", "Does it change across levels of analysis?"),
-        ("Structuring", "Which role-mechanism-level-scope combinations recur?"),
-        ("Configurational identity", "The theoretical identity of AI is in the configuration, not the label"),
+        ("Structuring", "Which role-mechanism-level-scope relations recur?"),
+        ("Configurational identity", "Theoretical identity lies in aligned dimensions; complete configurations are rare"),
         ("Entrepreneurship insight", "As AI expands prediction and generation, the bottleneck moves to evaluation and commitment"),
     ]
     fig, ax = plt.subplots(figsize=(8.5, 10))

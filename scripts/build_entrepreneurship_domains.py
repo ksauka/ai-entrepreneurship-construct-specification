@@ -83,7 +83,7 @@ def main() -> None:
         },
         "domains": {
             "core_entrepreneurship": {
-                "display_name": "Core entrepreneurship",
+                "display_name": "Leading entrepreneurship journals",
                 "basis": "in_query_3",
                 "papers": counts["core_entrepreneurship"],
                 "source_title_strings": int(
@@ -123,7 +123,7 @@ def main() -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(
         "Built entrepreneurship domains: "
-        f"Core {counts['core_entrepreneurship']:,}; "
+        f"Leading entrepreneurship journals {counts['core_entrepreneurship']:,}; "
         f"Other {counts['other_entrepreneurship']:,}; overlap 0"
     )
     print(f"Assignments: {assignments_path}")

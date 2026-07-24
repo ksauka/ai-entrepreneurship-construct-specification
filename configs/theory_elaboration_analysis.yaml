@@ -69,7 +69,7 @@ unit:
     - causal_sequence
 
 domains:
-  count: 13
+  count: 12
   assignment_mode: multilabel
   primary_domain: none
   overlap_rule: retain_and_disclose
@@ -79,7 +79,7 @@ domains:
       filter: in_query_2 == true
       expected_papers: 438
     core_entrepreneurship:
-      display_name: Core entrepreneurship
+      display_name: Leading entrepreneurship journals
       filter: in_query_3 == true
       expected_papers: 646
     other_entrepreneurship:
@@ -93,8 +93,11 @@ domains:
   journal_registry_derived:
     status: complete_for_current_corpus
     construction_rule: >
-      Apply the preserved journal-domain registries to source titles represented
-      in the existing 22,345-paper corpus. Do not retrieve or add papers.
+      Apply the explicit ASJC-code-to-domain aggregation to the completed
+      official Scopus source classifications for papers in the existing
+      22,345-paper corpus. Do not retrieve or add papers. The primary
+      horizontal domains use official ASJC codes only.
+    aggregation_config: configs/asjc_business_domain_aggregation.yaml
     assignment_path: data/processed/analysis/theory_elaboration/domains/business_domain_assignments.csv
     source_title_audit: data/processed/analysis/theory_elaboration/domains/business_domain_source_titles.csv
     manifest: data/processed/analysis/theory_elaboration/domains/business_domain_manifest.json
@@ -107,7 +110,6 @@ domains:
       - operations
       - organization_studies
       - environmental_and_sustainability
-      - ethics_and_corporate_social_responsibility
       - tourism
   non_domain_scope:
     query_1: Broad business and management journal retrieval scope
@@ -157,6 +159,8 @@ analysis_register:
     domain_membership: multilabel
     domain_percentages_may_sum_above_100_percent: true
     domain_counts_must_not_be_summed: true
+    full_corpus_baseline_includes_domain_residual: true
+    residual_papers_are_officially_asjc_classified: true
   statistical_rules:
     primary_purpose: descriptive_comparison
     independence_tests_across_overlapping_domains: prohibited

@@ -1,0 +1,33 @@
+{
+  "comparison_id": "claude-successful-paper-cohort-2026-07-22",
+  "reference_model": "claude-sonnet-5",
+  "models": [
+    "gpt-5.4-mini-2026-03-17",
+    "gpt-4.1-nano-2025-04-14",
+    "claude-sonnet-5",
+    "gemini-3.1-pro-preview"
+  ],
+  "supplementary_irr_models": [
+    {
+      "model": "llama3.2",
+      "minimum_coded_papers": 21930
+    }
+  ],
+  "cross_model_agreement_models": [
+    "gpt-5.4-mini-2026-03-17",
+    "gpt-4.1-nano-2025-04-14",
+    "claude-sonnet-5",
+    "gemini-3.1-pro-preview",
+    "llama3.2"
+  ],
+  "preferred_agreement_models": [
+    "gpt-5.4-mini-2026-03-17",
+    "claude-sonnet-5",
+    "gemini-3.1-pro-preview"
+  ],
+  "preferred_agreement_label": "Mini + Claude + Gemini sweet spot",
+  "cohort_rule": "Paper IDs successfully coded by the reference model",
+  "irr_rule": "One balanced paper-ID intersection shared by every displayed model",
+  "supplementary_irr_rule": "Llama 3.2 enters the displayed IRR cohort only when its usable analytical export contains at least 21,930 unique corpus papers",
+  "cross_model_agreement_rule": "Paper-level agreement uses every available assignment from Mini, Nano, Claude, Gemini, and Llama; missing Llama papers remain explicitly unavailable rather than being treated as agreement or disagreement"
+}

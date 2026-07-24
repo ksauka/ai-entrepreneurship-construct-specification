@@ -4,14 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Construct Contrasting</title>
-<link rel="stylesheet" href="/static/esd.css">
+<link rel="stylesheet" href="/static/esd.css?v=publication-counts-20260724">
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
-<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
+<script src="/static/paper_inspection.js?v=reference-model-20260724"></script>
+<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
 <div class="container contrasting-container">
   <header class="app-header">
-    <h1>Construct contrasting</h1>
+    <div class="platform-name">AI-Entrepreneurship Construct Specification Platform</div>
     <p>Inspect how AI specification changes across entrepreneurship populations, business domains, analytical levels, and recurring configurations.</p>
     <nav class="nav-links">
       <a class="nav-link" href="/">Analytics Dashboard</a>
@@ -56,7 +57,7 @@
     <div class="contrasting-context-strip" aria-label="Current analysis context">
       <span><strong id="analysisN">0</strong> <span id="analysisNLabel">Baseline papers</span></span>
       <span><strong id="availableGroups">0</strong> groups available</span>
-      <span><strong id="selectedAnalysisScope">Full corpus</strong> analysis population</span>
+      <span>Current analysis dataset: <strong id="selectedAnalysisScope">Full corpus</strong></span>
       <span><strong id="selectedView">Observed</strong> evidence view</span>
       <span><strong id="selectedModel">-</strong> coding model</span>
     </div>
@@ -102,6 +103,8 @@ let structuringPair = params.get("pair") || "ai_role__mechanism";
 let structuringMetric = params.get("structuring_metric") || "share_within_column";
 let minSupport = Math.max(1, Number.parseInt(params.get("min_support"), 10) || 10);
 let evidenceLimit = Number.parseInt(params.get("evidence_limit"), 10) || 100;
+let evidenceMinimumAgreement = 1;
+let evidencePreferredOnly = false;
 const EVIDENCE_LIMITS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 50000];
 const FISHER_AGUINIS_URL = "https://doi.org/10.1177/1094428116689707";
 let metadata = null;
@@ -209,8 +212,8 @@ function renderAnalysisControls() {
         <option value="ft50">FT50 papers only (FT50 baseline)</option>
       </select></label>
       <label>Entrepreneurship rows <select id="entrepreneurshipPopulationView">
-        <option value="all">Core, Additional, and Combined</option>
-        <option value="core">Core entrepreneurship only</option>
+        <option value="all">Leading, Additional, and Combined</option>
+        <option value="core">Leading entrepreneurship journals only</option>
         <option value="other">Additional entrepreneurship only</option>
         <option value="combined">Combined entrepreneurship only</option>
       </select></label>`;
@@ -388,12 +391,18 @@ function renderHorizontal(data) {
     values: Object.fromEntries(group.categories.map(item => [item.raw_value, item])),
   }));
   const controlFilters = data.control ? {[data.control.column]: data.control.value} : {};
+  const coverage = data.baseline_domain_coverage || {};
+  const residualNote = data.journal_scope === "ft50" ? "" :
+    ` Of the ${Number(coverage.baseline_papers || data.baseline.denominator).toLocaleString()} papers in this baseline, ` +
+    `${Number(coverage.outside_selected_business_domains || 0).toLocaleString()} ` +
+    `(${Number(coverage.outside_selected_business_domains_percent || 0).toFixed(2)}%) fall outside the ${Number(coverage.business_domain_count || 0).toLocaleString()} selected business-domain rows. ` +
+    `They retain official Scopus ASJC classifications and remain in the baseline.`;
   el("analysisN").textContent = data.baseline.denominator.toLocaleString();
   el("analysisNLabel").textContent = `${data.baseline_label} baseline papers`;
   el("availableGroups").textContent = String(rows.length);
   el("analysisBody").innerHTML = `<section class="card contrasting-matrix-card">
     <h2>${esc(data.dimension_label)} across domains${data.journal_scope === "ft50" ? " (FT50-only replication)" : ""}<button class="info-button" id="domainInfoButton" type="button" aria-label="Explain domain definitions" title="Explain domain definitions">i</button></h2>
-    <p class="chart-note"><strong>Comparison baseline:</strong> ${esc(data.baseline_label)}. ${esc(data.comparison_definition)} ${esc(metricLabel)}. Groups with no eligible papers remain visible as not available. Domain memberships can overlap, so rows must not be summed.</p>
+    <p class="chart-note"><strong>Comparison baseline:</strong> ${esc(data.baseline_label)}. ${esc(data.comparison_definition)}${esc(residualNote)} ${esc(metricLabel)}. Groups with no eligible papers remain visible as not available. Domain memberships can overlap, so rows must not be summed.</p>
     ${heatmapTable(rows, categories, metric, context => ({
       title: `${context.row.label}: ${context.category.value}`,
       domain: context.row.id,
@@ -514,7 +523,7 @@ function showAnalysisScopeInfo() {
       <h3>Horizontal contrasting</h3>
       <p><strong>Definition:</strong> comparison across contexts while the analytical basis remains broadly comparable. It tests which meanings generalize and which vary when a theoretical construct travels to another context (${fisherAguinisLink("Fisher and Aguinis, 2017, pp. 444-445")}).</p>
       <p><strong>Implementation here:</strong> the selected specification dimension is compared across registered business domains. The optional comparison-control dimension applies the same category restriction to the corpus baseline, every domain row, and the entrepreneurship boundary comparison. FT50 repeats the domain comparison within a selective-journal corpus.</p>
-      <p><strong>Within entrepreneurship:</strong> Core and Additional entrepreneurship are the journal-set comparison. Combined is their union benchmark, not another independent domain. This comparison is nested under Horizontal contrasting because it tests whether patterns are concentrated in core journals or extend through the broader entrepreneurship literature.</p>
+      <p><strong>Within entrepreneurship:</strong> Leading and Additional entrepreneurship journals are the journal-set comparison. Combined is their union benchmark, not another independent domain. This comparison is nested under Horizontal contrasting because it tests whether patterns are concentrated in the leading journals or extend through the broader entrepreneurship literature.</p>
     </section>
     <section class="contrast-interpretation">
       <h3>Vertical contrasting</h3>
@@ -543,6 +552,13 @@ function showDomainInfo() {
     const registry = domain.registry_field
       ? `<p><strong>Registry:</strong> ${esc(domain.registry_field.replaceAll("_", " "))}</p>`
       : "";
+    const codes = Object.entries(domain.asjc_codes || {});
+    const asjc = codes.length
+      ? `<p><strong>Official Scopus ASJC codes:</strong> ${codes.map(([code, label]) => `${esc(code)} (${esc(label)})`).join("; ")}</p>`
+      : "";
+    const rationale = domain.rationale
+      ? `<p><strong>Aggregation rationale:</strong> ${esc(domain.rationale)}</p>`
+      : "";
     const sources = (domain.source_titles || []).map(source =>
       `<tr><td>${esc(source.title)}</td><td>${Number(source.papers).toLocaleString()}</td></tr>`
     ).join("");
@@ -551,6 +567,8 @@ function showDomainInfo() {
       <div class="domain-definition-body">
         <p>${esc(domain.definition)}</p>
         <p><strong>Assignment type:</strong> ${esc(domain.assignment_type)}</p>
+        ${asjc}
+        ${rationale}
         ${registry}
         <div class="domain-source-table"><table><thead><tr><th>Represented journal</th><th>Papers</th></tr></thead><tbody>${sources}</tbody></table></div>
       </div>
@@ -564,7 +582,8 @@ function showDomainInfo() {
       <p>${esc(method.classification || "")}</p>
       <p>${esc(method.overlap || "")}</p>
       <p>${esc(method.unclassified || "")}</p>
-      <p><strong>Combined entrepreneurship</strong> is the union of Core and Additional entrepreneurship. It is an analytical population, not a fourteenth domain.</p>
+      <p>${esc(method.baseline || "")}</p>
+      <p><strong>Combined entrepreneurship</strong> is the union of Leading and Additional entrepreneurship journals. It is an analytical population, not a fourteenth domain.</p>
     </section>
     <h3>Registered domains and represented journals</h3>
     ${domainCards}`;
@@ -685,7 +704,7 @@ function heatmapTable(rows, categories, metric, contextFactory, diverging = fals
     const value = Number(item?.[metric] || 0);
     const index = registerCell(contextFactory({row, category, item}));
     const intensity = Math.min(0.88, 0.12 + Math.abs(value) / maximum * 0.68);
-    const colour = diverging && value < 0 ? `rgba(231,76,60,${intensity})` : `rgba(52,152,219,${intensity})`;
+    const colour = diverging && value < 0 ? `rgba(156,79,64,${intensity})` : `rgba(47,111,109,${intensity})`;
     const label = metric === "papers" ? Number(value).toLocaleString() : metric === "percentage_point_difference" ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}` : `${(value * 100).toFixed(2)}%`;
     return `<td><button class="heatmap-cell contrast-click" data-context="${index}" style="background:${colour}" title="${esc(label)}; ${Number(item?.papers || 0).toLocaleString()} papers">${esc(label)}</button></td>`;
   }).join("")}</tr>`).join("");
@@ -715,6 +734,8 @@ async function showEvidence(context) {
     study_status: effectiveStudyStatus(),
     filters: JSON.stringify(evidenceFilters),
     limit: String(evidenceLimit),
+    minimum_agreement: String(evidenceMinimumAgreement),
+    preferred_only: String(evidencePreferredOnly),
   });
   if (context.population) query.set("population", context.population);
   if (context.domain) query.set("domain", context.domain);
@@ -722,13 +743,28 @@ async function showEvidence(context) {
   el("panelBody").innerHTML = `<h2>${esc(context.title)}</h2><p class="muted">Loading evidence papers...</p>`;
   const result = await api(`/api/contrasting/evidence?${query}`);
   const options = EVIDENCE_LIMITS.map(limit => `<option value="${limit}" ${limit === evidenceLimit ? "selected" : ""}>${limit === 50000 ? "All" : limit.toLocaleString()}</option>`).join("");
+  const numericAgreementOptions = result.models.map((_model, index) => index + 1)
+    .filter(number => number >= 2)
+    .map(number => `<option value="${number}" ${!evidencePreferredOnly && number === evidenceMinimumAgreement ? "selected" : ""}>At least ${number} models agree</option>`).join("");
+  const agreementOptions =
+    `<option value="1" ${!evidencePreferredOnly && evidenceMinimumAgreement === 1 ? "selected" : ""}>All supporting papers</option>` +
+    `<option value="preferred" ${evidencePreferredOnly ? "selected" : ""}>${esc(result.preferred_agreement_label)}</option>` +
+    numericAgreementOptions;
   el("panelBody").innerHTML = `<h2>${esc(context.title)}</h2>
     ${contrastInterpretation(context)}
     <h3 class="contrast-evidence-heading">Supporting papers</h3>
-    <p class="chart-note">Showing ${result.returned_papers.toLocaleString()} of ${result.total_papers.toLocaleString()} papers in this exact cell.</p>
-    <div class="evidence-controls"><label>Papers displayed</label><select id="contrastEvidenceLimit">${options}</select></div>
+    <p class="chart-note"><strong>Cross-model agreement:</strong> ${result.agreement_papers.toLocaleString()} of ${result.supporting_papers.toLocaleString()} papers have this exact pattern from at least two models.</p>
+    <p class="chart-note"><strong>${esc(result.preferred_agreement_label)}:</strong> ${result.preferred_agreement_papers.toLocaleString()} papers.</p>
+    <p class="chart-note">Showing ${result.returned_papers.toLocaleString()} of ${result.filtered_agreement_papers.toLocaleString()} papers meeting the selected agreement threshold.</p>
+    <div class="evidence-controls"><label>Papers displayed</label><select id="contrastEvidenceLimit">${options}</select>
+    <label>Agreement threshold</label><select id="contrastAgreementMinimum">${agreementOptions}</select></div>
     ${result.papers.map(paper => paperInspectionCard(paper, Object.keys(evidenceFilters))).join("") || `<p class="empty-state">No papers satisfy this exact combination.</p>`}`;
   el("contrastEvidenceLimit").onchange = event => { evidenceLimit = Number(event.target.value); showEvidence(activeEvidence); };
+  el("contrastAgreementMinimum").onchange = event => {
+    evidencePreferredOnly = event.target.value === "preferred";
+    evidenceMinimumAgreement = evidencePreferredOnly ? 1 : Number(event.target.value);
+    showEvidence(activeEvidence);
+  };
 }
 
 function contrastInterpretation(context) {
@@ -766,7 +802,7 @@ function contrastInterpretation(context) {
       <h3>What is contrasted</h3>
       <p><strong>${esc(analysis.category)}</strong> for ${esc(analysis.dimension)} within <strong>${esc(analysis.population)}</strong>.</p>
       <div class="contrast-metric-grid"><div><strong>${Number(analysis.papers).toLocaleString()} of ${Number(analysis.denominator).toLocaleString()}</strong><span>${formatPercent(analysis.share)} within this population</span></div><div><strong>${difference >= 0 ? "+" : ""}${difference.toFixed(2)}</strong><span>percentage points from Combined</span></div></div>
-      <p><strong>Interpretation:</strong> this category is ${direction}. Core and Additional are the journal-set comparison; Combined is their union benchmark.</p>
+      <p><strong>Interpretation:</strong> this category is ${direction}. Leading and Additional entrepreneurship journals are the journal-set comparison; Combined is their union benchmark.</p>
       <p class="contrast-boundary">${esc(denominator)}</p>
     </section>`;
   }
@@ -775,7 +811,7 @@ function contrastInterpretation(context) {
       <h3>Configuration in this journal population</h3>
       <dl class="contrast-definition-list"><dt>AI role</dt><dd>${esc(analysis.aiRole)}</dd><dt>Mechanism</dt><dd>${esc(analysis.mechanism)}</dd><dt>Level</dt><dd>${esc(analysis.level)}</dd><dt>Scope</dt><dd>${esc(analysis.scope)}</dd><dt>Process stage</dt><dd>${esc(analysis.processStage)}</dd></dl>
       <p><strong>${Number(analysis.papers).toLocaleString()} papers</strong>, or ${formatPercent(analysis.share)} of ${Number(analysis.analyzedN).toLocaleString()} comparable papers in ${esc(analysis.population)}, carry this exact configuration.</p>
-      <p><strong>Interpretation:</strong> compare this prevalence across Core and Additional to determine whether the configuration is concentrated in the core journals or extends through the broader entrepreneurship literature.</p>
+      <p><strong>Interpretation:</strong> compare this prevalence across Leading and Additional entrepreneurship journals to determine whether the configuration is concentrated in the leading journals or extends through the broader entrepreneurship literature.</p>
       <p class="contrast-boundary">${esc(denominator)}</p>
     </section>`;
   }

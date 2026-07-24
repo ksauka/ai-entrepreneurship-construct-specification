@@ -9,16 +9,21 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import datetime
 from io import BytesIO
+import html
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import secrets
 import subprocess
 import sys
 from threading import Lock
+import time
+from urllib.parse import parse_qs, quote
 from zipfile import ZIP_DEFLATED, ZipFile
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import (
     FileResponse,
@@ -30,7 +35,12 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from aecsp.api.auth import verify_basic_credentials
+from aecsp.api.auth import (
+    ADMIN_ROLE,
+    REVIEWER_ROLE,
+    resolve_access_role,
+    resolve_basic_access_role,
+)
 from aecsp.api.graph_service import GraphService
 from aecsp.api.report import (
     build_composition_report,
@@ -53,6 +63,11 @@ HTML_NO_CACHE_HEADERS = {
 
 state: dict = {}
 topic_finalize_lock = Lock()
+dashboard_session_lock = Lock()
+
+DASHBOARD_SESSION_COOKIE = "etv_dashboard_session"
+DASHBOARD_SESSION_SECONDS = 12 * 60 * 60
+dashboard_sessions: dict[str, tuple[str, float]] = {}
 
 TOPIC_TABLE_DIR = PROJECT_ROOT / "reports/analysis/tables/stage4"
 TOPIC_ENRICHED_DATASET = (
@@ -66,8 +81,6 @@ TOPIC_TABLE_FILES = (
     "scope_topic_dimension_distribution.csv",
     "scope_topic_paper_index.csv",
 )
-
-
 class NoCacheStaticFiles(StaticFiles):
     """Serve dashboard assets without retaining stale interface behavior."""
 
@@ -75,6 +88,156 @@ class NoCacheStaticFiles(StaticFiles):
         response = await super().get_response(path, scope)
         response.headers.update(HTML_NO_CACHE_HEADERS)
         return response
+
+
+def _dashboard_credentials() -> tuple[str, str, str, str]:
+    """Return separately configured administrator and reviewer credentials."""
+
+    return (
+        os.getenv("ETV_DASHBOARD_USERNAME", ""),
+        os.getenv("ETV_DASHBOARD_PASSWORD", ""),
+        os.getenv("ETV_DASHBOARD_REVIEW_USERNAME", ""),
+        os.getenv("ETV_DASHBOARD_REVIEW_PASSWORD", ""),
+    )
+
+
+def _dashboard_configuration_error() -> str | None:
+    administrator_username, administrator_password, reviewer_username, reviewer_password = (
+        _dashboard_credentials()
+    )
+    if not administrator_username or not administrator_password:
+        return "Dashboard authentication is required but not configured."
+    if bool(reviewer_username) != bool(reviewer_password):
+        return "Reviewer authentication is only partially configured."
+    if reviewer_username and reviewer_username == administrator_username:
+        return "Administrator and reviewer usernames must be different."
+    return None
+
+
+def _prune_dashboard_sessions(now: float | None = None) -> None:
+    current = time.time() if now is None else now
+    expired = [
+        token
+        for token, (_role, expires_at) in dashboard_sessions.items()
+        if expires_at <= current
+    ]
+    for token in expired:
+        dashboard_sessions.pop(token, None)
+
+
+def _create_dashboard_session(role: str) -> str:
+    token = secrets.token_urlsafe(32)
+    with dashboard_session_lock:
+        _prune_dashboard_sessions()
+        dashboard_sessions[token] = (
+            role,
+            time.time() + DASHBOARD_SESSION_SECONDS,
+        )
+    return token
+
+
+def _dashboard_session_role(token: str | None) -> str | None:
+    if not token:
+        return None
+    with dashboard_session_lock:
+        _prune_dashboard_sessions()
+        record = dashboard_sessions.get(token)
+    return record[0] if record is not None else None
+
+
+def _delete_dashboard_session(token: str | None) -> None:
+    if not token:
+        return
+    with dashboard_session_lock:
+        dashboard_sessions.pop(token, None)
+
+
+def _safe_login_destination(value: str | None) -> str:
+    destination = (value or "/").strip()
+    if (
+        not destination.startswith("/")
+        or destination.startswith("//")
+        or destination.startswith("/login")
+        or destination.startswith("/logout")
+    ):
+        return "/"
+    return destination
+
+
+def _is_browser_navigation(request: Request) -> bool:
+    accept = request.headers.get("Accept", "").lower()
+    fetch_mode = request.headers.get("Sec-Fetch-Mode", "").lower()
+    return "text/html" in accept or fetch_mode == "navigate"
+
+
+def _login_page(
+    *,
+    next_path: str = "/",
+    error: str = "",
+    username: str = "",
+    signed_out: bool = False,
+    status_code: int = 200,
+) -> HTMLResponse:
+    destination = _safe_login_destination(next_path)
+    message = ""
+    if signed_out:
+        message = (
+            '<p class="login-notice" role="status">'
+            "You have been signed out. Enter either reviewer or administrator "
+            "credentials to continue.</p>"
+        )
+    error_html = (
+        f'<p class="login-error" role="alert">{html.escape(error)}</p>'
+        if error
+        else ""
+    )
+    document = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in · AI-Entrepreneurship Construct Specification Platform</title>
+<style>
+:root{{--ink:#203247;--muted:#4f5d69;--line:#cbc8bf;--paper:#fffefa;--ground:#f1efe9;--accent:#176f69}}
+*{{box-sizing:border-box}}
+body{{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",Arial,sans-serif}}
+main{{width:min(100%,480px);padding:34px 36px 38px;border:1px solid var(--line);border-top:4px solid var(--ink);border-radius:7px;background:var(--paper);box-shadow:0 10px 32px rgba(32,50,71,.09)}}
+.eyebrow{{margin:0 0 12px;color:var(--muted);font-size:.75rem;letter-spacing:.06em;text-transform:uppercase}}
+h1{{margin:0;font-family:"IBM Plex Serif",Georgia,serif;font-size:1.72rem;font-weight:500;line-height:1.22}}
+.intro{{margin:12px 0 24px;color:var(--muted);line-height:1.55}}
+label{{display:block;margin:15px 0 6px;font-size:.86rem;font-weight:500}}
+input{{width:100%;padding:11px 12px;border:1px solid #aeb4b3;border-radius:4px;background:#fff;color:var(--ink);font:inherit}}
+input:focus{{outline:2px solid rgba(23,111,105,.25);border-color:var(--accent)}}
+button{{width:100%;margin-top:22px;padding:11px 14px;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;font:500 .9rem/1.2 "IBM Plex Sans",Arial,sans-serif;cursor:pointer}}
+.login-notice,.login-error{{padding:10px 12px;border-left:3px solid var(--accent);background:#edf4f2;font-size:.86rem;line-height:1.45}}
+.login-error{{border-color:#9b3c32;background:#f8eeec;color:#742b24}}
+.security{{margin:20px 0 0;color:var(--muted);font-size:.76rem;line-height:1.45}}
+</style>
+</head>
+<body>
+<main>
+<p class="eyebrow">Secure research platform</p>
+<h1>AI-Entrepreneurship Construct Specification Platform</h1>
+<p class="intro">Sign in with reviewer or administrator credentials.</p>
+{message}
+{error_html}
+<form method="post" action="/login" autocomplete="on">
+<input type="hidden" name="next" value="{html.escape(destination, quote=True)}">
+<label for="username">Username</label>
+<input id="username" name="username" value="{html.escape(username, quote=True)}" autocomplete="username" required autofocus>
+<label for="password">Password</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in</button>
+</form>
+<p class="security">Access is role-specific. Reviewer accounts are read-only; administrator accounts can use authorised research-record controls.</p>
+</main>
+</body>
+</html>"""
+    return HTMLResponse(
+        document,
+        status_code=status_code,
+        headers=HTML_NO_CACHE_HEADERS,
+    )
 
 
 class CypherQueryRequest(BaseModel):
@@ -172,19 +335,43 @@ async def require_dashboard_authentication(request: Request, call_next):
 
     required = _dashboard_authentication_enabled()
     if not required:
-        return await call_next(request)
+        request.state.dashboard_access_role = "unauthenticated"
+        response = await call_next(request)
+        response.headers.update(HTML_NO_CACHE_HEADERS)
+        return response
 
-    username = os.getenv("ETV_DASHBOARD_USERNAME", "")
-    password = os.getenv("ETV_DASHBOARD_PASSWORD", "")
-    if not username or not password:
+    configuration_error = _dashboard_configuration_error()
+    if configuration_error:
         return PlainTextResponse(
-            "Dashboard authentication is required but not configured.",
+            configuration_error,
             status_code=503,
             headers={"Cache-Control": "no-store"},
         )
-    if not verify_basic_credentials(
-        request.headers.get("Authorization"), username, password
-    ):
+
+    if request.url.path in {"/login", "/logout"}:
+        request.state.dashboard_access_role = "unauthenticated"
+        response = await call_next(request)
+        response.headers.update(HTML_NO_CACHE_HEADERS)
+        return response
+
+    role = _dashboard_session_role(
+        request.cookies.get(DASHBOARD_SESSION_COOKIE)
+    )
+    if role is None and not _is_browser_navigation(request):
+        role = resolve_basic_access_role(
+            request.headers.get("Authorization"),
+            *_dashboard_credentials(),
+        )
+    if role is None:
+        if _is_browser_navigation(request):
+            destination = request.url.path
+            if request.url.query:
+                destination += f"?{request.url.query}"
+            return RedirectResponse(
+                f"/login?next={quote(_safe_login_destination(destination), safe='')}",
+                status_code=303,
+                headers=HTML_NO_CACHE_HEADERS,
+            )
         return PlainTextResponse(
             "Authentication required.",
             status_code=401,
@@ -193,7 +380,12 @@ async def require_dashboard_authentication(request: Request, call_next):
                 "Cache-Control": "no-store",
             },
         )
-    return await call_next(request)
+    request.state.dashboard_access_role = (
+        REVIEWER_ROLE if _dashboard_global_read_only_enabled() else role
+    )
+    response = await call_next(request)
+    response.headers.update(HTML_NO_CACHE_HEADERS)
+    return response
 
 
 def service() -> GraphService:
@@ -225,7 +417,11 @@ def targeted_reading_store() -> TargetedReadingStore:
 
 
 def _dashboard_authentication_enabled() -> bool:
-    return os.getenv("ETV_DASHBOARD_REQUIRE_AUTH", "").strip().lower() in {
+    return _environment_flag("ETV_DASHBOARD_REQUIRE_AUTH")
+
+
+def _environment_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -233,24 +429,24 @@ def _dashboard_authentication_enabled() -> bool:
     }
 
 
-def _require_authenticated_topic_write() -> None:
-    if not _dashboard_authentication_enabled():
+def _dashboard_global_read_only_enabled() -> bool:
+    return _environment_flag("ETV_DASHBOARD_READ_ONLY")
+
+
+def _dashboard_access_role(request: Request) -> str:
+    return str(
+        getattr(request.state, "dashboard_access_role", "unauthenticated")
+    )
+
+
+def _require_dashboard_write(request: Request, operation: str) -> None:
+    role = _dashboard_access_role(request)
+    if not _dashboard_authentication_enabled() or role != ADMIN_ROLE:
         raise HTTPException(
             status_code=403,
             detail=(
-                "Topic-review writes are disabled unless dashboard "
-                "authentication is enabled."
-            ),
-        )
-
-
-def _require_authenticated_annotation_write() -> None:
-    if not _dashboard_authentication_enabled():
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Human-annotation writes are disabled unless dashboard "
-                "authentication is enabled."
+                f"{operation} is disabled for reviewer read-only access. "
+                "Use the private administrator account to modify research records."
             ),
         )
 
@@ -624,6 +820,13 @@ def _composition_release_response(
         "irr_dimension_count": irr["dimension_count"],
         "irr_core_dimension_count": irr["core_dimension_count"],
         "irr_summary_method": irr["summary_method"],
+        "irr_balanced_common_papers": irr["balanced_common_papers"],
+        "irr_reference_model": irr["reference_model"],
+        "irr_reference_label": irr["reference_label"],
+        "irr_reference_cohort_papers": irr["reference_cohort_papers"],
+        "irr_comparison_cohort": irr["comparison_cohort"],
+        "irr_cohort_rule": irr["cohort_rule"],
+        "irr_rule": irr["irr_rule"],
         "irr_pairs": [
             {
                 "left_model": pair["left_model"],
@@ -678,9 +881,130 @@ def health() -> dict:
     }
 
 
+@app.get("/api/access-mode")
+def access_mode(request: Request) -> dict:
+    """Report the current credential's capabilities without exposing identities."""
+
+    role = _dashboard_access_role(request)
+    return {
+        "role": role,
+        "read_only": role != ADMIN_ROLE,
+        "writes_allowed": role == ADMIN_ROLE,
+        "reviewer_credentials_configured": bool(
+            os.getenv("ETV_DASHBOARD_REVIEW_USERNAME", "")
+            and os.getenv("ETV_DASHBOARD_REVIEW_PASSWORD", "")
+        ),
+    }
+
+
+@app.get("/login")
+def dashboard_login_page(
+    request: Request,
+    next: str = Query(default="/", max_length=2_000),
+    signed_out: bool = Query(default=False),
+) -> Response:
+    """Show the role-aware application login page."""
+
+    destination = _safe_login_destination(next)
+    if not _dashboard_authentication_enabled():
+        return RedirectResponse(destination, status_code=303)
+    if _dashboard_session_role(
+        request.cookies.get(DASHBOARD_SESSION_COOKIE)
+    ):
+        return RedirectResponse(destination, status_code=303)
+    return _login_page(next_path=destination, signed_out=signed_out)
+
+
+@app.post("/login")
+async def dashboard_login(request: Request) -> Response:
+    """Create one expiring dashboard session for either configured role."""
+
+    if not _dashboard_authentication_enabled():
+        return RedirectResponse("/", status_code=303)
+    body = await request.body()
+    if len(body) > 8_192:
+        return _login_page(
+            error="The submitted login request is too large.",
+            status_code=413,
+        )
+    try:
+        values = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    except UnicodeDecodeError:
+        return _login_page(
+            error="The submitted login request could not be read.",
+            status_code=400,
+        )
+    username = values.get("username", [""])[0].strip()
+    password = values.get("password", [""])[0]
+    destination = _safe_login_destination(values.get("next", ["/"])[0])
+    role = resolve_access_role(
+        username,
+        password,
+        *_dashboard_credentials(),
+    )
+    if role is None:
+        return _login_page(
+            next_path=destination,
+            error="The username or password was not recognised.",
+            username=username,
+            status_code=401,
+        )
+
+    session_token = _create_dashboard_session(role)
+    response = RedirectResponse(
+        destination,
+        status_code=303,
+        headers=HTML_NO_CACHE_HEADERS,
+    )
+    forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+    secure_cookie = (
+        forwarded_proto.split(",", 1)[0].strip().lower() == "https"
+        or request.url.scheme == "https"
+    )
+    response.set_cookie(
+        DASHBOARD_SESSION_COOKIE,
+        session_token,
+        max_age=DASHBOARD_SESSION_SECONDS,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="strict",
+        path="/",
+    )
+    return response
+
+
+@app.post("/logout")
+def logout_dashboard(request: Request) -> RedirectResponse:
+    """Invalidate the current session and return to the login screen."""
+
+    _delete_dashboard_session(
+        request.cookies.get(DASHBOARD_SESSION_COOKIE)
+    )
+    response = RedirectResponse(
+        "/login?signed_out=1",
+        status_code=303,
+        headers={
+            **HTML_NO_CACHE_HEADERS,
+            "Clear-Site-Data": '"cache", "cookies", "storage"',
+        },
+    )
+    response.delete_cookie(
+        DASHBOARD_SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="strict",
+    )
+    return response
+
+
 @app.get("/api/scopes")
 def scopes() -> list[dict]:
     return service().scopes()
+
+
+@app.get("/api/analytics/scopes")
+def analytics_scopes() -> list[dict]:
+    return service().analytics_scopes()
 
 
 @app.get("/api/specification/models")
@@ -738,6 +1062,56 @@ def performance_papers(
 @app.get("/api/performance/publication-growth")
 def publication_growth_comparison() -> dict:
     return service().publication_growth_comparison()
+
+
+@app.get("/api/performance/publication-growth/{population_id}/papers")
+def publication_growth_population_papers(
+    population_id: str,
+    year: int = Query(..., ge=1800, le=2200),
+    mode: str = Query("annual", pattern="^(annual|cumulative)$"),
+    limit: int = Query(100, ge=1, le=50000),
+) -> dict:
+    try:
+        return service().publication_growth_population_papers(
+            population_id, year=year, mode=mode, limit=limit
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/performance/publication-growth/{population_id}/keywords/year")
+def publication_growth_population_keyword_year(
+    population_id: str,
+    source: str = Query("author", pattern="^(author|index|combined)$"),
+    year: int = Query(..., ge=1800, le=2200),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict:
+    try:
+        return service().publication_growth_population_keyword_year(
+            population_id, source=source, year=year, limit=limit
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/performance/publication-growth/{population_id}/keywords/evidence")
+def publication_growth_population_keyword_evidence(
+    population_id: str,
+    source: str = Query("author", pattern="^(author|index|combined)$"),
+    keyword: str = Query(...),
+    year: int = Query(..., ge=1800, le=2200),
+    limit: int = Query(100, ge=1, le=200),
+) -> list[dict]:
+    try:
+        return service().publication_growth_population_keyword_evidence(
+            population_id,
+            source=source,
+            keyword=keyword,
+            year=year,
+            limit=limit,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/api/scope/{scope_id}/keywords")
@@ -838,9 +1212,11 @@ def observed_composition_evidence(
     filter_value: str | None = None,
     secondary_column: str | None = None,
     secondary_value: str | None = None,
-) -> list[dict]:
+    minimum_agreement: int = 1,
+    preferred_only: bool = False,
+) -> dict:
     try:
-        return service().observed_composition_evidence(
+        return service().observed_composition_evidence_bundle(
             scope_id,
             study_status=study_status,
             column=column,
@@ -851,6 +1227,8 @@ def observed_composition_evidence(
             filter_value=filter_value,
             secondary_column=secondary_column,
             secondary_value=secondary_value,
+            minimum_agreement=minimum_agreement,
+            preferred_only=preferred_only,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -898,6 +1276,117 @@ def observed_composition_irr(
 def observed_composition_irr_matrix(scope_id: str) -> dict:
     try:
         return service().composition_irr_matrix(scope_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/composition/coder-robustness")
+def primary_coder_robustness(
+    reference_model: str | None = Query(None),
+    comparison_model: str | None = Query(None),
+    min_support: int = Query(20, ge=1, le=1000),
+) -> dict:
+    """Return the same robustness analyses for any selected model pair."""
+
+    try:
+        return service().primary_coder_robustness(
+            reference_model=reference_model,
+            comparison_model=comparison_model,
+            min_support=min_support,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/composition/coder-robustness/download")
+def primary_coder_robustness_download(
+    reference_model: str | None = Query(None),
+    comparison_model: str | None = Query(None),
+    min_support: int = Query(20, ge=1, le=1000),
+) -> Response:
+    """Download the currently selected dynamic robustness comparison."""
+
+    try:
+        payload = service().primary_coder_robustness(
+            reference_model=reference_model,
+            comparison_model=comparison_model,
+            min_support=min_support,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "coder_robustness/summary.json",
+            json.dumps(
+                {
+                    "reference_model": payload["reference_model"],
+                    "comparison_model": payload["comparison_model"],
+                    "registered_primary_model": payload["registered_primary_model"],
+                    "population": payload["population"],
+                    "min_support": payload["min_support"],
+                    "summary": payload["summary"],
+                    "interpretation": payload["interpretation"],
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        for key in (
+            "aggregate_distributions",
+            "aggregate_comparison",
+            "nested_distributions",
+            "nested_comparison",
+            "entrepreneurship_contrasts",
+            "role_level_cells",
+            "role_level_comparison",
+            "selected_relations",
+        ):
+            archive.writestr(
+                f"coder_robustness/{key}.csv",
+                pd.json_normalize(payload[key]).to_csv(index=False),
+            )
+    reference_slug = re.sub(r"[^a-z0-9]+", "-", payload["reference_model"]["id"].lower()).strip("-")
+    comparison_slug = re.sub(r"[^a-z0-9]+", "-", payload["comparison_model"]["id"].lower()).strip("-")
+    return Response(
+        buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="coder_robustness_{reference_slug}_vs_{comparison_slug}.zip"'
+            )
+        },
+    )
+
+
+@app.get("/api/composition/coder-robustness/evidence")
+def coder_robustness_evidence(
+    reference_model: str = Query(...),
+    comparison_model: str = Query(...),
+    population: str = Query("combined", pattern="^(combined|core|additional)$"),
+    column: str = Query(...),
+    value: str = Query(...),
+    secondary_column: str | None = None,
+    secondary_value: str | None = None,
+    match_mode: str = Query(
+        "either", pattern="^(either|both|reference|comparison|different)$"
+    ),
+    limit: int = Query(100, ge=1, le=50000),
+) -> dict:
+    """Return traceable papers behind one selected-model robustness result."""
+
+    try:
+        return service().coder_robustness_evidence(
+            reference_model=reference_model,
+            comparison_model=comparison_model,
+            population=population,
+            column=column,
+            value=value,
+            secondary_column=secondary_column,
+            secondary_value=secondary_value,
+            match_mode=match_mode,
+            limit=limit,
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -983,26 +1472,45 @@ def _theory_result_rows(
                 )
         return rows
     if tactic == "horizontal":
-        domain_rows = [
-            {
-                "record_type": "domain_comparison",
-                "domain_id": group["id"],
-                "domain": group["label"],
-                "assignment_basis": group["assignment_basis"],
-                "dimension": payload["dimension_label"],
-                "column": payload["column"],
-                "distribution": payload["distribution"],
-                "denominator": group["denominator"],
-                "category": category["value"],
-                "papers": category["papers"],
-                "share": category["share"],
-                "percentage_point_difference_from_corpus": category[
-                    "percentage_point_difference"
-                ],
-            }
-            for group in payload["groups"]
-            for category in group["categories"]
-        ]
+        baseline = payload["baseline"]
+        baseline_by_value = {
+            str(item["raw_value"]): item for item in baseline["categories"]
+        }
+        coverage = payload.get("baseline_domain_coverage", {})
+        domain_rows = []
+        for group in payload["groups"]:
+            for category in group["categories"]:
+                baseline_category = baseline_by_value.get(
+                    str(category.get("raw_value", "")), {}
+                )
+                domain_rows.append(
+                    {
+                        "record_type": "domain_comparison",
+                        "domain_id": group["id"],
+                        "domain": group["label"],
+                        "assignment_basis": group["assignment_basis"],
+                        "dimension": payload["dimension_label"],
+                        "column": payload["column"],
+                        "distribution": payload["distribution"],
+                        "domain_denominator": group["denominator"],
+                        "baseline_label": payload["baseline_label"],
+                        "baseline_denominator": baseline["denominator"],
+                        "baseline_outside_selected_domain_papers": coverage.get(
+                            "outside_selected_business_domains", 0
+                        ),
+                        "baseline_outside_selected_domain_percent": coverage.get(
+                            "outside_selected_business_domains_percent", 0.0
+                        ),
+                        "category": category["value"],
+                        "papers": category["papers"],
+                        "share": category["share"],
+                        "baseline_category_papers": baseline_category.get("papers", 0),
+                        "baseline_share": baseline_category.get("share", 0.0),
+                        "percentage_point_difference_from_corpus": category[
+                            "percentage_point_difference"
+                        ],
+                    }
+                )
         entrepreneurship_rows = _theory_result_rows(
             "entrepreneurship",
             payload["entrepreneurship_comparison"],
@@ -1344,6 +1852,8 @@ def _theory_release_response(
         "available_domains": metadata["domains"],
         "pending_domains": metadata["pending_domains"],
         "domain_assignment_complete": metadata["domain_assignment_complete"],
+        "domain_coverage": metadata.get("domain_coverage", {}),
+        "domain_methodology": metadata.get("domain_methodology", {}),
         "journal_scope_by_tactic": {
             "construct_specification": "all",
             "horizontal_contrasting": journal_scope,
@@ -1514,6 +2024,8 @@ def theory_contrasting_evidence(
     domain: str | None = Query(None),
     filters: str = Query("{}", max_length=4000),
     limit: int = Query(100, ge=1, le=50000),
+    minimum_agreement: int = 1,
+    preferred_only: bool = False,
 ) -> dict:
     try:
         parsed_filters = json.loads(filters)
@@ -1527,6 +2039,8 @@ def theory_contrasting_evidence(
             domain_id=domain,
             filters={str(key): str(value) for key, value in parsed_filters.items()},
             limit=limit,
+            minimum_agreement=minimum_agreement,
+            preferred_only=preferred_only,
         )
     except (json.JSONDecodeError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -1568,16 +2082,34 @@ def theory_contrasting_report(
         )
         rows = _theory_result_rows(tactic, payload, distribution)
         title = f"Construct contrasting: {tactic.replace('_', ' ')}"
+        context = _theory_context(
+            tactic,
+            model,
+            population,
+            journal_scope,
+            study_status,
+            distribution,
+        )
+        if tactic == "horizontal":
+            coverage = payload.get("baseline_domain_coverage", {})
+            context.update(
+                {
+                    "comparison_baseline": payload.get("baseline_label", ""),
+                    "baseline_denominator": payload.get("baseline", {}).get(
+                        "denominator", 0
+                    ),
+                    "outside_selected_domain_rows": coverage.get(
+                        "outside_selected_business_domains", 0
+                    ),
+                    "outside_selected_domain_rows_percent": coverage.get(
+                        "outside_selected_business_domains_percent", 0.0
+                    ),
+                    "baseline_rule": payload.get("comparison_definition", ""),
+                }
+            )
         return build_theory_contrasting_report(
             title,
-            _theory_context(
-                tactic,
-                model,
-                population,
-                journal_scope,
-                study_status,
-                distribution,
-            ),
+            context,
             rows,
         )
     except ValueError as error:
@@ -1856,8 +2388,7 @@ def scope_download(
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-    scope = SCOPE_BY_ID.get(scope_id)
-    scope_label = scope.label if scope else scope_id
+    scope_label = service().scope_label(scope_id)
     generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
     slug = re.sub(r"[^a-z0-9]+", "_", scope_id.lower()).strip("_") or "scope"
     date_stamp = generated_at[:10]
@@ -1930,16 +2461,19 @@ def human_annotation_paper(
 
 
 @app.post("/api/human-annotation/save")
-def save_human_annotation(request: HumanAnnotationSaveRequest) -> dict:
+def save_human_annotation(
+    payload: HumanAnnotationSaveRequest,
+    request: Request,
+) -> dict:
     """Save a draft or completed paper with an append-only audit revision."""
 
-    _require_authenticated_annotation_write()
+    _require_dashboard_write(request, "Human-annotation writing")
     try:
         return human_annotation_store().save(
-            request.annotator_id,
-            request.paper_id,
-            request.annotation,
-            submit=request.submit,
+            payload.annotator_id,
+            payload.paper_id,
+            payload.annotation,
+            submit=payload.submit,
         )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -2145,13 +2679,16 @@ def targeted_reading_papers(
 
 
 @app.post("/api/targeted-reading/save")
-def save_targeted_reading(request: TargetedReadingSaveRequest) -> dict:
+def save_targeted_reading(
+    payload: TargetedReadingSaveRequest,
+    request: Request,
+) -> dict:
     """Save an independent interpretation and an append-only audit revision."""
 
-    _require_authenticated_annotation_write()
+    _require_dashboard_write(request, "Targeted-reading writing")
     try:
         return targeted_reading_store().save(
-            request.reviewer_id, request.paper_id, request.review
+            payload.reviewer_id, payload.paper_id, payload.review
         )
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -2219,10 +2756,11 @@ def update_topic_review(
     scope: str,
     topic_id: int,
     update: TopicReviewUpdateRequest,
+    request: Request,
 ) -> dict:
     """Save one audited label decision without changing topic assignments."""
 
-    _require_authenticated_topic_write()
+    _require_dashboard_write(request, "Topic-review writing")
     try:
         row = topic_review_store().update(
             scope,
@@ -2274,11 +2812,14 @@ def topic_review_download(
 
 
 @app.post("/api/topic-review/finalize")
-def finalize_topic_review(request: TopicFinalizeRequest) -> dict:
+def finalize_topic_review(
+    payload: TopicFinalizeRequest,
+    request: Request,
+) -> dict:
     """Apply a complete review and rebuild Stage 4 plus graph CSV exports."""
 
-    _require_authenticated_topic_write()
-    if request.confirmation != "APPLY ALL 130 APPROVED LABELS":
+    _require_dashboard_write(request, "Topic-review finalization")
+    if payload.confirmation != "APPLY ALL 130 APPROVED LABELS":
         raise HTTPException(status_code=400, detail="Finalization was not confirmed")
     if not topic_finalize_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Topic finalization is already running")

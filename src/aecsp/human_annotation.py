@@ -28,8 +28,10 @@ from aecsp.specification.analysis_columns import enrich_for_analysis
 from aecsp.specification.llm_coder import (
     PROTOCOL_ID,
     SYSTEM_PROMPT,
+    build_user_prompt,
     cache_key,
     protocol_fingerprint,
+    response_json_schema,
 )
 from aecsp.specification.schema import (
     AI_STUDY_STATUS_FIELD,
@@ -61,6 +63,87 @@ MODEL_LABELS = {
 }
 VALIDATION_CACHE_MODELS = {
     "llama3.2": "llama3.2",
+}
+
+DIMENSION_REFERENCES: dict[str, tuple[dict[str, str], ...]] = {
+    "ai_type_form": (
+        {
+            "label": "Obschonka et al.",
+            "citation": (
+                "Obschonka et al. (2025). Artificial Intelligence and "
+                "Entrepreneurship: A Call for Research to Prospect and "
+                "Establish the Scholarly AI Frontiers."
+            ),
+            "url": "https://doi.org/10.1177/10422587241304676",
+        },
+    ),
+    "ai_mechanism": (
+        {
+            "label": "Wiklund",
+            "citation": (
+                "Wiklund (2026). ETP at 50: The Past, Present, and Future "
+                "of Entrepreneurship Research."
+            ),
+            "url": "https://doi.org/10.1177/10422587261441596",
+        },
+        {
+            "label": "Maula et al.",
+            "citation": (
+                "Maula et al. (2026). Investing in Data Quality for "
+                "High-Impact Entrepreneurship Research."
+            ),
+            "url": "https://doi.org/10.1177/10422587261435916",
+        },
+    ),
+    "level_of_analysis": (
+        {
+            "label": "Fisher & Aguinis",
+            "citation": (
+                "Fisher and Aguinis (2017). Using Theory Elaboration to "
+                "Make Theoretical Advancements."
+            ),
+            "url": "https://doi.org/10.1177/1094428116689707",
+        },
+    ),
+    "entrepreneurial_process_stage": (
+        {
+            "label": "Burnell et al.",
+            "citation": (
+                "Burnell et al. (2026). Entrepreneurial Experimentation: "
+                "Conceptual Foundations, Integrative Theoretical Framework, "
+                "and Research Agenda."
+            ),
+            "url": "https://doi.org/10.1177/10422587251347046",
+        },
+        {
+            "label": "Shepherd & Suddaby",
+            "citation": (
+                "Shepherd and Suddaby (2017). Theory Building: A Review "
+                "and Integration."
+            ),
+            "url": "https://doi.org/10.1177/0149206316647102",
+        },
+    ),
+    "scope_conditions": (
+        {
+            "label": "Suddaby",
+            "citation": (
+                "Suddaby (2010). Editor's Comments: Construct Clarity in "
+                "Theories of Management and Organization."
+            ),
+            "url": "https://doi.org/10.5465/amr.35.3.zok346",
+        },
+    ),
+    "definition_construct_clarity": (
+        {
+            "label": "Suddaby",
+            "citation": (
+                "Suddaby (2010). Editor's Comments: Construct Clarity in "
+                "Theories of Management and Organization."
+            ),
+            "url": "https://doi.org/10.5465/amr.35.3.zok346",
+        },
+    ),
 }
 
 
@@ -100,6 +183,9 @@ def _dimension_contract() -> tuple[dict[str, Any], ...]:
             ),
             "question": dimension.question,
             "diagnosis": dimension.diagnosis,
+            "references": list(
+                DIMENSION_REFERENCES.get(dimension.column, ())
+            ),
             "allowed_values": list(dimension.allowed_values),
             "classification": (
                 "Core" if dimension.column in core else "Exploratory"
@@ -260,13 +346,32 @@ class HumanAnnotationStore:
                 ),
             ],
             "full_model_prompt": SYSTEM_PROMPT,
+            "full_model_user_prompt": build_user_prompt(
+                "{title}",
+                "{abstract}",
+                "{author_keywords}",
+                "{source_journal}",
+                "{publication_year}",
+            ),
+            "full_model_response_schema": json.dumps(
+                response_json_schema(), indent=2, ensure_ascii=False
+            ),
             "full_prompt_note": (
-                "This is the verbatim frozen system prompt used for the model "
-                "raters. The human instrument applies its coding discipline "
-                "to the seven construct-specification dimensions and "
-                "separately records AI Study Status as the eighth "
-                "comparability field. Model-only auxiliary outputs are not "
-                "part of human IRR."
+                "This section reproduces the complete model coding request: "
+                "the verbatim system instruction, the per-paper user-message "
+                "template, and the required structured response schema. The "
+                "system instruction defines seven evidence-bearing construct "
+                "dimensions. The response schema separately requires Study "
+                "status as the eighth comparability field. Model-only "
+                "auxiliary outputs are not part of human IRR."
+            ),
+            "study_status_schema_note": (
+                "Study status is the required response field that asks whether "
+                "AI is the phenomenon being studied, a research method used by "
+                "the authors, both, or unclear. Unlike the seven "
+                "evidence-bearing dimensions, the model response does not attach "
+                "a separate quotation, evidence-type label, or confidence value "
+                "to Study status."
             ),
         }
 

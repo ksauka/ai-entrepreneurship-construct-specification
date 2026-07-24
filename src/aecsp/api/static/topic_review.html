@@ -4,15 +4,17 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Topic Interpretation Review</title>
-<link rel="stylesheet" href="/static/esd.css" />
+<link rel="stylesheet" href="/static/esd.css?v=publication-counts-20260724" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
-<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
+<script src="/static/paper_inspection.js?v=reference-model-20260724"></script>
+<script src="/static/scope_context.js?v=shared-scopes-20260722"></script>
+<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
 <div class="container topic-review-container">
   <header class="app-header">
-    <h1>Topic interpretation review</h1>
+    <div class="platform-name">AI-Entrepreneurship Construct Specification Platform</div>
     <p>Inspect, rename, and approve topic interpretations using the terms and representative papers from each data-specific model.</p>
     <p id="scopeProgress" class="metric-definition"></p>
     <nav class="nav-links">
@@ -39,6 +41,7 @@
         <input id="reviewerName" type="text" maxlength="160" placeholder="Required for the audit trail" />
       </label>
     </div>
+    <div id="currentDatasetContext" class="selection-context" aria-live="polite"></div>
     <div class="toolbar">
       <span id="reviewStatus" class="status-pill warn">loading</span>
       <button id="refreshReview" class="btn btn-outline" type="button">Refresh</button>
@@ -92,6 +95,7 @@ const esc = value => String(value ?? "").replace(/[&<>\"]/g, character => ({
 const topicScopeIds = ["full_corpus", "query_1", "query_2", "query_3", "query_4"];
 let scopeLabels = {};
 let scopePaperCounts = {};
+let availableTopicScopes = [];
 const params = new URLSearchParams(window.location.search);
 let scope = topicScopeIds.includes(params.get("scope")) ? params.get("scope") : "full_corpus";
 let statusFilter = ["all", "pending", "approved", "revise"].includes(params.get("status"))
@@ -101,6 +105,11 @@ let topics = [];
 let prevalenceTopics = [];
 let topicPrevalenceChart = null;
 const fittedPaperLimits = new Map();
+const CHART_FONT_SANS = '"IBM Plex Sans", Arial, sans-serif';
+const CHART_FONT_MONO = '"IBM Plex Mono", monospace';
+Chart.defaults.font.family = CHART_FONT_SANS;
+Chart.defaults.font.weight = "500";
+Chart.defaults.color = "#3f4f5d";
 
 async function api(path, options = {}) {
   const response = await fetch(path, options);
@@ -120,6 +129,7 @@ function updateLocation() {
 
 async function init() {
   const availableScopes = (await api("/api/scopes")).filter(item => topicScopeIds.includes(item.id));
+  availableTopicScopes = availableScopes;
   scopeLabels = Object.fromEntries(availableScopes.map(item => [item.id, item.label]));
   scopePaperCounts = Object.fromEntries(availableScopes.map(item => [item.id, Number(item.papers)]));
   el("reviewScope").innerHTML = availableScopes.map(item =>
@@ -127,10 +137,12 @@ async function init() {
   ).join("");
   if (!scopeLabels[scope]) scope = "full_corpus";
   el("reviewScope").value = scope;
+  updateCurrentDatasetContext();
   el("reviewStatusFilter").value = statusFilter;
   el("reviewerName").value = localStorage.getItem("etvTopicReviewer") || "";
   el("reviewScope").onchange = event => {
     scope = event.target.value;
+    updateCurrentDatasetContext();
     updateLocation();
     renderAll();
   };
@@ -148,6 +160,14 @@ async function init() {
     button.onclick = () => downloadTopicBundle(button.dataset.topicDownload);
   });
   await renderAll();
+}
+
+function updateCurrentDatasetContext() {
+  ScopeContext.render(
+    "currentDatasetContext",
+    availableTopicScopes.find(item => item.id === scope),
+    {prefix: "Current topic-model dataset"},
+  );
 }
 
 async function renderAll() {
@@ -199,8 +219,8 @@ function renderTopicPrevalence() {
       labels: ranked.map(topic => `T${topic.topic_id}: ${topic.display_label}`),
       datasets: [{
         data: ranked.map(topic => topic.final_assigned_papers),
-        backgroundColor: "#327bd3",
-        borderColor: "#2569b8",
+        backgroundColor: "#4f8582",
+        borderColor: "#2f6f6d",
         borderWidth: 1,
       }],
     },
@@ -221,10 +241,25 @@ function renderTopicPrevalence() {
       scales: {
         x: {
           beginAtZero: true,
-          title: {display: true, text: "Papers assigned to topic"},
-          ticks: {precision: 0},
+          title: {
+            display: true,
+            text: "Papers assigned to topic",
+            color: "#2f4050",
+            font: {family: CHART_FONT_SANS, size: 12, weight: "500"},
+          },
+          ticks: {
+            color: "#354756",
+            font: {family: CHART_FONT_MONO, size: 11, weight: "500"},
+            precision: 0,
+          },
         },
-        y: {ticks: {autoSkip: false}},
+        y: {
+          ticks: {
+            color: "#354756",
+            font: {family: CHART_FONT_SANS, size: 11, weight: "500"},
+            autoSkip: false,
+          },
+        },
       },
       onClick: (_event, elements) => {
         if (elements.length) showEvidence(ranked[elements[0].index].topic_id);

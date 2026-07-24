@@ -16,6 +16,7 @@ from aecsp.specification.llm_coder import (
     protocol_for_model,
     protocol_parameters,
     response_json_schema,
+    sanitize_lone_surrogates,
 )
 from aecsp.specification.schema import (
     EVIDENCE_TYPES,
@@ -127,6 +128,21 @@ def test_prompt_carries_the_spec_v3_discipline_rules():
     prose = " ".join(SYSTEM_PROMPT.split())
     assert "Mechanism requires causal logic" in prose
     assert "needs_full_text is a signal, not a caveat" in prose
+
+
+def test_lone_surrogates_are_replaced_recursively():
+    value = {
+        "evidence": "valid \udcda text",
+        "nested": ["fine", "\ud800"],
+    }
+
+    sanitized = sanitize_lone_surrogates(value)
+
+    assert sanitized == {
+        "evidence": "valid \ufffd text",
+        "nested": ["fine", "\ufffd"],
+    }
+    assert sanitized["evidence"].encode("utf-8")
 
 
 def test_code_paper_uses_cache_without_client(tmp_path: Path):

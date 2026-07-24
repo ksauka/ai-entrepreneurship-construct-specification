@@ -4,12 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Human Annotation</title>
-<link rel="stylesheet" href="/static/esd.css" />
+<link rel="stylesheet" href="/static/esd.css?v=publication-counts-20260724" />
+<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
 <div class="container composition-container">
   <header class="app-header">
-    <h1>Human annotation</h1>
+    <div class="platform-name">AI-Entrepreneurship Construct Specification Platform</div>
     <p>Independent expert coding of the audited probability-sample overlap.</p>
     <nav class="nav-links">
       <a class="nav-link" href="/">Analytics Dashboard</a>
@@ -40,12 +41,19 @@
       <div id="instrumentReference" class="human-instrument-reference"></div>
     </details>
     <details class="human-protocol-details">
-      <summary>View the full frozen system prompt</summary>
+      <summary>View the complete model coding request</summary>
       <p id="fullPromptNote" class="chart-note"></p>
       <p class="human-protocol-meta">
         <strong>Protocol:</strong> <span id="protocolId"></span>
       </p>
+      <h3>System instruction</h3>
       <pre id="fullModelPrompt" class="human-full-prompt"></pre>
+      <h3>Per-paper user-message template</h3>
+      <p class="chart-note">The placeholders below were replaced with each paper's record. Source journal and publication year accompanied the request as contextual metadata; coding evidence was restricted to the title, abstract, and author keywords.</p>
+      <pre id="fullModelUserPrompt" class="human-full-prompt"></pre>
+      <h3>Required structured response schema</h3>
+      <p id="studyStatusSchemaNote" class="chart-note"></p>
+      <pre id="fullModelResponseSchema" class="human-full-prompt"></pre>
     </details>
     <p class="chart-note">Choose your own unique annotator ID. Each ID has a separate saved record. All annotators receive the same fixed blinded paper order so partial completion retains the largest possible common-paper set. Do not share an ID between annotators.</p>
     <div class="toolbar human-start-toolbar">
@@ -132,6 +140,9 @@ async function init() {
   el("fullPromptNote").textContent = instrument.full_prompt_note;
   el("protocolId").textContent = instrument.model_protocol_label;
   el("fullModelPrompt").textContent = instrument.full_model_prompt;
+  el("fullModelUserPrompt").textContent = instrument.full_model_user_prompt;
+  el("studyStatusSchemaNote").textContent = instrument.study_status_schema_note;
+  el("fullModelResponseSchema").textContent = instrument.full_model_response_schema;
   el("dimensionForms").innerHTML = instrument.dimensions.map(dimensionMarkup).join("");
   el("needsFullText").innerHTML = instrument.dimensions.map(item =>
     `<label><input type="checkbox" value="${esc(item.column)}" /> ${esc(item.label)}</label>`
@@ -162,10 +173,21 @@ function instrumentReferenceMarkup(item) {
       <h3>${esc(item.label)}</h3><span class="pill">${esc(item.classification)}</span>
     </div>
     <p><strong>Coding question:</strong> ${esc(item.question)}</p>
-    ${item.diagnosis ? `<p><strong>What it diagnoses:</strong> ${esc(item.diagnosis)}</p>` : ""}
+    ${item.diagnosis ? `<p><strong>What it diagnoses:</strong> ${linkedDiagnosis(item)}</p>` : ""}
     <p><strong>Permitted codes:</strong> ${item.allowed_values
       .map(value => `<span class="human-code-chip">${esc(value)}</span>`).join(" ")}</p>
   </section>`;
+}
+
+function linkedDiagnosis(item) {
+  let markup = esc(item.diagnosis);
+  (item.references || []).forEach(reference => {
+    const label = esc(reference.label);
+    const link = `<a class="human-citation-link" href="${esc(reference.url)}"
+      target="_blank" rel="noopener noreferrer" title="${esc(reference.citation)}">${label}</a>`;
+    markup = markup.split(label).join(link);
+  });
+  return markup;
 }
 
 function dimensionMarkup(item) {

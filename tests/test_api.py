@@ -11,6 +11,7 @@ import pytest
 
 from aecsp.api.graph_service import GraphService
 from aecsp.api.report import build_composition_report, build_scope_report
+from aecsp.analytics.publication_growth import cumulative_trace, growth_record
 
 
 @pytest.fixture
@@ -67,6 +68,18 @@ def test_performance_summary(service):
     assert round(s["cited_share"], 2) == 0.67
 
 
+def test_publication_growth_uses_cumulative_endpoint_denominators():
+    frame = pd.DataFrame({"Year": [1999, 2000, 2001, 2001]})
+    result = growth_record(frame, 2000, 2001)
+    assert result["start_cumulative_papers"] == 2
+    assert result["end_cumulative_papers"] == 4
+    assert result["added_papers"] == 2
+    assert result["percent_growth"] == 1.0
+    trace = cumulative_trace(frame, 2000, 2001)
+    assert trace[0] == {"year": 2000, "papers": 1, "cumulative_papers": 2}
+    assert trace[1] == {"year": 2001, "papers": 2, "cumulative_papers": 4}
+
+
 def test_service_prefers_frozen_primary_analysis_dataset(tmp_path):
     pd.DataFrame(
         [{"paper_id": "legacy", "Title": "Legacy corpus", "Year": "2020"}]
@@ -78,6 +91,35 @@ def test_service_prefers_frozen_primary_analysis_dataset(tmp_path):
     ).to_csv(analysis / "primary_analysis_dataset.csv", index=False)
     loaded = GraphService(processed_dir=tmp_path).papers
     assert loaded["paper_id"].tolist() == ["primary"]
+
+
+def test_reviewed_source_title_variant_is_merged_for_display(tmp_path):
+    pd.DataFrame(
+        [
+            {
+                "paper_id": "colon",
+                "Title": "Earlier record",
+                "Source title": "Entrepreneurship: Theory and Practice",
+                "ISSN": "10422587",
+                "Year": "2020",
+            },
+            {
+                "paper_id": "current",
+                "Title": "Current record",
+                "Source title": "Entrepreneurship Theory and Practice",
+                "ISSN": "10422587",
+                "Year": "2021",
+            },
+        ]
+    ).to_csv(tmp_path / "master_corpus.csv", index=False)
+
+    loaded = GraphService(processed_dir=tmp_path).papers
+
+    assert loaded["Source title"].unique().tolist() == [
+        "Entrepreneurship Theory and Practice"
+    ]
+    ranking = GraphService(processed_dir=tmp_path).performance("full_corpus")
+    assert ranking["top_journals"][0]["papers"] == 2
 
 
 def test_performance_rankings(service):
@@ -134,6 +176,25 @@ def test_performance_is_scope_aware(service):
     assert "Additional entrepreneurship journals" in labels
     assert comparison["scopes_overlap"] is True
     assert comparison["search_cutoff"]["label"] == "8 July 2026"
+    populations = {item["id"]: item for item in comparison["populations"]}
+    assert populations["combined_entrepreneurship"]["papers"] == 2
+    assert populations["remaining_full_corpus"]["papers"] == 1
+    assert populations["remaining_full_corpus"]["exclusive_complement"] is True
+    assert populations["combined_entrepreneurship"]["trace"][0]["year"] == 1976
+    assert populations["combined_entrepreneurship"]["trace"][-1]["year"] == 2026
+    scopes = {item["id"]: item for item in service.scopes()}
+    assert "strict_ai_ent" not in scopes
+    assert scopes["query_3"]["label"] == "Leading entrepreneurship journals"
+    assert scopes["combined_entrepreneurship"]["papers"] == 2
+    assert scopes["remaining_full_corpus"]["papers"] == 1
+    assert scopes["remaining_full_corpus"]["label"] == (
+        "Full corpus excluding Combined entrepreneurship"
+    )
+    assert service.analytics_scopes() == service.scopes()
+    assert service.performance("combined_entrepreneurship")["summary"]["papers"] == 2
+    assert "Combined entrepreneurship" in build_scope_report(
+        service, "combined_entrepreneurship"
+    )
 
 
 def test_performance_trend_preserves_later_dated_records_and_reconciles_total(
@@ -253,8 +314,11 @@ def test_observed_composition_is_filtered_and_inspectable(service):
     inspection = papers[0]["_inspection"]
     assert inspection["evidence_boundary"] == "Title, abstract, and author keywords"
     selected = [item for item in inspection["dimensions"] if item["selected"]]
-    assert len(selected) == 1
-    assert selected[0]["column"] == "ai_type_form"
+    assert {item["column"] for item in selected} == {
+        "ai_method_or_phenomenon",
+        "ai_type_form",
+    }
+    assert papers[0]["_model_agreement"]["models_agreeing"] == 1
 
     limited = service.observed_composition_evidence(
         "full_corpus",
@@ -313,11 +377,13 @@ def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
         "machine learning",
     ]
     population_labels = {item["id"]: item["label"] for item in metadata["populations"]}
+    assert population_labels["core"] == "Leading entrepreneurship journals"
     assert population_labels["other"] == "Additional entrepreneurship"
     core_domain = next(
         item for item in metadata["domains"] if item["id"] == "core_entrepreneurship"
     )
     assert core_domain["assignment_type"] == "Registered journal population"
+    assert core_domain["label"] == "Leading entrepreneurship journals"
     assert core_domain["source_title_count"] == 1
     assert core_domain["source_titles"][0]["title"] == "Journal of Business Venturing"
     assert "do not retrieve or add papers" in metadata["domain_methodology"]["construction"]
@@ -330,6 +396,13 @@ def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
     horizontal = service.theory_horizontal_contrast(
         model, "ai_role", "observed", "all", "all"
     )
+    assert "including papers outside the selected domain rows" in horizontal[
+        "comparison_definition"
+    ]
+    assert horizontal["baseline_domain_coverage"]["baseline_papers"] == 3
+    assert horizontal["baseline_domain_coverage"]["baseline_papers"] == horizontal[
+        "baseline"
+    ]["denominator"]
     group_ids = {item["id"] for item in horizontal["groups"]}
     assert {
         "core_entrepreneurship",
@@ -429,6 +502,15 @@ def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
     selected = [item for item in paper["_inspection"]["dimensions"] if item["selected"]]
     assert selected[0]["label"] == "AI Role / Function"
     assert selected[0]["evidence"] == "used by new ventures"
+    assert paper["_model_agreement"]["models_agreeing"] == 1
+
+    unfiltered_evidence = service.theory_contrasting_evidence(
+        model,
+        population="combined",
+        limit=100,
+    )
+    assert unfiltered_evidence["supporting_papers"] == 2
+    assert len(unfiltered_evidence["papers"]) == 2
 
 
 def test_ft50_horizontal_replication_uses_ft50_baseline_without_tautology(service):
@@ -568,6 +650,10 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
     assert status_irr["agreements"] == 1
     assert status_irr["percent_agreement"] == 0.5
     assert status_irr["classification"] == "Core"
+    assert status_irr["observability_comparable_papers"] == 2
+    assert status_irr["observability_percent_agreement"] == 1.0
+    assert status_irr["jointly_observed_papers"] == 2
+    assert status_irr["observed_category_percent_agreement"] == 0.5
     process_irr = next(
         item for item in irr["dimensions"] if item["column"] == "entrepreneurial_process_stage"
     )
@@ -603,10 +689,18 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
     assert "Study-status filter:</strong> Method" in report
     assert "Distribution:</strong> Compare full and observed" in report
     assert "Model inter-rater reliability" in report
-    assert "Krippendorff alpha" in report
+    assert "Krippendorff α" in report
+    assert "All-category pairwise nominal Krippendorff’s α" in report
+    assert "Evidence-presence pairwise nominal Krippendorff’s α" in report
+    assert "Category pairwise nominal Krippendorff’s α where both found evidence" in report
     assert "Full papers" in report
     assert "Observed share" in report
     assert "Exploratory" in report
+    assert "Three agreement layers" not in report
+    assert "Evidence-presence agreement" in report
+    assert "Category agreement where both found evidence" in report
+    assert "different empirical reasons" in report
+    assert "not a verdict on full-paper quality" in report
 
     observed_report = build_composition_report(
         model_service,
@@ -654,7 +748,263 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
         assert manifest["distribution_view"] == "observed"
         assert manifest["filtered_papers"] == 2
         assert manifest["irr_pairs"][0]["common_papers"] == 2
+        assert manifest["irr_balanced_common_papers"] == 2
         assert manifest["raw_model_records_changed"] is False
+
+
+def test_model_comparison_uses_claude_reference_and_one_balanced_intersection(
+    tmp_path,
+):
+    papers = pd.DataFrame(
+        [
+            {
+                "paper_id": paper_id,
+                "Title": f"Paper {paper_id}",
+                "ai_method_or_phenomenon": "phenomenon",
+                "ai_type_form": "machine learning",
+                "ai_role_function": "AI as tool",
+                "ai_mechanism": "improves prediction",
+                "ai_mechanism_analysis": "improves prediction",
+                "level_of_analysis": "firm",
+                "entrepreneurial_process_stage": "innovation",
+                "scope_conditions": "sector-specific",
+                "definition_construct_clarity": "partial definition",
+            }
+            for paper_id in ("P1", "P2", "P3")
+        ]
+    )
+    papers.to_csv(tmp_path / "master_corpus.csv", index=False)
+    specification_dir = tmp_path / "specification"
+    specification_dir.mkdir()
+
+    def write_model(model: str, paper_ids: tuple[str, ...]) -> None:
+        pd.DataFrame(
+            [
+                {
+                    "paper_id": paper_id,
+                    "coding_model": model,
+                    "ai_method_or_phenomenon": "phenomenon",
+                    "ai_type_form": "machine learning",
+                    "ai_role_function": "AI as tool",
+                    "ai_mechanism": "improves prediction",
+                    "ai_mechanism_logic": "AI improves prediction.",
+                    "level_of_analysis": "firm",
+                    "entrepreneurial_process_stage": "innovation",
+                    "scope_conditions": "sector-specific",
+                    "definition_construct_clarity": "partial definition",
+                }
+                for paper_id in paper_ids
+            ]
+        ).to_csv(
+            specification_dir / f"paper_specifications_{model}_spec-v3.csv",
+            index=False,
+        )
+
+    mini = "gpt-5.4-mini-2026-03-17"
+    nano = "gpt-4.1-nano-2025-04-14"
+    claude = "claude-sonnet-5"
+    gemini = "gemini-3.1-pro-preview"
+    write_model(mini, ("P1", "P2", "P3"))
+    write_model(nano, ("P1", "P2", "P3"))
+    write_model(claude, ("P1", "P2"))
+    write_model(gemini, ("P1",))
+
+    model_service = GraphService(processed_dir=tmp_path)
+    models = model_service.composition_models()
+    assert [item["id"] for item in models] == [mini, nano, claude, gemini]
+    assert {item["corpus_papers"] for item in models} == {3}
+    assert {item["reference_model"] for item in models} == {claude}
+    assert next(item for item in models if item["id"] == mini)["coded_papers"] == 3
+    assert next(item for item in models if item["id"] == claude)["coded_papers"] == 2
+    assert next(item for item in models if item["id"] == gemini)["coded_papers"] == 1
+
+    matrix = model_service.composition_irr_matrix("full_corpus")
+    assert matrix["reference_model"] == claude
+    assert matrix["reference_cohort_papers"] == 2
+    assert matrix["balanced_common_papers"] == 1
+    assert len(matrix["pairs"]) == 6
+    assert {pair["intersection_papers"] for pair in matrix["pairs"]} == {1}
+
+    two_plus = model_service.observed_composition_evidence_bundle(
+        "full_corpus",
+        "all",
+        "ai_type_form",
+        "machine learning",
+        model=mini,
+        minimum_agreement=2,
+    )
+    assert two_plus["agreement_papers"] == 3
+    assert two_plus["preferred_agreement_papers"] == 1
+    assert {paper["paper_id"] for paper in two_plus["papers"]} == {
+        "P1",
+        "P2",
+        "P3",
+    }
+    p1_agreement = next(
+        paper["_model_agreement"]
+        for paper in two_plus["papers"]
+        if paper["paper_id"] == "P1"
+    )
+    assert p1_agreement["preferred_sweet_spot"] is True
+    assert [item["label"] for item in p1_agreement["agreement_models"]] == [
+        "GPT-5.4 Mini",
+        "GPT-4.1 Nano",
+        "Claude Sonnet 5",
+        "Gemini 3.1 Pro Preview",
+    ]
+    preferred = model_service.observed_composition_evidence_bundle(
+        "full_corpus",
+        "all",
+        "ai_type_form",
+        "machine learning",
+        model=mini,
+        preferred_only=True,
+    )
+    assert [paper["paper_id"] for paper in preferred["papers"]] == ["P1"]
+
+    # A growing proprietary output is detected without restarting the service.
+    write_model(gemini, ("P1", "P2"))
+    refreshed = model_service.composition_irr_matrix("full_corpus")
+    assert refreshed["balanced_common_papers"] == 2
+    assert {pair["intersection_papers"] for pair in refreshed["pairs"]} == {2}
+
+
+def test_supplementary_model_is_selectable_without_changing_irr_cohort(
+    tmp_path,
+):
+    papers = pd.DataFrame(
+        [
+            {
+                "paper_id": paper_id,
+                "Title": f"Paper {paper_id}",
+                "ai_method_or_phenomenon": "phenomenon",
+                "ai_type_form": "machine learning",
+                "ai_role_function": "AI as tool",
+                "ai_mechanism": "improves prediction",
+                "ai_mechanism_analysis": "improves prediction",
+                "level_of_analysis": "firm",
+                "entrepreneurial_process_stage": "innovation",
+                "scope_conditions": "sector-specific",
+                "definition_construct_clarity": "partial definition",
+            }
+            for paper_id in ("P1", "P2")
+        ]
+    )
+    papers.to_csv(tmp_path / "master_corpus.csv", index=False)
+    specification_dir = tmp_path / "specification"
+    specification_dir.mkdir()
+
+    def write_model(model: str) -> None:
+        pd.DataFrame(
+            [
+                {
+                    "paper_id": paper_id,
+                    "coding_model": model,
+                    "ai_method_or_phenomenon": "phenomenon",
+                    "ai_type_form": "machine learning",
+                    "ai_role_function": "AI as tool",
+                    "ai_mechanism": "improves prediction",
+                    "ai_mechanism_logic": "AI improves prediction.",
+                    "level_of_analysis": "firm",
+                    "entrepreneurial_process_stage": "innovation",
+                    "scope_conditions": "sector-specific",
+                    "definition_construct_clarity": "partial definition",
+                }
+                for paper_id in ("P1", "P2")
+            ]
+        ).to_csv(
+            specification_dir / f"paper_specifications_{model}_spec-v3.csv",
+            index=False,
+        )
+
+    agreement_models = (
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-4.1-nano-2025-04-14",
+        "claude-sonnet-5",
+        "gemini-3.1-pro-preview",
+    )
+    for model in (*agreement_models, "llama3.2"):
+        write_model(model)
+
+    model_service = GraphService(processed_dir=tmp_path)
+    selectable = model_service.composition_models()
+    llama = next(item for item in selectable if item["id"] == "llama3.2")
+    assert llama["label"] == "Llama 3.2"
+    assert llama["role"] == "supplementary"
+    assert llama["coverage_share"] == 1.0
+    assert llama["irr_eligible"] is False
+    assert llama["irr_minimum_coded_papers"] == 21_930
+    assert llama["irr_status"] == "pending_threshold"
+
+    composition = model_service.observed_composition(
+        "full_corpus",
+        model="llama3.2",
+    )
+    assert composition["model_label"] == "Llama 3.2"
+    assert composition["scope_papers"] == 2
+
+    matrix = model_service.composition_irr_matrix("full_corpus")
+    assert [item["id"] for item in matrix["models"]] == list(agreement_models)
+    assert len(matrix["pairs"]) == 6
+
+    evidence = model_service.observed_composition_evidence_bundle(
+        "full_corpus",
+        "all",
+        "ai_type_form",
+        "machine learning",
+        model="llama3.2",
+        minimum_agreement=2,
+    )
+    assert [item["id"] for item in evidence["models"]] == [
+        *agreement_models,
+        "llama3.2",
+    ]
+    assert evidence["reference_model"] == {
+        "id": "llama3.2",
+        "label": "Llama 3.2",
+    }
+    assert evidence["agreement_papers"] == 2
+    assert evidence["agreement_threshold_counts"] == [
+        {
+            "minimum_models": minimum,
+            "papers": 2,
+            "additional_models_beyond_reference": minimum - 1,
+        }
+        for minimum in range(1, 6)
+    ]
+    assert all(
+        paper["_model_agreement"]["models_total"] == 5
+        for paper in evidence["papers"]
+    )
+    assert all(
+        paper["_model_agreement"]["models_available"] == 5
+        for paper in evidence["papers"]
+    )
+    assert all(
+        paper["_model_agreement"]["reference_model"] == {
+            "id": "llama3.2",
+            "label": "Llama 3.2",
+        }
+        for paper in evidence["papers"]
+    )
+    assert all(
+        next(
+            assignment
+            for assignment in paper["_model_agreement"]["assignments"]
+            if assignment["model"] == "llama3.2"
+        )["is_reference"]
+        for paper in evidence["papers"]
+    )
+
+    model_service._comparison_config["supplementary_irr_models"] = [
+        {"model": "llama3.2", "minimum_coded_papers": 2}
+    ]
+    qualified_matrix = model_service.composition_irr_matrix("full_corpus")
+    assert [item["id"] for item in qualified_matrix["models"]] == [
+        *agreement_models,
+        "llama3.2",
+    ]
+    assert len(qualified_matrix["pairs"]) == 10
 
 
 def test_report_includes_performance_with_citation_and_link(service):
@@ -684,6 +1034,10 @@ def test_endpoint_handlers_serve_performance_and_report(service):
     growth = main.publication_growth_comparison()
     assert growth["search_cutoff"]["date"] == "2026-07-08"
     assert len(growth["views"]) == 5
+    analytics_scopes = {item["id"]: item for item in main.analytics_scopes()}
+    assert analytics_scopes["combined_entrepreneurship"]["papers"] == 2
+    assert analytics_scopes["remaining_full_corpus"]["papers"] == 1
+    assert main.scopes() == main.analytics_scopes()
 
     keywords = main.keyword_evolution(
         "full_corpus", source="author", series_top_n=10, period_top_n=20
@@ -717,7 +1071,11 @@ def test_endpoint_handlers_serve_performance_and_report(service):
         limit=50000,
         model=None,
     )
-    assert {paper["paper_id"] for paper in composition_evidence} == {"P1", "P2"}
+    assert {paper["paper_id"] for paper in composition_evidence["papers"]} == {
+        "P1",
+        "P2",
+    }
+    assert composition_evidence["supporting_papers"] == 2
 
     report = main.scope_report("full_corpus")
     assert "Performance analysis" in report
@@ -804,7 +1162,16 @@ def test_construct_contrasting_endpoints_and_release_are_reproducible(service):
     )
     assert current.media_type.startswith("text/csv")
     current_rows = pd.read_csv(BytesIO(current.body))
-    assert {"domain", "category", "papers", "share"}.issubset(
+    assert {
+        "domain",
+        "category",
+        "papers",
+        "share",
+        "domain_denominator",
+        "baseline_denominator",
+        "baseline_share",
+        "baseline_outside_selected_domain_papers",
+    }.issubset(
         current_rows.columns
     )
 
@@ -859,6 +1226,9 @@ def test_construct_contrasting_endpoints_and_release_are_reproducible(service):
         assert "evidence/filtered_entrepreneurship_papers.csv" in names
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["corpus_papers"] == 3
+        assert manifest["domain_coverage"]["baseline_papers"] == 3
+        assert "baseline_rule" in manifest["domain_coverage"]
+        assert "baseline" in manifest["domain_methodology"]
         assert manifest["raw_model_records_changed"] is False
         assert manifest["journal_scope_by_tactic"] == {
             "construct_specification": "all",
@@ -911,9 +1281,20 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
         assert 'src="/static/citation.js?v=scopus-first-20260716"' in html
         assert "Construct Specification" in html
 
+    knowledge_graph_html = (
+        main.STATIC_DIR / "knowledge_graph.html"
+    ).read_text(encoding="utf-8")
+    assert "<h1>Knowledge Graph Explorer</h1>" not in knowledge_graph_html
+
+    assistant_html = (
+        main.STATIC_DIR / "assistant.html"
+    ).read_text(encoding="utf-8")
+    assert "<h1>Construct Specification Assistant</h1>" not in assistant_html
+
     topic_review_html = (main.STATIC_DIR / "topic_review.html").read_text(
         encoding="utf-8"
     )
+    assert "<h1>Topic interpretation review</h1>" not in topic_review_html
     assert 'id="reviewerName"' in topic_review_html
     assert 'id="topicPrevalenceChart"' in topic_review_html
     assert "function renderTopicPrevalence" in topic_review_html
@@ -942,6 +1323,8 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Back to topic evidence" in topic_review_html
     assert 'api("/api/scopes")' in topic_review_html
     assert 'id="reviewScope"></select>' in topic_review_html
+    assert 'id="currentDatasetContext" class="selection-context"' in topic_review_html
+    assert 'prefix: "Current topic-model dataset"' in topic_review_html
     assert "Dataset review progress" not in topic_review_html
     assert 'id="approvedCount"' not in topic_review_html
     assert 'id="pendingCount"' not in topic_review_html
@@ -971,11 +1354,12 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     composition_html = (
         main.STATIC_DIR / "observed_composition.html"
     ).read_text(encoding="utf-8")
-    assert "<h1>Construct specification</h1>" in composition_html
+    assert "<h1>Construct specification</h1>" not in composition_html
     assert "Dataset scope" in composition_html
     assert "Compare full and observed" in composition_html
     assert "filtered papers · calculated live" in composition_html
     assert "Research artifacts" in composition_html
+    assert "Specification results" not in composition_html
     assert 'href="/human-annotation"' in composition_html
     assert "Human-anchored model validation" in composition_html
     assert "/api/human-annotation/reliability" in composition_html
@@ -983,6 +1367,10 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Balanced common papers" in composition_html
     assert "/static/paper_inspection.js" in composition_html
     assert "paperInspectionCard(paper, [column, secondaryColumn].filter(Boolean))" in composition_html
+    assert "${referenceLabel} + at least ${number - 1} other" in composition_html
+    assert "no cross-model requirement" in composition_html
+    assert "agreement_threshold_counts" in composition_html
+    assert "preferred_agreement_label" in composition_html
     assert 'id="filterDimension"' in composition_html
     assert 'id="filterValue"' in composition_html
     assert 'id="compositionMatrix"' in composition_html
@@ -991,7 +1379,9 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     contrasting_html = (
         main.STATIC_DIR / "construct_contrasting.html"
     ).read_text(encoding="utf-8")
-    assert "Construct contrasting" in contrasting_html
+    assert ">Construct Contrasting</a>" in contrasting_html
+    assert "<h1>Construct contrasting</h1>" not in contrasting_html
+    assert "Current analysis dataset:" in contrasting_html
     assert "Horizontal contrasting" in contrasting_html
     assert "Vertical contrasting" in contrasting_html
     assert 'data-tactic="entrepreneurship"' not in contrasting_html
@@ -1013,6 +1403,10 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "/api/contrasting/evidence" in contrasting_html
     assert "/api/contrasting/report" in contrasting_html
     assert "/api/contrasting/download/" in contrasting_html
+    assert "Official Scopus ASJC codes" in contrasting_html
+    assert "selected business-domain rows" in contrasting_html
+    assert "coverage.business_domain_count" in contrasting_html
+    assert "retain official Scopus ASJC classifications and remain in the baseline" in contrasting_html
     assert 'id="artifactMenu"' in contrasting_html
     assert '<summary class="btn btn-outline">Research artifacts</summary>' in contrasting_html
     assert '<h2>Research artifacts' not in contrasting_html
@@ -1022,6 +1416,8 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'class="card contrasting-workspace-controls"' in contrasting_html
     assert "/static/paper_inspection.js" in contrasting_html
     assert "paperInspectionCard(paper, Object.keys(evidenceFilters))" in contrasting_html
+    assert "At least ${number} models agree" in contrasting_html
+    assert "preferred_agreement_label" in contrasting_html
     assert "What is contrasted" in contrasting_html
     assert "percentage points" in contrasting_html
     assert "Supporting papers" in contrasting_html
@@ -1032,6 +1428,13 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "function populationOptions()" in contrasting_html
     assert "selected comparison corpus defines both the baseline" in contrasting_html
     assert 'id="journalScopeControl"' not in contrasting_html
+
+    paper_inspection_js = (
+        main.STATIC_DIR / "paper_inspection.js"
+    ).read_text(encoding="utf-8")
+    assert "Agreement among:" in paper_inspection_js
+    assert "preferred_sweet_spot" in paper_inspection_js
+    assert "Compare model assignments" in paper_inspection_js
     assert 'id="horizontalJournalScope"' in contrasting_html
     assert "All journals (full-corpus baseline)" in contrasting_html
     assert "FT50 papers only (FT50 baseline)" in contrasting_html
@@ -1071,7 +1474,8 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     human_annotation_html = (
         main.STATIC_DIR / "human_annotation.html"
     ).read_text(encoding="utf-8")
-    assert "Human annotation" in human_annotation_html
+    assert ">Human Annotation</a>" in human_annotation_html
+    assert "<h1>Human annotation</h1>" not in human_annotation_html
     assert 'id="annotatorId"' in human_annotation_html
     assert "/api/human-annotation/instrument" in human_annotation_html
     assert "/api/human-annotation/save" in human_annotation_html
@@ -1080,9 +1484,17 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'id="instructions"' in human_annotation_html
     assert 'id="completionRequirements"' in human_annotation_html
     assert "View all eight dimensions and permitted codes" in human_annotation_html
-    assert "View the full frozen system prompt" in human_annotation_html
+    assert "View the complete model coding request" in human_annotation_html
     assert 'id="fullModelPrompt"' in human_annotation_html
     assert "instrument.full_model_prompt" in human_annotation_html
+    assert 'id="fullModelUserPrompt"' in human_annotation_html
+    assert "instrument.full_model_user_prompt" in human_annotation_html
+    assert 'id="fullModelResponseSchema"' in human_annotation_html
+    assert "instrument.full_model_response_schema" in human_annotation_html
+    assert 'id="studyStatusSchemaNote"' in human_annotation_html
+    assert "function linkedDiagnosis(item)" in human_annotation_html
+    assert 'class="human-citation-link"' in human_annotation_html
+    assert 'target="_blank" rel="noopener noreferrer"' in human_annotation_html
     assert "Fingerprint:" not in human_annotation_html
     assert 'id="protocolFingerprint"' not in human_annotation_html
     assert "Choose your own unique annotator ID" in human_annotation_html
@@ -1091,14 +1503,52 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Annotator ID already in use: choose another ID" in human_annotation_html
 
     index_html = (main.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'api("/api/scopes")' in index_html
+    assert (
+        '<div class="platform-name">'
+        "AI-Entrepreneurship Construct Specification Platform</div>"
+    ) in index_html
+    assert "<h1>Analytics Dashboard</h1>" not in index_html
+    assert 'id="scopeActionSummary" class="selection-context"' in index_html
+    assert "renderPlatformState()" in index_html
+    assert "observed publication years:" in index_html
+    assert "trend analysis through" in index_html
+    assert "retrieved ${performanceData.search_cutoff.label}" in index_html
     assert "Annual and cumulative publication output" in index_html
     assert "Cumulative papers" in index_html
+    assert "Cumulative publication-stock growth" not in index_html
+    assert 'id="growthPopulation"' not in index_html
+    assert 'id="growthPeriod"' in index_html
+    assert 'id="growthPlotMode"' in index_html
+    assert 'id="growthTraceChart"' in index_html
+    assert 'value="1976__2026"' in index_html
+    assert 'value="1976__2000"' in index_html
+    assert "Percentage growth is therefore undefined" in index_html
+    assert 'class="growth-calculation-details"' in index_html
+    assert "`${scopeLabel}: ${startCumulative.toLocaleString()} to ${endCumulative.toLocaleString()} cumulative papers`;" in index_html
+    assert 'value="annual_cumulative"' in index_html
+    assert 'value="growth"' in index_html
+    assert 'value="annual_growth"' in index_html
+    assert "percentage.toFixed" in index_html
+    assert 'label: "Cumulative publication growth"' in index_html
+    assert 'borderColor: "#315b78"' in index_html
+    assert 'backgroundColor: "rgba(49,91,120,.10)"' in index_html
+    assert "Cumulative publication growth from ${startYear}" in index_html
+    assert "Cumulative publication growth from ${startYear} (+" not in index_html
+    assert 'publicationYearTitle = ["Publication year"]' in index_html
+    assert "values as at ${p.search_cutoff.label}" in index_html
+    assert "records were already present in the Scopus retrieval of ${p.search_cutoff.label}" in index_html
+    assert '`${values[index].year}*`' in index_html
+    assert '`${values[index].year}**`' in index_html
+    assert "[String(values[index].year), `retrieved ${p.search_cutoff.label}`]" not in index_html
+    assert "growthEndpointLabel" not in index_html
+    assert "endpoint uses records retrieved from Scopus" in index_html
     assert "Citations accumulated by publication cohort" not in index_html
     assert "Cumulative publication growth across dataset views" not in index_html
     assert 'id="publicationGrowthTable"' not in index_html
     assert "/performance/papers" in index_html
     assert "/keywords/year" in index_html
-    assert "showPublicationPapers(year)" in index_html
+    assert "showPublicationPapers(values[elements[0].index].year)" in index_html
     assert 'id="publicationPaperLimit"' in index_html
     assert 'id="publicationKeywordSource"' in index_html
     assert 'id="publicationKeywordLimit"' in index_html
@@ -1107,16 +1557,20 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Back to publication year" in index_html
     assert "Show all ${data.total_papers.toLocaleString()}" in index_html
     assert "The final cumulative point matches all" in index_html
-    assert "publication year recorded in Scopus" in index_html
+    assert "publication year ${year} in Scopus" in index_html
     assert "present in the Scopus export downloaded on" in index_html
-    assert "`${a.year} (retrieved ${p.search_cutoff.label})`" in index_html
-    assert "`${a.year} (Scopus year)`" not in index_html
+    assert "`${item.year} (retrieved ${p.search_cutoff.label})`" in index_html
     assert "minBarLength: 4" in index_html
-    assert "order: 2, yAxisID: \"y\"" in index_html
-    assert "order: 1, yAxisID: \"y1\"" in index_html
-    assert "row.year >= p.search_cutoff.year ? 5 : 1.5" in index_html
+    assert 'yAxisID: "yAnnual"' in index_html
+    assert 'yAxisID: "yCumulative"' in index_html
+    assert 'yAxisID: "yGrowth"' in index_html
+    assert "yGrowth: {" in index_html
+    assert "display: showGrowth" in index_html
+    assert "callback: compactPercentageTick" in index_html
+    assert "maxTicksLimit: 6" in index_html
     assert "autoSkip: false" in index_html
     assert 'class="chart-wrap publication-chart"' in index_html
+    assert index_html.count('id="growthTraceChart"') == 1
     assert index_html.count('class="performance-table-scroll') == 3
     assert index_html.count("<thead></thead><tbody></tbody>") == 3
     assert "early access" not in index_html.lower()
@@ -1124,8 +1578,30 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "2026 is incomplete" not in index_html
     assert '<a href="${source}"' not in topic_review_html
     css = (main.STATIC_DIR / "esd.css").read_text(encoding="utf-8")
+    assert ".selection-context" in css
+    assert "--muted: #4f5e69;" in css
+    assert ".platform-name {" in css
+    assert "margin: 0 0 6px;" in css
+    assert "text-align: left;" in css
+    assert "AI THEORY ELABORATION" not in css
+    assert 'font-family: "IBM Plex Sans"' in css
+    assert 'font-family: "IBM Plex Serif"' in css
+    assert 'font-family: "IBM Plex Mono"' in css
+    assert "fonts.googleapis.com" not in css
+    plex_dir = main.STATIC_DIR / "fonts" / "ibm-plex"
+    for font_file in (
+        "IBMPlexSans-Regular.woff2",
+        "IBMPlexSans-Medium.woff2",
+        "IBMPlexSerif-Regular.woff2",
+        "IBMPlexSerif-Medium.woff2",
+        "IBMPlexMono-Regular.woff2",
+        "IBMPlexMono-Medium.woff2",
+        "OFL.txt",
+    ):
+        assert (plex_dir / font_file).is_file()
     assert "cursor: zoom-in" not in css
     assert ".chart-wrap.publication-chart { height: 520px; }" in css
+    assert ".growth-calculation-details" in css
     assert ".performance-table-scroll {" in css
     assert "position: sticky;" in css
 
@@ -1133,7 +1609,9 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
         encoding="utf-8"
     )
     graph_js = (main.STATIC_DIR / "knowledge_graph.js").read_text(encoding="utf-8")
-    assert 'src="/static/knowledge_graph.js"' in graph_html
+    assert 'src="/static/knowledge_graph.js?' in graph_html
+    assert 'id="currentDatasetContext" class="selection-context"' in graph_html
+    assert "updateCurrentDatasetContext()" in graph_js
     assert 'id="nodeTypeFilters"' in graph_html
     assert 'id="relationshipTypeFilters"' in graph_html
     assert 'id="cypherQuery"' in graph_html
@@ -1168,15 +1646,34 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "data.model_label" in composition_html
     assert "Research artifacts" in composition_html
     assert "Generate filtered report" in composition_html
+    assert 'id="currentDatasetContext" class="selection-context"' in composition_html
+    assert "updateCurrentDatasetContext()" in composition_html
     assert 'data-composition-download="composition"' in composition_html
     assert 'data-composition-download="irr"' in composition_html
+    assert 'id="coderRobustnessDownload"' in composition_html
+    assert "/api/composition/coder-robustness/download" in composition_html
     assert 'data-composition-download="release"' in composition_html
     assert "Model inter-rater reliability" in composition_html
+    assert "Coder robustness" in composition_html
+    assert 'id="robustReferenceModel"' in composition_html
+    assert 'id="robustComparisonModel"' in composition_html
+    assert 'id="robustSupportThreshold"' in composition_html
+    assert 'data-robustness-detail="aggregate"' in composition_html
+    assert 'data-robustness-detail="relations"' in composition_html
+    assert 'id="robustAggregate"' in composition_html
+    assert 'id="robustNested"' in composition_html
+    assert 'id="robustRelations"' in composition_html
+    assert "/api/composition/coder-robustness" in composition_html
+    assert "/api/composition/coder-robustness/evidence" in composition_html
+    assert "function showRobustnessDetail" in composition_html
+    assert "function showRobustnessEvidence" in composition_html
+    assert "The page filters above do not alter this fixed robustness analysis" not in composition_html
     assert composition_html.index('id="compositionGrid"') < composition_html.index(
         "Model inter-rater reliability"
     )
     assert 'id="irrAgreementMatrix"' in composition_html
     assert 'id="irrAlphaMatrix"' in composition_html
+    assert "irr-detail-table-wrap" in composition_html
     assert 'id="irrLeftModel"' not in composition_html
     assert 'id="irrRightModel"' not in composition_html
     assert "/composition/irr/matrix" in composition_html
@@ -1188,6 +1685,14 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'distributionView === "full"' in composition_html
     assert 'distributionView === "observed"' in composition_html
     assert "eight dimensions; six core" in composition_html
+    assert 'id="irrDimensionInfoButton"' in composition_html
+    assert "function showIrrDimensionInfo()" in composition_html
+    assert "Exploratory does not mean excluded, invalid, or unavailable" in composition_html
+    assert "Why the agreement table separates three questions" in composition_html
+    assert "Process-stage models disagree primarily" not in composition_html
+    assert "the main weakness is agreement about whether a stage is observable" in composition_html
+    assert "irr-decomposition-table" in composition_html
+    assert "not a verdict on whether the full paper defines AI adequately" in composition_html
     assert "/composition/report?" in composition_html
     assert "/composition/download/" in composition_html
     assert 'id="compositionEvidenceLimit"' in composition_html
@@ -1215,7 +1720,7 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Generate scope report" in dashboard_html
     assert "Download scope data" in dashboard_html
     assert "downloadScopeData" in dashboard_html
-    assert "papers selected" in dashboard_html
+    assert "renderPlatformState()" in dashboard_html
     assert 'id="cards"' not in dashboard_html
     assert "Clear study status" not in dashboard_html
     assert "Named technical type" not in dashboard_html
@@ -1224,7 +1729,8 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Total citations" in dashboard_html
     assert "Mean citations per paper" in dashboard_html
     assert "Papers cited at least once" in dashboard_html
-    assert "Publication years" in dashboard_html
+    assert "Corpus overview" in dashboard_html
+    assert '<div class="l">Publication years</div>' not in dashboard_html
 
     citation_js = (main.STATIC_DIR / "citation.js").read_text(encoding="utf-8")
     assert "Best available link for a paper: Scopus first, then DOI" in citation_js
@@ -1233,12 +1739,21 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     )
 
     assistant_html = (main.STATIC_DIR / "assistant.html").read_text(encoding="utf-8")
+    assert 'id="currentDatasetContext" class="selection-context"' in assistant_html
+    assert "updateCurrentDatasetContext()" in assistant_html
     assert "assistant-contrast" in assistant_html
     assert "Documents per view" in assistant_html
     assert "View roles" in assistant_html
     assert "View papers" in assistant_html
     assert "showContrastRoles" in assistant_html
     assert "showRolePapers" in assistant_html
+
+    scope_context_js = (main.STATIC_DIR / "scope_context.js").read_text(
+        encoding="utf-8"
+    )
+    assert "Current dataset" in scope_context_js
+    assert "Business domain" in scope_context_js
+    assert "Analytical residual" in scope_context_js
 
 
 def test_static_assets_are_never_cached(monkeypatch):

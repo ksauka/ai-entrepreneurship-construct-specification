@@ -4,6 +4,8 @@ import json
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 from aecsp.specification.gemini_batch import (
     custom_id_for,
     estimate_cost,
@@ -108,3 +110,41 @@ def test_validation_gate_can_be_reused_only_for_same_fingerprint(tmp_path):
     reused = json.loads((target / "live_validation_gate.json").read_text())
     assert reused["passed"] is True
     assert reused["reused_from"].endswith("pilot/live_validation_gate.json")
+
+
+def test_quota_error_is_signalled_for_safe_outer_retry():
+    module = load_script()
+
+    class QuotaError(Exception):
+        status_code = 429
+
+    class Batches:
+        @staticmethod
+        def create(**kwargs):
+            raise QuotaError("RESOURCE_EXHAUSTED")
+
+    class Client:
+        batches = Batches()
+
+    with pytest.raises(SystemExit) as caught:
+        module.create_batch_job(
+            Client(), model=module.DEFAULT_MODEL, uploaded_file="files/test"
+        )
+    assert caught.value.code == module.QUOTA_RETRY_EXIT_CODE
+
+
+def test_nonquota_submission_error_is_not_retried():
+    module = load_script()
+
+    class Batches:
+        @staticmethod
+        def create(**kwargs):
+            raise RuntimeError("invalid request")
+
+    class Client:
+        batches = Batches()
+
+    with pytest.raises(RuntimeError, match="invalid request"):
+        module.create_batch_job(
+            Client(), model=module.DEFAULT_MODEL, uploaded_file="files/test"
+        )

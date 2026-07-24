@@ -1,6 +1,6 @@
 """Render the construct-specification graphs per entrepreneurship population.
 
-For each population (full corpus, top-tier/core entrepreneurship, other
+For each population (full corpus, Leading entrepreneurship journals, Additional
 entrepreneurship, combined) this renders the per-dimension observed-composition
 panels that are the Stage 1 construct-specification portrait. It reuses the
 platform's analyze_observed_composition so the graphs match the interactive
@@ -40,8 +40,8 @@ def populations(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
     q4 = _truthy(frame["in_query_4"]) if "in_query_4" in frame.columns else pd.Series(False, index=frame.index)
     return {
         "full_corpus": (frame, "Full corpus"),
-        "core_entrepreneurship": (frame[q3], "Top-tier entrepreneurship (Query 3)"),
-        "other_entrepreneurship": (frame[q4], "Other entrepreneurship (Query 4)"),
+        "core_entrepreneurship": (frame[q3], "Leading entrepreneurship journals"),
+        "other_entrepreneurship": (frame[q4], "Additional entrepreneurship"),
         "combined_entrepreneurship": (frame[q3 | q4], "Combined entrepreneurship"),
     }
 

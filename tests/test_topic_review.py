@@ -5,7 +5,9 @@ from zipfile import ZipFile
 
 import pandas as pd
 import pytest
+from fastapi import Request
 
+from aecsp.api.auth import ADMIN_ROLE
 from aecsp.topics.review import (
     EXPECTED_BY_SCOPE,
     FIGURE_NAMES,
@@ -312,13 +314,22 @@ def test_api_write_requires_authentication_and_updates_store(tmp_path, monkeypat
         reviewer_notes="Reviewed",
         reviewer="Researcher C",
     )
+    http_request = Request(
+        {
+            "type": "http",
+            "method": "PATCH",
+            "path": "/api/topic-review/query_4/0",
+            "headers": [],
+        }
+    )
+    http_request.state.dashboard_access_role = ADMIN_ROLE
 
     monkeypatch.delenv("ETV_DASHBOARD_REQUIRE_AUTH", raising=False)
     with pytest.raises(main.HTTPException) as blocked:
-        main.update_topic_review("query_4", 0, request)
+        main.update_topic_review("query_4", 0, request, http_request)
     assert blocked.value.status_code == 403
 
     monkeypatch.setenv("ETV_DASHBOARD_REQUIRE_AUTH", "true")
-    response = main.update_topic_review("query_4", 0, request)
+    response = main.update_topic_review("query_4", 0, request, http_request)
     assert response["topic"]["approved_label"] == "AI adoption"
     assert response["summary"]["approved"] == 1

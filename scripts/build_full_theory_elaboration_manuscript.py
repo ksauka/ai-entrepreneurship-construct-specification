@@ -6,16 +6,17 @@ with the complete registered theory-elaboration blueprint.  It reads only
 frozen corpus, validation, topic, domain, and contrasting artifacts; it does
 not recode papers or change any analytical dataset.
 
-The output is deliberately labelled ``current evidence`` because the full
-Claude/Gemini extension and blind human annotation remain incomplete.  Those
-pending layers are disclosed inside the validation section rather than used to
-block results already supported by the frozen corpus and primary coding.
+The output is deliberately labelled ``current evidence`` because blind human
+annotation of the eight model-coded dimensions remains incomplete. The four
+model outputs and their exact balanced common-paper intersection are complete
+at the documented checkpoint and are rebuilt from frozen research artifacts.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
@@ -30,6 +31,13 @@ from lxml import etree
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from aecsp.analytics.publication_growth import (  # noqa: E402
+    cumulative_trace,
+    growth_record,
+)
+
 SOURCE = ROOT / "docs/ETP draft - July 17.docx"
 OUTPUT = ROOT / "docs/ETP draft - full methodology results discussion - current evidence 2026-07-21.docx"
 MARKDOWN = ROOT / "reports/analysis/ETP_FULL_BLUEPRINT_CURRENT_EVIDENCE.md"
@@ -40,14 +48,23 @@ TOPIC_MANIFEST = ROOT / "data/processed/topics/final_run_manifest.json"
 CONTRAST = ROOT / "reports/analysis/tables/contrasting"
 VALIDATION = ROOT / "data/processed/analysis/model_validation"
 VALIDATION_TABLES = ROOT / "reports/analysis/tables/model_validation"
+FULL_IRR_COVERAGE = VALIDATION_TABLES / "full_corpus_model_coverage.csv"
+FULL_IRR_SUMMARY = VALIDATION_TABLES / "full_corpus_pairwise_irr_core_summary.csv"
+FULL_IRR_DIMENSIONS = VALIDATION_TABLES / "full_corpus_pairwise_irr_dimensions.csv"
+FULL_IRR_CONSENSUS = VALIDATION_TABLES / "full_corpus_dimension_consensus.csv"
+FULL_IRR_MANIFEST = VALIDATION_TABLES / "full_corpus_model_irr_manifest.json"
 HUMAN_DB = ROOT / "data/interim/human_validation/human_annotations.sqlite3"
+DOMAIN_ASSIGNMENTS = ROOT / "data/processed/analysis/theory_elaboration/domains/business_domain_assignments.csv"
 
 FIG_SPEC = ROOT / "reports/analysis/figures/specification/specification_combined_entrepreneurship.png"
+FIG_TREND = ROOT / "reports/analysis/figures/contrasting/publication_trend_combined_entrepreneurship.png"
+FIG_NESTED_STATUS = ROOT / "reports/analysis/figures/contrasting/nested_status_central_dimensions.png"
 FIG_TYPE_ROLE = ROOT / "reports/analysis/figures/contrasting/specification_type_by_role.png"
 FIG_HORIZONTAL = ROOT / "reports/analysis/figures/contrasting/horizontal_role_by_domain_with_ent.png"
 FIG_VERTICAL = ROOT / "reports/analysis/figures/contrasting/vertical_role_by_collapsed_level.png"
 FIG_STRUCTURE = ROOT / "reports/analysis/figures/contrasting/structuring_role_by_mechanism.png"
 FIG_FRAMEWORK = ROOT / "reports/analysis/figures/contrasting/framework_diagram.png"
+NESTED_STATUS = CONTRAST / "study_status_conditioned_specification.csv"
 
 ROLE_MISSING = {"", "AI as unspecified label"}
 TYPE_MISSING = {"", "unspecified AI"}
@@ -62,6 +79,155 @@ def truthy(series: pd.Series) -> pd.Series:
     return series.astype(str).str.strip().str.lower().isin({"1", "true", "yes", "y", "x"})
 
 
+def publication_growth_claims(
+    frame: pd.DataFrame,
+    combined: pd.DataFrame,
+) -> dict[str, dict[tuple[int, int], dict]]:
+    """Reproduce the introduction's annual-output growth claims."""
+
+    assignments = pd.read_csv(
+        DOMAIN_ASSIGNMENTS, dtype=str, keep_default_na=False
+    )
+    core_mask = truthy(frame["in_query_3"])
+    additional_mask = truthy(frame["in_query_4"])
+    populations = {
+        "full_corpus": frame,
+        "core_entrepreneurship": frame[core_mask].copy(),
+        "additional_entrepreneurship": frame[additional_mask].copy(),
+        "combined_entrepreneurship": combined,
+        "remaining_full_corpus": frame[
+            ~frame["paper_id"].isin(set(combined["paper_id"]))
+        ].copy(),
+    }
+    for domain_id in ("marketing", "finance"):
+        paper_ids = set(
+            assignments.loc[assignments["domain_id"].eq(domain_id), "paper_id"]
+        )
+        populations[domain_id] = frame[frame["paper_id"].isin(paper_ids)].copy()
+    periods = ((2000, 2026), (2010, 2020), (2020, 2023), (2023, 2026))
+    claims: dict[str, dict[tuple[int, int], dict]] = {}
+    for population_id, population in populations.items():
+        years = pd.to_numeric(population["Year"], errors="coerce")
+        claims[population_id] = {}
+        for start_year, end_year in periods:
+            start_count = int(years.eq(start_year).sum())
+            end_count = int(years.eq(end_year).sum())
+            claims[population_id][(start_year, end_year)] = {
+                "start_year": start_year,
+                "end_year": end_year,
+                "start_annual_papers": start_count,
+                "end_annual_papers": end_count,
+                "added_annual_papers": end_count - start_count,
+                "percent_growth": (
+                    (end_count - start_count) / start_count
+                    if start_count > 0
+                    else None
+                ),
+            }
+    return claims
+
+
+def build_publication_trend_figure(combined: pd.DataFrame) -> None:
+    """Render the manuscript equivalent of the platform trend selection."""
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    trace = cumulative_trace(combined, 2000, 2026)
+    years = [row["year"] for row in trace]
+    annual = [row["papers"] for row in trace]
+    cumulative = [row["cumulative_papers"] for row in trace]
+
+    FIG_TREND.parent.mkdir(parents=True, exist_ok=True)
+    fig, annual_axis = plt.subplots(figsize=(10.6, 5.8))
+    annual_axis.bar(
+        years,
+        annual,
+        width=0.76,
+        color="#3498db",
+        alpha=0.62,
+        edgecolor="#2471a3",
+        linewidth=0.45,
+        label="Papers published in year",
+    )
+    annual_axis.set_ylabel("Papers published in year", color="#2471a3")
+    annual_axis.tick_params(axis="y", colors="#2471a3")
+    annual_axis.grid(axis="y", color="#d9e2e8", linewidth=0.7, alpha=0.75)
+    annual_axis.set_axisbelow(True)
+
+    cumulative_axis = annual_axis.twinx()
+    cumulative_axis.plot(
+        years,
+        cumulative,
+        color="#8e44ad",
+        linewidth=2.8,
+        marker="o",
+        markersize=3.3,
+        label="Cumulative papers",
+    )
+    cumulative_axis.set_ylabel("Cumulative papers", color="#8e44ad")
+    cumulative_axis.tick_params(axis="y", colors="#8e44ad")
+    cumulative_axis.annotate(
+        f"{cumulative[-1]:,}",
+        xy=(years[-1], cumulative[-1]),
+        xytext=(-8, -22),
+        textcoords="offset points",
+        ha="right",
+        color="#8e44ad",
+        fontsize=9.5,
+        fontweight="bold",
+    )
+
+    ticks = [2000, 2005, 2010, 2015, 2020, 2023, 2026]
+    annual_axis.set_xticks(ticks)
+    annual_axis.set_xticklabels(
+        [
+            str(year) if year != 2026 else "2026*"
+            for year in ticks
+        ]
+    )
+    annual_axis.set_xlim(1999.3, 2026.7)
+    annual_axis.set_xlabel(
+        "Publication year\n* 2026 values are as at 8 July 2026",
+        labelpad=8,
+    )
+    annual_axis.set_title(
+        "Combined entrepreneurship: annual and cumulative publication output",
+        loc="left",
+        fontsize=13,
+        fontweight="bold",
+        color="#203040",
+        pad=13,
+    )
+    annual_axis.text(
+        0,
+        1.015,
+        "Bars show yearly output; the line shows the cumulative number of papers through each year.",
+        transform=annual_axis.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=9.2,
+        color="#5f6b73",
+    )
+    handles_1, labels_1 = annual_axis.get_legend_handles_labels()
+    handles_2, labels_2 = cumulative_axis.get_legend_handles_labels()
+    annual_axis.legend(
+        handles_1 + handles_2,
+        labels_1 + labels_2,
+        loc="upper left",
+        frameon=False,
+        fontsize=9.2,
+    )
+    for spine in ("top", "right"):
+        annual_axis.spines[spine].set_visible(False)
+    cumulative_axis.spines["top"].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(FIG_TREND, dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
 def remove_from_marker(document: Document, marker: str) -> None:
     paragraph = next((p for p in document.paragraphs if p.text.strip() == marker), None)
     if paragraph is None:
@@ -73,6 +239,106 @@ def remove_from_marker(document: Document, marker: str) -> None:
             remove = True
         if remove and child.tag != qn("w:sectPr"):
             body.remove(child)
+
+
+def remove_paragraph(paragraph) -> None:
+    """Delete a source paragraph without leaving review scaffolding behind."""
+
+    element = paragraph._element
+    element.getparent().remove(element)
+    paragraph._p = paragraph._element = None
+
+
+def british_spelling(text: str) -> str:
+    """Apply the manuscript's British spelling convention to authored prose."""
+
+    replacements = [
+        ("Organizational", "Organisational"),
+        ("organizational", "organisational"),
+        ("Organization", "Organisation"),
+        ("organization", "organisation"),
+        ("Organizing", "Organising"),
+        ("organizing", "organising"),
+        ("Organized", "Organised"),
+        ("organized", "organised"),
+        ("Organize", "Organise"),
+        ("organize", "organise"),
+        ("Operationalization", "Operationalisation"),
+        ("operationalization", "operationalisation"),
+        ("Operationalized", "Operationalised"),
+        ("operationalized", "operationalised"),
+        ("Operationalizes", "Operationalises"),
+        ("operationalizes", "operationalises"),
+        ("Operationalize", "Operationalise"),
+        ("operationalize", "operationalise"),
+        ("Theorized", "Theorised"),
+        ("theorized", "theorised"),
+        ("Emphasizing", "Emphasising"),
+        ("emphasizing", "emphasising"),
+        ("Emphasizes", "Emphasises"),
+        ("emphasizes", "emphasises"),
+        ("Emphasize", "Emphasise"),
+        ("emphasize", "emphasise"),
+        ("Generalized", "Generalised"),
+        ("generalized", "generalised"),
+        ("Generalize", "Generalise"),
+        ("generalize", "generalise"),
+        ("Normalized", "Normalised"),
+        ("normalized", "normalised"),
+        ("Centered", "Centred"),
+        ("centered", "centred"),
+        ("Modeling", "Modelling"),
+        ("modeling", "modelling"),
+        ("Labeled", "Labelled"),
+        ("labeled", "labelled"),
+    ]
+    for source, target in replacements:
+        text = text.replace(source, target)
+    return text
+
+
+def normalise_authored_paragraphs(document: Document) -> None:
+    """Normalise prose without changing cited titles stored in tables/references."""
+
+    for paragraph in document.paragraphs:
+        for run in paragraph.runs:
+            # Empty runs carry drawings and footnote references. Reassigning
+            # their text would delete those non-text XML children.
+            if run.text:
+                run.text = british_spelling(run.text)
+
+
+def validate_manuscript(document: Document) -> None:
+    """Fail the build if known submission-blocking scaffolding reappears."""
+
+    paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs]
+    forbidden = {
+        "The next section…",
+        "The next section...",
+        "Topics",
+        "[Reference list incomplete in this draft: every in-text citation, including the entrepreneurship anchor papers cited in the introduction, theory, results, and interpretation, must be added before submission.]",
+    }
+    present = sorted(forbidden.intersection(paragraphs))
+    if present:
+        raise RuntimeError(f"Unfinished manuscript scaffolding remains: {present}")
+    try:
+        references_index = paragraphs.index("References")
+    except ValueError as error:
+        raise RuntimeError("The manuscript has no References heading") from error
+    references = [value for value in paragraphs[references_index + 1 :] if value]
+    if len(references) < 39:
+        raise RuntimeError(
+            f"Reference list unexpectedly shortened to {len(references)} entries"
+        )
+    framework_index = paragraphs.index(
+        "Figure 8. Construct-clarification framework and entrepreneurship implication."
+    )
+    if not (
+        paragraphs.index("5.2 AI as a configurational construct")
+        < framework_index
+        < paragraphs.index("5.3 Entrepreneurship and bottleneck relocation")
+    ):
+        raise RuntimeError("Figure 8 is not positioned in the framework subsection")
 
 
 def shade(cell, fill: str) -> None:
@@ -269,7 +535,7 @@ class Writer:
             cells = table.add_row().cells
             for index, value in enumerate(row):
                 set_cell(cells[index], value)
-        format_table(table)
+        format_table(table, prevent_splitting=True)
         self.document.add_paragraph()
         self.md.extend([f"**{caption}**", ""])
         self.md.append("| " + " | ".join(headers) + " |")
@@ -333,32 +599,98 @@ def distribution(frame: pd.DataFrame, column: str, excluded: set[str]) -> tuple[
     return len(values), values.value_counts(normalize=True).mul(100)
 
 
-def model_validation_rows() -> list[list[object]]:
-    macro = pd.read_csv(VALIDATION_TABLES / "pairwise_macro_agreement.csv")
-    pairwise = pd.read_csv(VALIDATION / "agreement_pairwise.csv")
+def status_conditioned_rows() -> list[list[str]]:
+    """Summarise the frozen platform slice used in the nested results table."""
+
+    nested = pd.read_csv(NESTED_STATUS, keep_default_na=False)
+    nested = nested[
+        nested["population"].eq("combined")
+        & nested["distribution"].eq("observed")
+    ].copy()
+    order = [
+        ("ai_role", "AI role"),
+        ("technical_type", "Technical type"),
+        ("mechanism", "Mechanism"),
+        ("level", "Level"),
+        ("process_stage", "Process stage"),
+        ("scope", "Scope"),
+        ("definition", "Definition"),
+    ]
     rows = []
-    for row in macro.sort_values("percent_agreement", ascending=False).itertuples():
-        match = pairwise[
-            (pairwise.comparison_set == "probability_sample")
-            & (pairwise.left_model == row.left_model)
-            & (pairwise.right_model == row.right_model)
-        ]
-        if match.empty:
-            match = pairwise[
-                (pairwise.comparison_set == "probability_sample")
-                & (pairwise.left_model == row.right_model)
-                & (pairwise.right_model == row.left_model)
-            ]
-        comparable = int(match.iloc[0].comparable)
-        rows.append(
-            [
-                f"{row.left_model} : {row.right_model}",
-                comparable,
-                f"{row.percent_agreement:.2f}",
-                f"{row.krippendorff_alpha:.2f}",
-            ]
-        )
+    for dimension, label in order:
+        cells = []
+        for status in ("phenomenon", "method", "both"):
+            selected = nested[
+                nested["outcome_dimension"].eq(dimension)
+                & nested["control_raw_value"].eq(status)
+            ].copy()
+            if selected.empty:
+                cells.append("Not available")
+                continue
+            selected["share"] = pd.to_numeric(selected["share"], errors="coerce")
+            top = selected.sort_values(["share", "papers"], ascending=False).iloc[0]
+            cells.append(
+                f"{top.category}: {top.share:.1%}; observed "
+                f"{int(top.denominator):,}/{int(top.control_papers):,} "
+                f"({int(top.denominator) / int(top.control_papers):.1%})"
+            )
+        rows.append([label, *cells])
     return rows
+
+
+def model_validation_rows() -> list[list[object]]:
+    """Return the final full-intersection six-core orientation summary."""
+
+    table = pd.read_csv(FULL_IRR_SUMMARY)
+    table = table.sort_values(
+        ["mean_krippendorff_alpha", "mean_exact_agreement"], ascending=False
+    )
+    return [
+        [
+            row.model_pair,
+            f"{int(row.balanced_common_papers):,}",
+            f"{row.mean_exact_agreement:.2%}",
+            f"{row.mean_krippendorff_alpha:.2f}",
+        ]
+        for row in table.itertuples()
+    ]
+
+
+def model_coverage_rows() -> list[list[object]]:
+    table = pd.read_csv(FULL_IRR_COVERAGE)
+    return [
+        [
+            row.model_label,
+            f"{int(row.successful_corpus_papers):,}",
+            f"{row.coverage_share:.2%}",
+            f"{int(row.missing_corpus_papers):,}",
+        ]
+        for row in table.itertuples()
+    ]
+
+
+def model_reliability_claims() -> dict:
+    summary = pd.read_csv(FULL_IRR_SUMMARY)
+    dimensions = pd.read_csv(FULL_IRR_DIMENSIONS)
+    consensus = pd.read_csv(FULL_IRR_CONSENSUS)
+    manifest = json.loads(FULL_IRR_MANIFEST.read_text(encoding="utf-8"))
+    strongest_pair = summary.sort_values(
+        ["mean_krippendorff_alpha", "mean_exact_agreement"], ascending=False
+    ).iloc[0]
+    preferred_pairs = summary[
+        ~summary["model_pair"].str.contains("Nano", na=False)
+    ].copy()
+    technical = dimensions[
+        dimensions["dimension"].eq("ai_type_form")
+        & ~dimensions["model_pair"].str.contains("Nano", na=False)
+    ].copy()
+    return {
+        "manifest": manifest,
+        "strongest_pair": strongest_pair,
+        "preferred_pairs": preferred_pairs,
+        "technical": technical,
+        "consensus": consensus,
+    }
 
 
 def annotation_count() -> int:
@@ -445,22 +777,76 @@ def build() -> None:
     additional = frame[truthy(frame.in_query_4)].copy()
     combined = frame[truthy(frame.in_query_3) | truthy(frame.in_query_4)].copy()
     ft50 = frame[truthy(frame.in_query_2)].copy()
+    publication_growth = publication_growth_claims(frame, combined)
+    build_publication_trend_figure(combined)
+
+    def claim(population: str, start_year: int, end_year: int) -> dict:
+        return publication_growth[population][(start_year, end_year)]
+
+    def claim_percentage(population: str, start_year: int, end_year: int) -> float:
+        value = claim(population, start_year, end_year)["percent_growth"]
+        if value is None:
+            raise RuntimeError(
+                f"No cumulative growth baseline for {population}: "
+                f"{start_year}-{end_year}"
+            )
+        return float(value) * 100
 
     document = Document(SOURCE)
-    for paragraph in document.paragraphs:
-        if "increased by XXX%" in paragraph.text:
+    paragraphs_to_remove = []
+    for paragraph in list(document.paragraphs):
+        if paragraph.text.startswith("Artificial intelligence (AI) has opened a lively new frontier"):
             paragraph.text = (
-                "AI is ubiquitous across business disciplines (Ooi et al., 2025), but its uptake within "
-                "entrepreneurship research is noteworthy. Using a broad corpus of 22,345 AI-related papers in "
-                "business and management journals, we track cumulative publication growth across analytical "
-                "populations. Between 2000 and 2026, the publication stock in Combined entrepreneurship grew "
-                "from 65 to 1,632 papers (2,410.77%), compared with 1,172.94% among the remaining broad-corpus "
-                "papers. Combined entrepreneurship grew by 113.89% between 2010 and 2020, 97.73% between 2020 "
-                "and 2023, and 167.98% between 2023 and 2026. The corresponding increases were 278.49%, "
-                "112.78%, and 105.87% in marketing, and 132.53%, 113.47%, and 157.28% in finance. All 2026 "
-                "values reflect records available at the 8 July 2026 retrieval. These patterns show rapid "
-                "growth across business research, with entrepreneurship forming an increasingly important part "
-                "of that expansion."
+                "Artificial intelligence (AI) has opened a lively new frontier in entrepreneurship scholarship, "
+                "reshaping academic discourse on opportunity, judgment, organising, markets, and research "
+                "practice. Yet the use of AI as a construct in this rapidly expanding conversation rests on "
+                "different theoretical underpinnings. We use theory elaboration to examine this variation across "
+                "22,345 business and management papers, including 1,632 papers in Core and Additional "
+                "entrepreneurship journals. Large-scale coding of titles, abstracts, and author keywords is "
+                "combined with systematic close reading of 136 papers. Construct specification, horizontal and "
+                "vertical contrasting, and structuring show that common technical labels conceal different study "
+                "statuses, theoretical roles, mechanisms, levels, and scope conditions. The entrepreneurship "
+                "reading further indicates that expanded prediction and generation relocate the binding "
+                "constraint towards evaluation and commitment, and that firms benefit when AI is integrated "
+                "across organisational routines, data, skills, learning, and governance. We develop a construct-"
+                "clarification framework and operationalise it through an interactive, evidence-linked research "
+                "platform."
+            )
+        elif paragraph.text.startswith("Keywords: entrepreneurship, AI"):
+            paragraph.text = (
+                "Keywords: entrepreneurship, artificial intelligence, theory elaboration, construct "
+                "specification, interactive research platform"
+            )
+        if "increased by XXX%" in paragraph.text:
+            entrepreneurship_all = claim(
+                "combined_entrepreneurship", 2000, 2026
+            )
+            other_all = claim("remaining_full_corpus", 2000, 2026)
+            paragraph.text = (
+                "AI is ubiquitous in business research (Ooi et al., 2025), but its growth within "
+                "entrepreneurship scholarship is noteworthy. Using our corpus of 22,345 AI-related papers, "
+                "we compare yearly publication output in Core and Additional entrepreneurship journals with "
+                "output elsewhere in the business corpus. Between 2000 and 2026, yearly output in the Combined "
+                f"entrepreneurship population rose from {entrepreneurship_all['start_annual_papers']:,} to "
+                f"{entrepreneurship_all['end_annual_papers']:,} papers "
+                f"({claim_percentage('combined_entrepreneurship', 2000, 2026):,.2f}%), compared with "
+                f"an increase from {other_all['start_annual_papers']:,} to "
+                f"{other_all['end_annual_papers']:,} papers "
+                f"({claim_percentage('remaining_full_corpus', 2000, 2026):,.2f}%) in the remainder of the "
+                "corpus. Within Combined entrepreneurship, yearly output increased by "
+                f"{claim_percentage('combined_entrepreneurship', 2010, 2020):,.2f}% between 2010 and 2020, "
+                f"{claim_percentage('combined_entrepreneurship', 2020, 2023):,.2f}% between 2020 and 2023, "
+                f"and {claim_percentage('combined_entrepreneurship', 2023, 2026):,.2f}% between 2023 and "
+                "8 July 2026. The corresponding increases were "
+                f"{claim_percentage('marketing', 2010, 2020):,.2f}%, "
+                f"{claim_percentage('marketing', 2020, 2023):,.2f}%, and "
+                f"{claim_percentage('marketing', 2023, 2026):,.2f}% in marketing, and "
+                f"{claim_percentage('finance', 2010, 2020):,.2f}%, "
+                f"{claim_percentage('finance', 2020, 2023):,.2f}%, and "
+                f"{claim_percentage('finance', 2023, 2026):,.2f}% in finance. The 2026 figures are partial-year "
+                "counts based on records available at the 8 July 2026 retrieval. These patterns suggest that AI "
+                "has become a rapidly expanding scholarly construct across business research, with "
+                "entrepreneurship scholarship forming an important part of that expansion."
             )
         elif paragraph.text.startswith("To answer this question, we developed an interactive web-based platform"):
             paragraph.text = (
@@ -475,18 +861,122 @@ def build() -> None:
             )
         elif paragraph.text.startswith("Our paper contributes to the entrepreneurship literature in a few ways. First"):
             paragraph.text = (
-                "Our paper contributes to entrepreneurship research in several ways. First, it provides an "
-                "interactive platform for examining AI-related scholarship within a broad business and management "
-                "corpus, while keeping the Core, Additional, and Combined entrepreneurship populations explicit. "
-                "Publication years run through 2026, with separately labelled advance 2027 records already "
-                "indexed by Scopus at the 8 July 2026 retrieval. The platform connects growth, construct "
-                "specification, contrasting, topic navigation, and evidence-paper inspection, making the review "
-                "transparent, reusable, and extendable rather than static."
+                "Our paper makes two contributions. First, it develops a construct-clarification framework that "
+                "establishes the theoretical identity of an AI claim from its study status and technical form, "
+                "together with four theoretical dimensions: role, mechanism, level of analysis, and embedding or "
+                "scope condition. Process stage and definition form provide additional specification diagnostics. "
+                "The framework shows that studies sharing a technical label are theoretically comparable only "
+                "when the dimensions carrying their claims are sufficiently aligned. It treats the allocation of "
+                "agency between human and machine as a theoretical frontier surfaced by the analysis but not "
+                "resolved by abstract-observable evidence."
             )
+        elif paragraph.text.startswith("Second, we provide a construct-level diagnosis"):
+            paragraph.text = (
+                "Second, it operationalises this framework in an interactive platform built over the 22,345-paper "
+                "business and management corpus, within which the Core, Additional, and Combined entrepreneurship "
+                "populations remain explicit. The platform links every aggregate pattern to its analytical cells, "
+                "coding evidence, metadata, and source records and supports reproducible filtering, contrasting, "
+                "human review, and the production of reports and data tables. The diagnosis of AI heterogeneity, the theory-elaboration "
+                "procedure, and the template for updateable literature analysis are developed within these two "
+                "contributions rather than claimed separately."
+            )
+        elif paragraph.text.startswith("Third, we develop a construct-clarification framework"):
+            paragraphs_to_remove.append(paragraph)
+        elif paragraph.text.startswith("Fourth, we contribute to theory development"):
+            paragraphs_to_remove.append(paragraph)
+        elif paragraph.text.startswith("Fifth, we offer a methodological template"):
+            paragraphs_to_remove.append(paragraph)
+        elif paragraph.text.strip() == "The next section…":
+            paragraph.text = (
+                "The remainder of the paper proceeds as follows. The theory section develops the four "
+                "theory-elaboration tactics and the construct-clarification logic. The methods section reports "
+                "the corpus, coding instrument and validation, topic navigation layer, systematic close-reading "
+                "procedure, and platform implementation. The results present construct specification within "
+                "entrepreneurship, horizontal and vertical contrasting, structuring, and the interpretation of "
+                "the strongest recurring relations. The discussion develops the configurational construct, its "
+                "entrepreneurship implication, and the limits of the current evidence."
+            )
+        elif paragraph.text.startswith("Theory elaboration as a process in which researchers use existing"):
+            paragraph.text = (
+                "Theory elaboration is a process through which researchers use existing conceptual ideas to "
+                "develop new theoretical insights by contrasting, specifying, or structuring constructs and "
+                "related concepts in light of empirical observations (Fisher & Aguinis, 2017). It differs from "
+                "theory generation, which begins from a relatively unexplained phenomenon, and theory testing, "
+                "which begins from formal hypotheses derived from already specified theory. Theory elaboration "
+                "is appropriate when a phenomenon is partly explained but its constructs are fragmented or its "
+                "relations require refinement."
+            )
+        elif paragraph.text.startswith("The first theory-elaboration tactic we use is construct specification"):
+            paragraph.text = (
+                "The first theory-elaboration tactic is construct specification. Fisher and Aguinis (2017) "
+                "describe it as refining theoretical constructs so that they better reflect empirical "
+                "observations. It may involve construct splitting, in which a broad construct is divided "
+                "into more precise dimensions because empirical use shows that the original construct covers "
+                "several theoretically distinct elements. We use construct specification to improve the validity "
+                "and scope of the focal construct (Fisher & Aguinis, 2017)."
+            )
+        elif paragraph.text.startswith("We argue that AI in entrepreneurship literature is a construct"):
+            paragraph.text = (
+                "We argue that AI in entrepreneurship research is a construct requiring specification rather "
+                "than a term that can be defined once and applied uniformly. Constructs can accumulate surplus "
+                "meaning as they travel across empirical contexts (Suddaby, 2010)."
+            )
+        elif "The problem is unclarified construct heterogeneity" in paragraph.text:
+            paragraph.text = paragraph.text.replace(
+                "Studies may share the label “AI” while making different assumptions about AI’s role, mechanism, scope, agency, and level of analysis.",
+                "Studies may share the label “AI” while making different assumptions about AI’s role, mechanism, scope, and level of analysis. They also raise unresolved questions about how agency is allocated between human and machine.",
+            ).replace("building upon to different concepts", "building on different concepts")
+        elif paragraph.text.startswith("In this paper, we focus on our core research question"):
+            paragraph.text = (
+                "Our core research question is: How is AI specified as a construct in entrepreneurship research "
+                "relative to its use in other business domains, and how can these specifications be organised to "
+                "support cumulative theory development? The first part is diagnostic: it examines whether AI is "
+                "the substantive phenomenon, a method or research instrument, and what theoretical role it is "
+                "assigned. The second part is theory elaborative: it asks how these specifications can be organised "
+                "so that scholars can compare, connect, extend, and challenge AI-entrepreneurship claims more "
+                "precisely."
+            )
+        elif paragraph.text.startswith("Vertical contrasting helps us treat the level of analysis"):
+            paragraph.text = (
+                "Vertical contrasting treats level of analysis as a core dimension of construct clarification. "
+                "The purpose is not simply to record that AI appears at several levels, but to examine whether "
+                "its theoretical role and mechanism remain comparable as the claim moves from individuals to "
+                "teams, firms, platforms, ecosystems, or institutions. Questions about how agency is allocated "
+                "between human and machine are surfaced as an unresolved boundary rather than treated as an "
+                "observed coding dimension."
+            )
+        elif paragraph.text.startswith("The third theory-elaboration tactic we use is structuring"):
+            paragraph.text = (
+                "The third theory-elaboration tactic we use is structuring. Fisher and Aguinis (2017) define "
+                "structuring as the elaboration of theoretical relations so that they better describe and explain "
+                "empirical observations. Whereas construct specification clarifies what a construct is, structuring "
+                "clarifies how that construct relates to other elements of the theoretical explanation. Here it "
+                "connects AI role to observable mechanism, level of analysis, and embedding or scope condition. "
+                "Because complete multidimensional combinations are rare, the analysis treats recurring pairwise "
+                "and selected three-way relations as role-bound fragments rather than claiming a recovered causal "
+                "process model (Fisher & Aguinis, 2017, pp. 447–449). Agency is retained as a theoretical frontier, "
+                "not an observed relation."
+            )
+        elif paragraph.text.startswith("Construct specification tells us that AI must be split"):
+            paragraph.text = (
+                "Taken together, construct specification identifies theoretically different uses of AI; horizontal "
+                "and vertical contrasting show where those uses change across domains and levels; and structuring "
+                "identifies the role-mechanism-level-scope relations that recur. This sequence produces a "
+                "construct-clarification framework without implying that the cross-sectional evidence establishes "
+                "a temporal or causal sequence."
+            )
+        elif paragraph.text.strip() == "|":
+            paragraphs_to_remove.append(paragraph)
+        elif paragraph.text.startswith("Contrasting shows that those roles vary"):
+            paragraphs_to_remove.append(paragraph)
+        elif paragraph.text.startswith("Structuring turns those observations into a framework"):
+            paragraphs_to_remove.append(paragraph)
+        elif paragraph.text.strip() == "Topics":
+            paragraphs_to_remove.append(paragraph)
         elif paragraph.text.startswith("We use structuring in a bounded way."):
             paragraph.text = (
                 "We use structuring in a bounded way. We do not claim a causal process model. Instead, we use "
-                "structuring to organize the relations among the dimensions of the construct-clarification "
+                "structuring to organise the observable relations among the dimensions of the construct-clarification "
                 "framework. This is appropriate because our aim is to clarify AI as a construct in "
                 "entrepreneurship research before stronger causal relationships can be developed or tested."
             )
@@ -494,6 +984,8 @@ def build() -> None:
             # The Zotero-backed July working file records the cited construct-
             # clarity and surplus-meaning source as Suddaby (2010).
             paragraph.text = paragraph.text.replace("(Suddaby, 2017)", "(Suddaby, 2010)")
+    for paragraph in paragraphs_to_remove:
+        remove_paragraph(paragraph)
     remove_from_marker(document, "Methods")
     section = document.sections[0]
     section.top_margin = Inches(0.75)
@@ -525,20 +1017,20 @@ def build() -> None:
         ],
     )
 
-    writer.heading("3.2 Corpus construction and integrity controls", 2)
+    writer.heading("3.2 Corpus construction and screening", 2)
     writer.paragraph(
         "The analytical corpus contains 22,345 unique Scopus records retrieved on 8 July 2026. Search results "
-        "were combined, deduplicated, and retained when the registered retrieval rules linked an AI term with "
+        "were combined, deduplicated, and retained when the predefined search and screening criteria linked an AI term with "
         "the relevant business or entrepreneurship vocabulary and source-title boundaries. Publication years "
         "run through 2026, with 15 advance records already indexed by Scopus as 2027 at retrieval. These records "
         "are retained and labelled by indexed publication year rather than described as papers published after "
-        "the retrieval date. The primary analysis dataset is checksum-locked and contains one row per paper."
+        "the retrieval date. The final analytical dataset contains one row per paper."
     )
     writer.paragraph(
         "A known limitation is that acronym matching can admit retrieval false positives. Five book-review "
         "records entered because an author name contained the standalone token BERT, which the search treated "
-        "as the AI model. The study does not silently delete those rows or revise the frozen denominator at this "
-        "stage. Their presence, and the possibility of similar acronym-only cases, is reported as a corpus "
+        "as the AI model. These rows are retained so that the reported denominator is not altered after the "
+        "analysis. Their presence, and the possibility of similar acronym-only cases, is reported as a corpus "
         "precision limitation. This affects the interpretation of broad-corpus prevalence and topic estimates "
         "but does not convert an unspecified model code into evidence of AI relevance."
     )
@@ -548,14 +1040,14 @@ def build() -> None:
         [
             ["Identification", "Query 1: broad business and management sources", "29,294"],
             ["Identification", "Query 2: FT50 journals", "818"],
-            ["Identification", "Query 3: Core entrepreneurship", "1,097"],
+            ["Identification", "Query 3: Leading entrepreneurship journals", "1,097"],
             ["Identification", "Query 4: Additional entrepreneurship", "1,509"],
             ["Identification", "Total records identified", "32,718"],
             ["Screening", "Duplicate records collapsed", "2,045"],
             ["Screening", "Unique publications", "30,673"],
             ["Screening", "Outside validated source-title universe", "20"],
             ["Screening", "Assessed for AI and business or entrepreneurship relevance", "30,653"],
-            ["Screening", "Did not meet the registered relevance rule", "8,308"],
+            ["Screening", "Excluded after relevance screening", "8,308"],
             ["Included", "Primary analytical corpus", "22,345"],
             ["Sensitivity", "Strict AI-and-entrepreneurship indicator", "2,509"],
         ],
@@ -564,7 +1056,7 @@ def build() -> None:
         "The identification and screening flow is PRISMA 2020–aligned rather than a claim that a computational "
         "bibliometric corpus is a conventional intervention review. Four searches yielded 32,718 records. "
         "Deduplication used Scopus EID first, DOI second, and normalized title-year matching as the fallback, "
-        "while retaining every query-membership flag. Source-title validation and the registered relevance rule "
+        "while retaining every query-membership flag. Source-title validation and the relevance criteria "
         "then produced the 22,345-paper analytical corpus. The stricter 2,509-paper AI-and-entrepreneurship "
         "indicator is a sensitivity lens and is not substituted for the Core, Additional, or Combined journal "
         "populations."
@@ -573,32 +1065,66 @@ def build() -> None:
     writer.heading("3.3 Analytical populations and business domains", 2)
     writer.paragraph(
         "The 22,345-paper table is the broad business and management corpus, not an entrepreneurship-only "
-        "corpus. Core entrepreneurship contains 646 papers in the registered leading-journal view; Additional "
+        "corpus. Leading entrepreneurship journals contain 646 papers; Additional "
         "entrepreneurship contains 986 papers in the wider entrepreneurship-journal view; their union contains "
-        "1,632 papers with no cross-view overlap. FT50 contains 438 papers and is used as a robustness and "
-        "boundary restriction, not as the primary horizontal contrast."
+        "1,632 papers with no cross-view overlap. Thus every Core and Additional paper is retained in Combined "
+        "entrepreneurship: 646 + 986 = 1,632. FT50 contains 438 papers and is used as a robustness and boundary "
+        "restriction, not as the primary horizontal contrast."
     )
     domain_rows = [
-        [entry["label"], f"{entry['papers']:,}", entry["represented_source_titles"]]
+        [
+            entry["label"],
+            f"{entry['papers']:,}",
+            f"{entry['represented_source_titles']:,} source-title labels",
+        ]
         for entry in domain_manifest["domains"].values()
     ]
+    full_source_titles = frame["Source title"].astype(str).str.strip().nunique()
+    full_source_pairs = frame[["Source title", "ISSN"]].drop_duplicates().shape[0]
+    ft50_source_titles = ft50["Source title"].astype(str).str.strip().nunique()
+    core_source_titles = core["Source title"].astype(str).str.strip().nunique()
+    additional_source_titles = additional["Source title"].astype(str).str.strip().nunique()
+    combined_source_titles = combined["Source title"].astype(str).str.strip().nunique()
     writer.table(
         "Table 3. Analytical populations and represented business domains",
-        ["Population or domain", "Papers", "Represented source titles"],
+        ["Population or domain", "Papers retained", "Source-title coverage in this corpus"],
         [
-            ["Full corpus", f"{len(frame):,}", "All retained source titles"],
-            ["Core entrepreneurship", f"{len(core):,}", 15],
-            ["Additional entrepreneurship", f"{len(additional):,}", 13],
-            ["Combined entrepreneurship", f"{len(combined):,}", 28],
-            ["FT50 restriction", f"{len(ft50):,}", "Registered FT50 view"],
+            [
+                "Full corpus",
+                f"{len(frame):,}",
+                f"{full_source_titles:,} source-title labels; {full_source_pairs:,} title-ISSN pairs",
+            ],
+            [
+                "Leading entrepreneurship journals",
+                f"{len(core):,}",
+                f"{core_source_titles:,} source-title labels; all {len(core):,} papers retained",
+            ],
+            [
+                "Additional entrepreneurship",
+                f"{len(additional):,}",
+                f"{additional_source_titles:,} source-title labels; all {len(additional):,} papers retained",
+            ],
+            [
+                "Combined entrepreneurship",
+                f"{len(combined):,}",
+                f"{combined_source_titles:,} source-title labels; exact Core-Additional union",
+            ],
+            [
+                "FT50 restriction",
+                f"{len(ft50):,}",
+                f"{ft50_source_titles:,} source-title labels; all {len(ft50):,} papers retained",
+            ],
         ] + domain_rows,
     )
     writer.paragraph(
         f"Business-domain assignments were applied only to journals represented in the existing corpus; no "
-        f"new papers were retrieved to fill categories. The registry assigns "
+        f"new papers were retrieved to fill categories. The journal classification assigns "
         f"{domain_manifest['validation']['unique_assigned_papers']:,} unique papers to ten substantive domains. "
         f"Seventy-nine papers belong to more than one domain, so domain counts are not additive. Source "
-        "classification follows the preserved Scopus-aligned journal registry and reviewed source-title aliases."
+        "classification follows the Scopus-aligned journal classification and reviewed source-title aliases. "
+        "Core, Additional, and Combined entrepreneurship are analytical populations rather than mutually "
+        "exclusive business-domain assignments. Figure 5 therefore retains all three explicitly at the right of "
+        "the horizontal matrix instead of absorbing them into the ten substantive domains."
     )
     writer.paragraph(
         "The official ASJC layer was constructed from Elsevier's June 2026 Scopus Source Title List before the "
@@ -636,83 +1162,169 @@ def build() -> None:
         ],
     )
     writer.paragraph(
-        "Mechanism is reported as one reader-facing dimension. Internally, the analysis applies a preregistered "
-        "empty-logic rule so a generic mechanism label is not treated as substantive when the accompanying "
+        "Mechanism is reported as one dimension. A coding rule prevents a generic mechanism label from being "
+        "treated as substantive when the accompanying "
         "causal logic is absent. Definition form and process stage are retained as exploratory diagnostics; "
         "definition visibility in an abstract is not used as a verdict on full-paper quality."
+    )
+    writer.paragraph(
+        "Specification was analysed at two levels. The marginal portrait describes each dimension across the "
+        "selected population. The nested analysis then conditions the population on one exact value of any "
+        "dimension and recalculates every remaining distribution and pairwise matrix. For example, selecting "
+        "study status as phenomenon, method, or both produces three separate portraits of role, technical type, "
+        "mechanism, level, stage, scope, and definition form. Full views retain missing and unspecified values; "
+        "observed views remove only the missing or unspecified values defined for the displayed outcome dimension. The "
+        "same procedure covers all 28 unique pairs among the eight dimensions and the Full, Core, Additional, "
+        "and Combined populations. The denominator definitions and coding dimensions are documented in "
+        "Supplementary Tables A1.1 and A1.2. The main paper reports theoretically consequential contrasts; "
+        "Supplementary Tables A3.1-A3.9 report the complete study-status-conditioned distributions, "
+        "Supplementary Table A4.1 reports the conditioned Core-Additional boundary comparison, and "
+        "Supplementary Table A5.1 inventories all 28 Combined entrepreneurship dimension pairs."
     )
     writer.paragraph(
         "The coding discipline required evidence before classification. For every dimension the response stored "
         "a short supporting quotation or close paraphrase, an epistemic status of stated, inferred, or absent, "
         "and a dimension-specific confidence value. The structured response also retained mechanism logic, named "
-        "theories, full-text-review flags, and an adversarial self-review. Instrument calibration occurred on "
-        "separate pilot outputs from the target corpus; pilot and production caches were never pooled. The final "
-        "system prompt fixed the category definitions, evidence boundary, response schema, and rule that a "
+        "theories, full-text-review flags, and a final self-review. Instrument calibration used a separate pilot "
+        "that was not included in the analytical results. The coding instructions fixed the category definitions, "
+        "evidence boundary, response format, and rule that a "
         "substantive mechanism required a non-empty statement of what AI changed or enabled."
     )
 
     writer.heading("3.5 Model execution and validation", 2)
     writer.paragraph(
-        "GPT-5.4 Mini supplies the current complete 22,345-paper coding used for population analyses. GPT-4.1 "
-        "Nano supplies an additional near-complete baseline. Claude Sonnet 5 and Gemini 3.1 Pro Preview were "
-        "run on the fixed 2,235-paper stratified probability sample. The sample was drawn independently of model "
-        "outputs using publication era, query provenance, abstract length, journal coverage, and metadata "
-        "completeness. Mini and Gemini cover all 2,235 sampled papers; Nano and Claude each have one "
-        "non-response, leaving an exact four-model intersection of 2,233 papers."
+        "Four models were used to code the corpus. GPT-5.4 Mini and Gemini 3.1 Pro "
+        "Preview each supplied usable codes for all 22,345 corpus papers. GPT-4.1 Nano supplied 22,335 usable "
+        "records (99.96%), while Claude Sonnet 5 supplied 21,940 (98.19%); missing responses were not imputed. "
+        "GPT-5.4 Mini provides the primary population estimates, GPT-4.1 Nano provides a lower-cost sensitivity "
+        "comparison, and Claude and Gemini provide independent model comparisons. Model-specific construct-"
+        "specification distributions therefore retain each model's actual successful-paper denominator."
+    )
+    writer.table(
+        "Table 5. Model coverage of the analytical corpus",
+        ["Model", "Usable corpus papers", "Coverage", "Corpus non-responses"],
+        model_coverage_rows(),
     )
     writer.paragraph(
-        "Before proprietary coding, the adequacy of the probability-sample fraction was tested on the "
+        "Supplementary Table A6.1 reports model-specific coverage alongside the common set of papers used "
+        "for reliability, making the distinction between model-specific specification denominators and the "
+        "common comparison denominator explicit."
+    )
+    writer.paragraph(
+        "Reliability requires the same papers to be compared across models. Claude supplied classifications for "
+        "21,940 corpus papers; ten of these were not classified by Nano. The intersection across Mini, Nano, "
+        "Claude, and Gemini therefore contains 21,930 papers. Every one of the six model pairs and all eight "
+        "dimension estimates use this same set. The arithmetic "
+        "means shown below summarize the six core dimensions for orientation only; study status, technical "
+        "type, role, mechanism, level, and scope remain the dimension-level inferential record. Process stage "
+        "and definition clarity are reported as exploratory fields because their chance-corrected agreement is "
+        "weak."
+    )
+    writer.table(
+        "Table 6. Model reliability across six core dimensions",
+        ["Model pair", "Balanced papers", "Mean exact agreement", "Mean nominal alpha"],
+        model_validation_rows(),
+    )
+    writer.paragraph(
+        "Supplementary Table A6.2 reproduces these six-core orientation means, while Supplementary Table A6.3 "
+        "reports the complete 48 pair-by-dimension estimates, including the two exploratory fields."
+    )
+    writer.paragraph(
+        "Before extending the model comparisons to the full corpus, we selected a model-independent "
+        "2,235-paper probability sample "
+        "using publication era, query provenance, abstract length, journal coverage, and metadata completeness. "
+        "This sample allowed us to compare independent models before undertaking full-corpus classification and "
+        "to test whether the same coding instructions produced comparable results. The adequacy of the sample fraction "
+        "was tested on the "
         "22,335-paper Mini-Nano intersection. With seed 20260711, 1,000 stratified samples were drawn at "
         "10%, 25%, and 40%. For all eight coding fields, replicate exact agreement and nominal Krippendorff "
-        "alpha estimates were compared with their full-intersection values. The declared limits were absolute "
+        "alpha estimates were compared with the values obtained from the complete common set of papers. The declared limits were absolute "
         "bias no greater than 0.01 and empirical 95% width no greater than 0.05 for exact agreement, and bias "
         "no greater than 0.02 and width no greater than 0.10 for alpha. All fractions passed. At 10%, the "
         "largest absolute bias was 0.0056 and the largest empirical 95% width was 0.0574, supporting the "
         "smallest tested fraction rather than treating 10% as a universal reliability rule."
     )
     writer.paragraph(
-        "The frozen draw used seed 20260712. It contains 500 papers through 2015, 283 from 2016-2020, and "
+        "The probability sample was drawn with random seed 20260712. It contains 500 papers through 2015, 283 from 2016-2020, and "
         "1,452 from 2021 onward; the short, medium, and long abstract bands contain 742, 748, and 745 papers. "
-        "It includes 88 FT50, 93 Core entrepreneurship, and 108 Additional entrepreneurship memberships, "
+        "It includes 88 FT50, 93 Leading entrepreneurship-journal, and 108 Additional entrepreneurship memberships, "
         "which may overlap across query flags; 106, 441, and 1,688 papers come from small, medium, and large "
         "journal strata; and 167 papers lack author keywords. The maximum absolute sample-population share "
         "difference was 1.98 percentage points. Selection probabilities and inverse-probability weights are "
         "retained, and non-responses remain missing rather than being replaced to improve agreement."
     )
-    writer.table(
-        "Table 5. Probability-sample model reliability across six core dimensions",
-        ["Model pair", "Common papers", "Mean exact agreement", "Mean nominal alpha"],
-        model_validation_rows(),
-    )
     writer.paragraph(
-        "The macro statistic averages study status, technical type, AI role, mechanism, level, and scope. "
-        "Technical type is the most stable individual dimension. Process stage and definition form are shown "
-        "separately because their chance-corrected reliability is weak. Agreement demonstrates coding "
-        "consistency, not truth. No blind human annotation has yet been completed "
-        f"(current saved annotation records: {annotation_count()}); claims of human-validated accuracy are "
-        "therefore withheld. Claude and Gemini are being extended to the full corpus, but their pending coverage "
-        "does not change the coding definitions used in the current analyses."
+        "The probability-sample results and bootstrap intervals remain the prospective validation analysis; the "
+        "full-corpus comparison does not replace or retrospectively redefine that design. "
+        "Agreement demonstrates coding convergence, not truth. Blind human annotation of the eight dimensions "
+        "has not yet been completed, so we do not claim human-validated accuracy. Supplementary Tables A6.1-A6.3 "
+        "report model coverage and reliability; "
+        "Supplementary Table A6.4 reports three-model and unanimous four-model agreement counts; and "
+        "Supplementary Table A6.5 identifies the underlying reliability data tables."
     )
 
     writer.heading("3.6 Topic modelling as a navigation layer", 2)
     models = topic_manifest["models"]
     writer.paragraph(
-        "Topic modelling followed specification coding and was kept analytically separate from it. Titles, "
-        "abstracts, and keywords were converted into hybrid phrase documents and embedded with "
-        "sentence-transformers/all-MiniLM-L6-v2. BERTopic used UMAP dimensionality reduction and HDBSCAN "
-        "clustering. Candidate minimum topic sizes were compared using silhouette, topic diversity, raw outlier "
-        "rate, and topic-size balance. The declared composite weighted these components 0.25, 0.25, 0.35, and "
-        "0.15 respectively. The full corpus and broad-query model used the common best reviewed minimum size of "
-        "50; the smaller scopes were optimized independently."
+        "Topic modelling followed construct-specification coding and was kept analytically separate so discovered "
+        "topics could not influence the coding instrument. Titles, abstracts, and author keywords were converted "
+        "into hybrid phrase documents that combined normalised semantic phrases with statistically detected "
+        "phrases. Records containing fewer than 50 usable characters were excluded from fitting but retained in "
+        "the master table. Sentence embeddings were generated with sentence-transformers/all-MiniLM-L6-v2. "
+        "BERTopic then reduced the embeddings with UMAP, identified density-connected clusters with HDBSCAN, "
+        "and represented each cluster using corpus-specific term weights. HDBSCAN inferred the number of topics; "
+        "the analysis did not request a predetermined topic count."
     )
     writer.table(
-        "Table 6. Approved data-specific topic models",
+        "Table 7. Common topic-model configuration",
+        ["Component", "Setting", "Analytical function"],
+        [
+            ["Evidence", "Title, abstract, and author keywords; minimum 50 usable characters", "Construct one hybrid phrase document per eligible paper"],
+            ["Embedding", "sentence-transformers/all-MiniLM-L6-v2", "Map phrase documents into a shared semantic vector space"],
+            ["UMAP", "15 neighbours; 5 components; cosine distance; seed 42", "Reduce embedding dimensionality while preserving local neighbourhoods"],
+            ["HDBSCAN", "Excess-of-mass selection; minimum topic size varied by grid", "Infer dense topic clusters and an initial outlier class"],
+            ["Topic representation", "One- to three-word expressions; minimum document frequency 2; top 10 terms", "Produce inspectable term representations for semantic review"],
+            ["Outlier reassignment", "Highest non-outlier probability at least 0.05", "Reassign only sufficiently supported fitted outliers"],
+        ],
+    )
+    writer.paragraph(
+        "Candidate minimum topic sizes were compared using four declared diagnostics: silhouette for separation "
+        "among non-outlier papers, top-term diversity, the raw HDBSCAN outlier rate, and the coefficient of "
+        "variation of topic sizes. The composite was 0.25 × ((silhouette + 1) / 2) + 0.25 × topic diversity + "
+        "0.35 × (1 - raw outlier rate) + 0.15 × (1 / (1 + topic-size coefficient of variation)). It prioritised "
+        "coverage while retaining separation, vocabulary distinctiveness, and size balance; it was a selection "
+        "diagnostic, not an accuracy estimate. The Full Corpus and broad business grids tested minimum sizes 20, "
+        "30, 40, 50, 75, and 100. The smaller-scope grids were scaled to their corpus sizes: FT50 tested 8, 12, "
+        "20, 30, and 40; Leading entrepreneurship journals tested 12, 18, 20, 30, 40, 50, and 75; and Additional "
+        "entrepreneurship tested 19, 20, 28, 30, 40, and 50."
+    )
+    writer.paragraph(
+        "Quantitative optimisation was followed by semantic review of every candidate's leading terms and three "
+        "centroid-nearest representative papers per topic. A two-topic solution could score well by reducing "
+        "outliers and increasing apparent term diversity while collapsing substantively different conversations. "
+        "Configurations with fewer than five topics were therefore retained in the diagnostic record but made "
+        "ineligible for selection. This safeguard was introduced after inspecting the optimisation results and is "
+        "reported as an exploratory selection rule rather than a prospective truth about the number of topics."
+    )
+    writer.paragraph(
+        "The Full Corpus and broad business scope required an additional nesting check. The broad scope contains "
+        "21,454 of the 22,344 model-eligible Full Corpus papers (96.02%); independently selected resolutions had "
+        "initially produced the anomalous result that this nearly nested scope contained more topics than the "
+        "primary model. The final joint rule considered only minimum sizes tested in both grids and selected the "
+        "common value with the highest arithmetic mean composite score, subject to the five-topic floor and "
+        "semantic review. Minimum size 50 had the highest joint mean (0.57355) and produced 53 Full Corpus and 50 "
+        "broad-scope topics. The smaller native models used their highest-scoring eligible candidate after the "
+        "same semantic review. Supplementary Figure A8.1 and Tables A8.1-A8.2 preserve the complete decision "
+        "logic and joint grid."
+    )
+    writer.table(
+        "Table 8. Approved data-specific topic models",
         ["Scope", "Papers", "Minimum topic size", "Topics"],
         [
             ["Full corpus", f"{models['full_corpus']['eligible_papers']:,}", models['full_corpus']['min_topic_size'], models['full_corpus']['topics']],
             ["Broad business and management", f"{models['query_1']['papers']:,}", models['query_1']['min_topic_size'], models['query_1']['topics']],
             ["FT50", f"{models['query_2']['papers']:,}", models['query_2']['min_topic_size'], models['query_2']['topics']],
-            ["Core entrepreneurship", f"{models['query_3']['papers']:,}", models['query_3']['min_topic_size'], models['query_3']['topics']],
+            ["Leading entrepreneurship journals", f"{models['query_3']['papers']:,}", models['query_3']['min_topic_size'], models['query_3']['topics']],
             ["Additional entrepreneurship", f"{models['query_4']['papers']:,}", models['query_4']['min_topic_size'], models['query_4']['topics']],
         ],
     )
@@ -724,10 +1336,9 @@ def build() -> None:
         "theory-elaboration conclusions."
     )
     writer.paragraph(
-        "The final configuration used seed 42, UMAP with 15 neighbours, five components, and cosine distance, "
-        "and HDBSCAN with excess-of-mass cluster selection. Topic representations used one-to-three-word n-grams "
-        "with a minimum document frequency of two. Outlier rates reported during grid search are not final "
-        "unassigned rates: for the broad-query model, 10,585 papers were initially marked as outliers, 6,974 "
+        "Raw grid-search outlier rates and final unassigned rates describe different stages and are not "
+        "interchangeable. For the broad-scope final transformation, 10,585 papers were initially marked as "
+        "outliers, 6,974 "
         "were conservatively reassigned only when their highest non-outlier topic probability reached 0.05, "
         "and 3,611 remained unassigned. Topic labels remain researcher-reviewable display labels; changing a "
         "label does not change a fitted paper assignment or stable topic identity."
@@ -735,20 +1346,22 @@ def build() -> None:
 
     writer.heading("3.7 Operationalisation of the four tactics", 2)
     writer.paragraph(
-        "Construct specification was run separately for Core, Additional, and Combined entrepreneurship using "
+        "Construct specification was run separately for Leading, Additional, and Combined entrepreneurship using "
         "both full and observed distributions and an AI-type-by-role matrix. Horizontal contrasts apply the "
         "same selected dimension to every represented business domain and report within-domain percentages, "
         "declared denominators, percentage-point differences from the full-corpus baseline, and a separate FT50 "
-        "restriction. Vertical contrasts keep the registered level of analysis on one axis while allowing study "
+        "restriction. Vertical contrasts keep level of analysis on one axis while allowing study "
         "status, role, technical type, mechanism, process stage, or scope on the other. Structuring uses pairwise "
         "role-mechanism, role-level, mechanism-level, and role-scope relations plus selected three-way "
-        "combinations. Exact five-way cells are supplementary because only two satisfy the current support rule."
+        "combinations. Exact five-way cells are supplementary because only two meet the support threshold. "
+        "Supplementary Table A5.1 inventories the complete Combined entrepreneurship pairwise matrix family, "
+        "and Supplementary Table A7.1 identifies the underlying cell-level tables."
     )
     writer.paragraph(
         "For the main role-mechanism evidence table, a recurring pair required at least 20 Combined "
         "entrepreneurship papers. Meeting this threshold was necessary but not sufficient: retained pairs also "
         "had to illuminate a contrast, have evidence that could be traced to the displayed fields, and contribute "
-        "to the construct-clarification or bottleneck-relocation argument. Core and Additional support counts are "
+        "to the construct-clarification or bottleneck-relocation argument. Leading and Additional support counts are "
         "reported for every retained pair."
     )
 
@@ -756,37 +1369,142 @@ def build() -> None:
     writer.paragraph(
         "Matrices were interpreted rather than narrated cell by cell. A pattern was retained only when it used "
         "substantive categories, disclosed an adequate denominator, appeared in more than one comparison or was "
-        "meaningfully bounded by Core, Additional, or FT50 results, linked to supporting and contrasting papers, "
-        "and did not require unseen full text. The historical workbook contained 154 rows representing 153 "
-        "unique papers because one paper appeared in two topic locations. Conservative exact matching by "
-        "normalized title, Scopus EID, and DOI found 136 papers in the current corpus and left 17 unmatched; "
-        "no fuzzy match was accepted. The matched records also agreed with the original Scopus exports on title, "
-        "abstract, author keywords, source title, and year. These 136 papers serve as purposive qualitative "
-        "anchors and counterexamples, not a prevalence sample. Twenty-three occurred naturally in the fixed "
-        "probability sample and remain a possible blind-human anchor; the other 113 are a separately labelled "
-        "targeted-read evidence set and are not added to the probability design."
+        "meaningfully bounded by Leading, Additional, or FT50 results, linked to supporting and contrasting "
+        "papers, and did not require unseen full text. The auditable current-corpus reading ledger contains 136 "
+        "papers. Registered population flags place 51 in Leading entrepreneurship journals and 73 in Additional "
+        "entrepreneurship journals, producing a 124-paper Combined entrepreneurship interpretation base. The "
+        "remaining 12 papers are retained only as cross-domain contrasts. Current data-specific topic assignments "
+        "organise the entrepreneurship papers across five of six Leading-journal topics and all eight assigned "
+        "Additional-journal topics; topic placement structures comparison but is not treated as a construct or "
+        "sampling weight."
+    )
+    writer.paragraph_with_footnote(
+        "The 124 Combined entrepreneurship papers form the entrepreneurship close-reading part of the design; "
+        "the 12 other papers supply bounded cross-domain contrasts. Evidence recorded for interpretation includes "
+        "AI role, technical type, mechanism, level, central claim, and supporting or contrasting evidence. A "
+        "candidate interpretation was retained only when it recurred across multiple current topic assignments, "
+        "was consequential for entrepreneurship theory, remained analytically distinct, and was supported in both "
+        "entrepreneurship populations when framed as field-wide. All 124 entrepreneurship papers appear in the "
+        "available Query 3 and Query 4 VOSviewer document maps. Their total-link-strength ranks span broad portions "
+        "of both maps, including 25 Leading and 37 Additional papers in the respective top quartiles. This is a "
+        "post hoc network-position check, not the reading-set selection rule. The reading set supports interpretation "
+        "and counterexample selection but never corpus prevalence. Twenty-three of the 136 papers occur naturally "
+        "in the probability-sample annotation target; 20 of those belong to Combined entrepreneurship.",
+        "This human reliability check evaluates insight-family allocation, not the eight-dimension coding "
+        "instrument. Lada et al. (2023) was excluded because it is absent from the final corpus. In Task 2, "
+        "KS (researcher) and MK agreed on all 14 remaining papers (14/14; 100.0%; Cohen's kappa = 1.000): 11 "
+        "map to the Leading or Additional entrepreneurship populations, three to FT50 only, and four are among the "
+        "23 current interpretive anchors. The result provides prior human triangulation of insight allocation "
+        "only; it is not human validation of the current eight coding dimensions."
     )
     writer.paragraph(
         "The interactive platform is part of the methodology. Its Construct Specification page reproduces "
         "model, dataset, study-status, full-versus-observed, and nested dimension filters. Its Construct "
         "Contrasting page reproduces the horizontal, vertical, and structuring matrices. Aggregate cells open "
         "evidence panels containing the title, abstract, author keywords, coding evidence, metadata, and Scopus "
-        "record. Research artifacts and filtered reports are generated from the same tables used by the visible "
-        "charts. Human annotations and topic-label decisions are stored separately from model output, and "
-        "reviewed topic names modify only the display label, never the fitted assignments. Stable paper, scope, "
-        "topic, model, and artifact identifiers preserve provenance across downloads and rebuilt figures. Thus "
-        "the platform functions as an inspectable, data-specific implementation of the analysis rather than a "
-        "detached visualization website."
+        "record. Each model-specific chart uses the number of papers successfully classified by that model; the "
+        "inter-model reliability analysis instead compares the same 21,930 papers across all four models. Within "
+        "a selected specification or contrasting cell, readers can inspect papers on which at least two models, "
+        "three models, or all four models assign the same code. The strongest three-model convergence indicator "
+        "uses Mini, Claude, and Gemini; Nano's assignment remains visible but does not determine that indicator. "
+        "The evidence panel names the models that agree and also shows each model's classification, so "
+        "disagreement is not replaced by a majority code. Filtered reports and downloads are generated from the "
+        "same analysis tables as the charts. Human annotations and topic-label decisions are stored separately "
+        "from model classifications, and revised topic names change only the displayed label, not the fitted "
+        "paper assignments. The Analytics page applies one dataset selection to the performance statistics, "
+        "annual and cumulative publication graph, keyword evolution, evidence papers, reports, and downloads. "
+        "The platform therefore provides an inspectable implementation of the analysis rather than a detached "
+        "visualisation. Supplementary Table A2.1 links each platform operation to its underlying data, while "
+        "Supplementary Table A7.1 documents the conditioned distributions and pairwise matrices available for "
+        "download."
     )
 
     writer.heading("Results", 1)
     writer.heading("4.1 Growth and analytical population", 2)
+    full_growth = growth_record(frame, 2000, 2026)
+    full_annual_growth = claim("full_corpus", 2000, 2026)
+    core_growth = claim("core_entrepreneurship", 2000, 2026)
+    additional_growth = claim("additional_entrepreneurship", 2000, 2026)
+    combined_growth = claim("combined_entrepreneurship", 2000, 2026)
+    remaining_growth = claim("remaining_full_corpus", 2000, 2026)
     writer.paragraph(
-        "The frozen corpus contains 22,345 papers. Cumulative indexed records increased from 1,691 by 2000 to "
-        "22,330 through 2026, a 1,220.52% increase in the publication stock; the remaining 15 records are advance "
-        "2027 records already present at retrieval. Growth establishes the scale of the conversation, but it is "
-        "not itself evidence of theoretical accumulation. The theory-elaboration results therefore focus on the "
-        "1,632-paper Combined entrepreneurship population and compare it with the broader domain structure."
+        f"The corpus contains {len(frame):,} papers. Of these, "
+        f"{full_growth['end_cumulative_papers']:,} have publication years through 2026; the remaining "
+        f"{len(frame) - full_growth['end_cumulative_papers']:,} records are advance "
+        "2027 records already indexed by Scopus at retrieval. Yearly publication output rose from "
+        f"{full_annual_growth['start_annual_papers']:,} papers in 2000 to "
+        f"{full_annual_growth['end_annual_papers']:,} in 2026. The 2026 value covers records available by "
+        "8 July and is therefore a partial-year count. Growth establishes the scale of the conversation, but it "
+        "is not itself evidence of theoretical accumulation."
+    )
+    writer.paragraph(
+        "The entrepreneurship populations grew at different rates. Yearly output in Leading entrepreneurship journals "
+        f"increased from {core_growth['start_annual_papers']:,} papers in 2000 to "
+        f"{core_growth['end_annual_papers']:,} in 2026 "
+        f"({float(core_growth['percent_growth']) * 100:,.2f}%), while Additional entrepreneurship increased "
+        f"from {additional_growth['start_annual_papers']:,} to "
+        f"{additional_growth['end_annual_papers']:,} papers "
+        f"({float(additional_growth['percent_growth']) * 100:,.2f}%). Their Combined population therefore "
+        f"increased from {combined_growth['start_annual_papers']:,} to "
+        f"{combined_growth['end_annual_papers']:,} papers "
+        f"({float(combined_growth['percent_growth']) * 100:,.2f}%), compared with "
+        f"{float(remaining_growth['percent_growth']) * 100:,.2f}% among all other papers in the corpus after "
+        "excluding Combined entrepreneurship. Figure 1 reproduces the platform setting for Combined "
+        "entrepreneurship over 2000–2026, showing yearly output and the cumulative number of papers through "
+        "each year. The 2026 endpoint reflects records retrieved from Scopus on 8 July 2026. The subsequent "
+        "theory-elaboration results focus on the 1,632-paper Combined entrepreneurship population and compare "
+        "it with the broader domain structure."
+    )
+    writer.picture(
+        FIG_TREND,
+        "Figure 1. Annual and cumulative publication output in Combined entrepreneurship, 2000–2026. Bars show papers published in each year; the line shows the cumulative number of papers through each year. The 2026 endpoint reflects records retrieved from Scopus on 8 July 2026.",
+    )
+
+    writer.heading("4.1.1 Four-model reliability and convergent evidence", 3)
+    reliability = model_reliability_claims()
+    strongest_pair = reliability["strongest_pair"]
+    preferred_pairs = {
+        row.model_pair: row
+        for row in reliability["preferred_pairs"].itertuples()
+    }
+    technical_pairs = {
+        row.model_pair: row
+        for row in reliability["technical"].itertuples()
+    }
+    consensus = reliability["consensus"].set_index("dimension")
+    writer.paragraph(
+        f"Across the common set of {int(reliability['manifest']['balanced_common_papers']):,} papers, "
+        f"{strongest_pair.model_pair} was the most convergent pair across the six core dimensions "
+        f"(mean exact agreement = {strongest_pair.mean_exact_agreement:.2%}; mean nominal alpha = "
+        f"{strongest_pair.mean_krippendorff_alpha:.2f}). GPT-5.4 Mini also converged materially with both "
+        f"independent raters: Mini / Gemini produced {preferred_pairs['GPT-5.4 Mini / Gemini 3.1 Pro Preview'].mean_exact_agreement:.2%} "
+        f"mean exact agreement and alpha = {preferred_pairs['GPT-5.4 Mini / Gemini 3.1 Pro Preview'].mean_krippendorff_alpha:.2f}, "
+        f"while Mini / Claude produced {preferred_pairs['GPT-5.4 Mini / Claude Sonnet 5'].mean_exact_agreement:.2%} "
+        f"and alpha = {preferred_pairs['GPT-5.4 Mini / Claude Sonnet 5'].mean_krippendorff_alpha:.2f}. "
+        "Pairs involving Nano were substantially lower, showing that the coding patterns are sensitive to "
+        "model capability and not merely reproduced by any model receiving the same coding instructions. The six-core pair "
+        "summary is reported in Supplementary Table A6.2 and all dimension-level results in Supplementary "
+        "Table A6.3."
+    )
+    writer.paragraph(
+        f"Technical AI type showed the strongest agreement among Mini, Claude, and Gemini. Claude / Gemini agreed exactly on "
+        f"{technical_pairs['Claude Sonnet 5 / Gemini 3.1 Pro Preview'].exact_agreement:.2%} of papers "
+        f"(alpha = {technical_pairs['Claude Sonnet 5 / Gemini 3.1 Pro Preview'].krippendorff_alpha:.2f}), "
+        f"Mini / Gemini on {technical_pairs['GPT-5.4 Mini / Gemini 3.1 Pro Preview'].exact_agreement:.2%} "
+        f"(alpha = {technical_pairs['GPT-5.4 Mini / Gemini 3.1 Pro Preview'].krippendorff_alpha:.2f}), and "
+        f"Mini / Claude on {technical_pairs['GPT-5.4 Mini / Claude Sonnet 5'].exact_agreement:.2%} "
+        f"(alpha = {technical_pairs['GPT-5.4 Mini / Claude Sonnet 5'].krippendorff_alpha:.2f}). At the "
+        f"paper level, Mini, Claude, and Gemini assigned the same technical type to "
+        f"{int(consensus.loc['ai_type_form', 'preferred_trio_agreement_papers']):,} papers "
+        f"({consensus.loc['ai_type_form', 'preferred_trio_agreement_share']:.2%}). Agreement among these three models "
+        f"was {consensus.loc['ai_method_or_phenomenon', 'preferred_trio_agreement_share']:.2%} "
+        f"for study status, {consensus.loc['ai_role_function', 'preferred_trio_agreement_share']:.2%} for "
+        f"role, {consensus.loc['ai_mechanism_analysis', 'preferred_trio_agreement_share']:.2%} for mechanism, "
+        f"{consensus.loc['level_of_analysis', 'preferred_trio_agreement_share']:.2%} for level, and "
+        f"{consensus.loc['scope_conditions', 'preferred_trio_agreement_share']:.2%} for scope. These papers "
+        "form high-convergence evidence for the selected dimension value; they do not constitute a consensus "
+        "recoding, an accuracy estimate, or proof that the shared code is true. Three-model and unanimous "
+        "four-model counts for all eight dimensions are reported in Supplementary Table A6.4."
     )
 
     writer.heading("4.2 Construct specification within entrepreneurship", 2)
@@ -811,7 +1529,49 @@ def build() -> None:
         f"country boundaries account for {scope['sector-specific']:.1f}% and {scope['country-specific']:.1f}% of "
         f"{scope_n:,} observed scope codes."
     )
-    writer.picture(FIG_SPEC, "Figure 1. Observed construct composition in Combined entrepreneurship.")
+    writer.picture(FIG_SPEC, "Figure 2. Observed construct composition in Combined entrepreneurship.")
+
+    writer.heading("4.2.1 Nested specification by study status", 3)
+    writer.paragraph(
+        "The aggregate portrait conceals three different research objects. Conditioning all other dimensions on "
+        "study status shows that method papers use AI primarily as an analytical instrument, whereas phenomenon "
+        "papers distribute theoretical work across tools, context, capabilities, infrastructure, and actors. "
+        "Papers coded as both form a hybrid rather than a simple midpoint. Table 9 reports the leading category "
+        "within each observed outcome dimension and discloses both the observed denominator and the complete "
+        "status-subset denominator. Supplementary Tables A3.1-A3.9 report observability, leading categories, "
+        "and the complete category distributions for every remaining dimension; Supplementary Figures A3.1 "
+        "and A3.2 visualise dimension observability and the complete conditioned composition."
+    )
+    writer.picture(
+        FIG_NESTED_STATUS,
+        "Figure 3. Nested construct specification by study status in Combined entrepreneurship. Values are shares within each observed outcome dimension; denominators are reported in Table 9.",
+    )
+    writer.table(
+        "Table 9. Leading nested specification result by study status in Combined entrepreneurship",
+        ["Outcome dimension", "Phenomenon", "Method", "Both"],
+        status_conditioned_rows(),
+    )
+    writer.paragraph(
+        "The separation is sharpest for role, technical form, and mechanism. Among observed role codes, 84.6% "
+        "of method papers use AI as a research method, compared with no phenomenon papers; phenomenon and both "
+        "papers instead lead with AI as a tool (50.7% and 52.6%). Method papers are more likely to name a "
+        "technical type (84.4%) than phenomenon papers (46.1%), and 65.5% of their named types are machine "
+        "learning. Yet only 33.2% of method papers state an observable mechanism, compared with 64.8% of "
+        "phenomenon papers. Where method mechanisms are visible, prediction accounts for 57.0%; phenomenon "
+        "papers distribute mechanisms across learning (27.5%), prediction (18.5%), judgment (11.8%), uncertainty "
+        "reduction (10.7%), and stakeholder interaction (9.7%). Technical explicitness therefore does not imply "
+        "theoretical mechanism explicitness."
+    )
+    writer.paragraph(
+        "The both category combines method-like technical specificity with phenomenon-like theoretical breadth. "
+        "Machine learning accounts for 54.9% and generative AI for 21.4% of its named types; tool, context, "
+        "research-method, and capability roles remain visible, while prediction, learning, judgment, interaction, "
+        "and experimentation all contribute to its mechanism profile. Across all three statuses, the firm is the "
+        "leading level and innovation the leading specified stage. Study status consequently changes the meaning "
+        "of the remaining dimensions but does not erase shared entrepreneurship-level emphases."
+    )
+
+    writer.heading("4.2.2 Core and Additional entrepreneurship boundaries", 3)
 
     # Core versus Additional differences, observed denominators.
     contrast_rows = []
@@ -838,12 +1598,12 @@ def build() -> None:
                 ]
             )
     writer.table(
-        "Table 7. Selected Core versus Additional entrepreneurship contrasts (observed view)",
+        "Table 10. Selected Core versus Additional entrepreneurship contrasts (observed view)",
         ["Dimension", "Category", "Core", "Additional", "Core minus Additional"],
         contrast_rows,
     )
     writer.paragraph(
-        "The within-entrepreneurship comparison is not flat. Core entrepreneurship is more method-oriented: "
+        "The within-entrepreneurship comparison is not flat. Leading entrepreneurship journals are more method-oriented: "
         "research-method roles, machine learning, prediction mechanisms, individual-level analysis, resource "
         "acquisition, and opportunity evaluation are all more prominent. Additional entrepreneurship is more "
         "likely to code AI as both phenomenon and method, as a firm capability or context, as generative AI, "
@@ -852,7 +1612,20 @@ def build() -> None:
         "condition rather than pooled away."
     )
 
-    writer.picture(FIG_TYPE_ROLE, "Figure 2. AI technical type by theoretical role in Combined entrepreneurship.")
+    writer.paragraph(
+        "The nested boundary check shows that these differences are concentrated in particular study statuses. "
+        "Among phenomenon papers, generative AI represents 31.0% of named types in Additional entrepreneurship "
+        "but 8.2% in Core, and learning represents 35.2% of mechanisms versus 15.2%; Core instead gives more "
+        "weight to individual entrepreneurs (30.8% versus 19.2%) and tools (56.3% versus 47.5%). Among method "
+        "papers, the research-method role is nearly identical (85.5% versus 83.7%), even though Core remains more "
+        "individual-level and Additional more country-bounded. The journal-population contrast is therefore not "
+        "one uniform tier effect; it interacts with what the paper is using AI to study or do. Supplementary "
+        "Table A4.1 reports the strongest Core-Additional contrast for every study-status and outcome-dimension "
+        "combination."
+    )
+
+    writer.heading("4.2.3 Technical type, role, and mechanism", 3)
+    writer.picture(FIG_TYPE_ROLE, "Figure 4. AI technical type by theoretical role in Combined entrepreneurship.")
     writer.paragraph(
         "The type-by-role matrix provides the clearest evidence that a technical label does not carry a single "
         "theoretical meaning. Of 403 papers in which machine learning and a substantive role are both visible, "
@@ -883,20 +1656,20 @@ def build() -> None:
         f"generative-AI papers, learning accounts for {gen_mech.get('supports learning', 0):.1f}%, "
         f"experimentation for {gen_mech.get('reshapes experimentation', 0):.1f}%, and stakeholder "
         f"interaction for {gen_mech.get('transforms stakeholder interaction', 0):.1f}%. This mechanism "
-        "comparison is calculated separately from Figure 2; it is not inferred from the type-by-role chart."
+        "comparison is calculated separately from Figure 4; it is not inferred from the type-by-role chart."
     )
 
     writer.heading("4.3 Horizontal contrasting across business domains", 2)
-    writer.picture(FIG_HORIZONTAL, "Figure 3. Horizontal contrast in AI-role composition across domains and entrepreneurship populations.")
+    writer.picture(FIG_HORIZONTAL, "Figure 5. Horizontal contrast in AI-role composition across domains and entrepreneurship populations.")
     horizontal = pd.read_csv(CONTRAST / "horizontal_domain_contrast_full_corpus.csv")
     selections = [
-        ("Operations", "ai_role", "AI as tool"),
+        ("Management Science and Operations Research", "ai_role", "AI as tool"),
         ("Marketing", "mechanism", "transforms stakeholder interaction"),
-        ("Innovation", "technical_type", "generative AI"),
+        ("Management of Technology and Innovation", "technical_type", "generative AI"),
         ("Organization studies", "mechanism", "alters judgment"),
         ("Finance", "technical_type", "machine learning"),
         ("Environmental and sustainability", "mechanism", "improves prediction"),
-        ("Core entrepreneurship", "ai_role", "AI as research method"),
+        ("Leading entrepreneurship journals", "ai_role", "AI as research method"),
         ("Additional entrepreneurship", "ai_role", "AI as firm capability"),
     ]
     horizontal_rows = []
@@ -913,7 +1686,7 @@ def build() -> None:
             [domain, row.dimension_label, category, f"{int(row.denominator):,}", f"{row.share:.1%}", f"{row.percentage_point_difference:+.1f} pp"]
         )
     writer.table(
-        "Table 8. Selected theoretically meaningful horizontal contrasts",
+        "Table 11. Selected theoretically meaningful horizontal contrasts",
         ["Domain", "Dimension", "Category", "Observed denominator", "Within-domain share", "Difference from full corpus"],
         horizontal_rows,
     )
@@ -934,7 +1707,7 @@ def build() -> None:
     )
 
     writer.heading("4.4 Vertical contrasting across levels", 2)
-    writer.picture(FIG_VERTICAL, "Figure 4. Vertical contrast in AI role across aggregated registered levels.")
+    writer.picture(FIG_VERTICAL, "Figure 6. Vertical contrast in AI role across aggregated levels of analysis.")
     vertical = pd.read_csv(CONTRAST / "vertical_dimension_by_level.csv")
     vertical_rows = []
     for category in ["AI as tool", "AI as research method", "AI as firm capability", "AI as actor/agent", "AI as context"]:
@@ -947,7 +1720,7 @@ def build() -> None:
         )
         vertical_rows.append([category, total, leading])
     writer.table(
-        "Table 9. Where entrepreneurship AI roles are located",
+        "Table 12. Where entrepreneurship AI roles are located",
         ["AI role", "Papers with specified level", "Leading levels within role"],
         vertical_rows,
     )
@@ -962,9 +1735,9 @@ def build() -> None:
     )
 
     writer.heading("4.5 Structuring recurring configurations", 2)
-    writer.picture(FIG_STRUCTURE, "Figure 5. Structuring matrix linking AI role and observable mechanism.")
+    writer.picture(FIG_STRUCTURE, "Figure 7. Structuring matrix linking AI role and observable mechanism.")
     writer.evidence_table(
-        "Table 10. Recurring configurations, evidence papers, and theoretical meanings",
+        "Table 13. Recurring configurations, evidence papers, and theoretical meanings",
         representative_rows(frame),
     )
     writer.paragraph(
@@ -973,8 +1746,9 @@ def build() -> None:
         "learning locates the effect in organizational relations and routines. Tool × judgment and tool × "
         "uncertainty show that better outputs can create new evaluation problems. Context × stakeholder "
         "interaction locates AI in a changed relational environment. The exact five-dimensional combinations are "
-        "too sparse for the main argument; only two meet the current support rule, so they are not presented as "
-        "stable archetypes."
+        "too sparse for the main argument; only two meet the support threshold, so they are not presented as "
+        "stable archetypes. Supplementary Table A5.1 inventories the complete set of pairwise dimension matrices "
+        "before theoretical retention."
     )
     writer.paragraph(
         "The field therefore has recurring role-bound fragments rather than a widely shared complete "
@@ -986,17 +1760,19 @@ def build() -> None:
 
     writer.heading("4.5.1 Researcher-led interpretation of the strongest configurations", 3)
     writer.paragraph(
-        "Close reading makes the recurring configurations theoretically legible. The 136 previously read papers "
-        "are used here as qualitative anchors and counterexamples, never as a prevalence sample. The retained "
-        "interpretation has one central entrepreneurship insight, one organizational condition, and one domain "
-        "boundary. An agency pattern remains an open frontier. Twenty of the 23 unique papers cited in this "
+        "The large-scale coding establishes construct heterogeneity and the recurrence of particular role-"
+        "mechanism relations; it does not by itself establish what those relations mean for entrepreneurship "
+        "theory. That interpretation comes from the systematic close reading described in Section 3.8 and is "
+        "reported as theory elaboration rather than a corpus-level frequency claim. The retained interpretation "
+        "has one central entrepreneurship insight, one organisational condition, and one domain boundary. An "
+        "agency pattern remains an open frontier. Twenty of the 23 unique papers cited in this "
         "interpretive section belong to the Core or Additional entrepreneurship populations. The three papers "
         "outside those populations are identified only as contrasting domain cases."
     )
     writer.paragraph(
         "Bottleneck relocation is the central insight. The dominant configurations pair AI with informational "
         "mechanisms: tools improve prediction, support learning, and reduce uncertainty, while AI-supported "
-        "judgment is concentrated closer to individual action. Yet the Core entrepreneurship anchors show that "
+        "judgment is concentrated closer to individual action. Yet the Leading entrepreneurship-journal anchors show that "
         "more information does not settle the entrepreneurial decision. Chalmers et al. (2021) connect cheaper "
         "solution generation to a greater need for evaluation and selection. Ramoglou et al. (2026) describe "
         "opportunity search as adjudication among machine-generated possibilities, and Rady et al. (2026) expose "
@@ -1011,7 +1787,7 @@ def build() -> None:
     writer.paragraph(
         "Organizational embedding is the condition under which firms can handle the relocated bottleneck. The "
         "capability-supports-learning configuration contains 57 entrepreneurship papers, 51 from Additional and "
-        "six from Core entrepreneurship. De Fano et al. (2025), Shore et al. (2024), and Abbas et al. (2026) "
+        "six from Leading entrepreneurship journals. De Fano et al. (2025), Shore et al. (2024), and Abbas et al. (2026) "
         "locate value in routines, resilience, knowledge bases, and learning rather than in isolated access to a "
         "tool. Grashof and Kopka (2023) connect AI outcomes to absorptive capacity. Schwaeke et al. (2025), "
         "Ledesma Chaves et al. (2026), and Metzger et al. (2025) show the condition from below: infrastructure, "
@@ -1031,31 +1807,24 @@ def build() -> None:
         "specifies where bottleneck relocation takes a predictive, learning, interactional, or judgment-centered "
         "form; it does not create an additional competing narrative."
     )
-    writer.paragraph_with_footnote(
+    writer.paragraph(
         "Agency remains an open frontier. Core and Additional entrepreneurship papers range from AI augmenting "
         "entrepreneurial cognition to AI as a teammate, relational nonhuman actor, or co-agent (Shepherd & "
         "Majchrzak, 2022; Murtinu & De Massis, 2025; Al-Bashrawi et al., 2026; Spurrier et al., 2025). Because the "
         "present evidence is abstract-observable and the instrument records one primary role per paper, these "
         "cases identify an unresolved theoretical boundary rather than support a settled claim about autonomous "
-        "AI agency.",
-        "To align an earlier human evaluation with the current corpus, Lada et al. (2023), which is absent from "
-        "the frozen corpus, was excluded and reliability was recalculated for the remaining 14 papers. The "
-        "exercise assessed allocation to the three interpretive insight families plus fragmentation, not the "
-        "eight-dimension instrument. Using the Task 2 decisions recorded in the KS and MK tabs of the final IRR "
-        "workbook, the researcher and human coder agreed on all 14 papers (100.0%; Cohen's kappa = 1.000). "
-        "Eleven papers "
-        "map to the current Core or Additional entrepreneurship populations and three to FT50 only; six of the "
-        "23 current interpretive anchors were included. We use this result only as prior human triangulation of "
-        "narrative allocation and as evidence that the boundaries between the insights required interpretation."
+        "AI agency."
     )
 
     writer.heading("4.6 Integrated empirical finding", 2)
     writer.paragraph(
         "The literature does not contain one consistently portable AI construct. It contains recurring, "
-        "theoretically different configurations that often share a technical label. Construct specification "
+        "theoretically different role-bound relations, mostly pairwise in the current abstract-observable "
+        "evidence, that often share a technical label; complete multidimensional configurations are rare rather "
+        "than typical. Construct specification "
         "shows the multiplicity; horizontal contrasting shows that domains emphasize different meanings; "
         "vertical contrasting shows that roles and mechanisms move differently across levels; and structuring "
-        "shows which combinations recur. The empirical answer is therefore configurational: an AI finding is "
+        "shows which relations recur. The empirical answer is configurational in principle: an AI finding is "
         "theoretically interpretable only when the paper's study status, technical form, role, mechanism, level, "
         "and scope are sufficiently explicit."
     )
@@ -1079,10 +1848,21 @@ def build() -> None:
         "states its boundary; and study status separates substantive AI theory from AI-enabled research methods. "
         "None is sufficient alone. Together they specify the unit that can enter cumulative theory."
     )
+    writer.paragraph(
+        "The nested study-status result demonstrates why the dimensions must be interpreted jointly. Method "
+        "papers frequently name a technical system but place it on the method side of the explanation and often "
+        "leave the substantive mechanism unstated. Phenomenon papers are less technically specific but distribute "
+        "explanatory work across learning, prediction, judgment, uncertainty, interaction, and access. A shared "
+        "machine-learning label therefore does not make those papers theoretically commensurable. Study status "
+        "acts as an interpretive gate: it establishes whether the remaining dimensions describe the phenomenon "
+        "being explained or the instrument used to observe another phenomenon."
+    )
+    writer.picture(FIG_FRAMEWORK, "Figure 8. Construct-clarification framework and entrepreneurship implication.", width=5.7)
 
     writer.heading("5.3 Entrepreneurship and bottleneck relocation", 2)
     writer.paragraph(
-        "The configurations sharpen the earlier bottleneck-relocation insight. AI can expand search, generate "
+        "The systematic close reading interprets the recurring role-mechanism relations as bottleneck relocation. "
+        "AI can expand search, generate "
         "options, improve prediction, and reduce some information costs. Yet the papers linking tools to judgment, "
         "uncertainty, and experimentation show that the entrepreneurial problem does not disappear. It moves "
         "toward evaluating possibilities, assessing plausibility, calibrating reliance, selecting what deserves "
@@ -1092,10 +1872,10 @@ def build() -> None:
     )
     writer.paragraph(
         "Organizational integration conditions whether firms benefit from this relocation. The capability × "
-        "learning configuration indicates that value arises when AI is integrated across routines, data, skills, "
-        "learning, governance, and human-algorithm relations rather than used as an isolated optional tool. This "
-        "is not a separate story from bottleneck relocation. Integration supplies the organizational means for "
-        "handling the new evaluation and commitment burden."
+        "learning relation indicates that value arises when AI is integrated across routines, data, skills, "
+        "learning, governance, and human-algorithm relations rather than used as an isolated optional tool. "
+        "Organisational integration is therefore the condition under which firms can absorb the relocated "
+        "evaluation and commitment burden."
     )
 
     writer.heading("5.4 What is distinctive about entrepreneurship?", 2)
@@ -1107,6 +1887,14 @@ def build() -> None:
         "more generative-, capability-, learning-, innovation-, and country-oriented. Entrepreneurship's "
         "distinctiveness therefore lies less in a unique AI category than in the mix of configurations and the "
         "evaluation problems they foreground."
+    )
+    writer.paragraph(
+        "Nested comparison sharpens this conclusion. The Core-Additional difference is largest among phenomenon "
+        "and both papers, where Additional journals foreground generative AI, learning, and innovation while Core "
+        "journals foreground tools, prediction, and individual entrepreneurs. Their method papers, by contrast, "
+        "assign almost the same research-method role to AI. What appears marginally as a journal-population "
+        "difference is therefore partly a difference in the mixture of study statuses and partly a conditional "
+        "difference within those statuses (Supplementary Table A4.1)."
     )
 
     writer.heading("5.5 Implications for cumulative theory development", 2)
@@ -1124,10 +1912,16 @@ def build() -> None:
         "The platform operationalizes the theory-elaboration workflow. Researchers can move from a population-"
         "level pattern to its cells, evidence papers, coding excerpts, and source records; change the model and "
         "analytical population; compare full and observed distributions; alter the dimensions on a vertical "
-        "matrix; apply the FT50 restriction; and download the exact filtered artifact. Topic humanization and "
-        "blind annotation are human-in-the-loop functions rather than hidden preprocessing. Because charts, "
+        "matrix; apply the FT50 restriction; and download the corresponding filtered data. Topic-label review and "
+        "blind annotation allow researchers to make and record interpretive decisions within the platform. Because charts, "
         "evidence panels, reports, and downloads use shared source tables, the interface is an inspectability and "
-        "method-reproduction layer as well as a communication tool."
+        "method-reproduction layer as well as a communication tool. Its model-agreement controls add a further "
+        "measurement function: a reader can distinguish all supporting papers from exact two-model convergence, "
+        "agreement among Mini, Claude, and Gemini, or unanimous four-model coding, then inspect the retained "
+        "and dissenting assignments paper by paper. This turns model sensitivity from a detached validation table "
+        "into an evidence-selection and review operation without treating convergence as ground truth. "
+        "Supplementary Table A2.1 links these interface operations to the underlying analyses, and "
+        "Supplementary Tables A6.4 and A7.1 report the convergence counts and downloadable data tables."
     )
 
     writer.heading("5.7 Limitations and current evidence boundary", 2)
@@ -1135,15 +1929,23 @@ def build() -> None:
         "The evidence is restricted to titles, abstracts, and author keywords. One primary code per dimension "
         "cannot recover multiple roles or claim-level relations within a paper. Agency configuration is not an "
         "independently observed full-text construct; the observable mechanism is used only to describe what AI "
-        "changes or enables. Domains overlap and depend on journal registries. Model agreement does not establish "
-        "truth, human validation is incomplete, and the full Claude/Gemini extension remains pending. Definition "
+        "changes or enables. Domains overlap and depend on the journal classification. Model agreement does not establish "
+        "truth, and blind human validation of the eight model-coded dimensions is incomplete. Claude has 405 "
+        "corpus non-responses, so the four-model reliability estimates apply to the disclosed 21,930-paper "
+        "common set rather than every corpus paper (Supplementary Tables A6.1 and A6.3). The "
+        "completed KS-MK human check addresses "
+        "interpretive insight "
+        "allocation only and must not be treated as accuracy evidence for those eight dimensions. Definition "
         "visibility is genre-sensitive. Topic boundaries overlap and serve navigation rather than inference. The "
-        "frozen corpus also contains known acronym-driven false positives, including five book-review records, "
-        "which may slightly affect broad-corpus estimates. The 136 previously read papers are purposive evidence "
-        "and cannot supply prevalence estimates."
+        "corpus also contains known acronym-driven false positives, including five book-review records, "
+        "which may slightly affect broad-corpus estimates. The 136 mapped close-reading papers support structured "
+        "interpretation but cannot supply prevalence estimates."
     )
 
-    writer.picture(FIG_FRAMEWORK, "Figure 6. Construct-clarification framework and entrepreneurship implication.", width=5.7)
+    # The source draft mixes spelling conventions. Normalise authored prose
+    # before adding the verbatim reference list; paper and journal titles in
+    # references and evidence tables must remain unchanged.
+    normalise_authored_paragraphs(document)
     writer.heading("References", 1)
     writer.paragraph(
         "Fisher, G., & Aguinis, H. (2017). Using theory elaboration to make theoretical advancements. "
@@ -1333,6 +2135,7 @@ def build() -> None:
         "https://downloads.ctfassets.net/o78em1y1w4i4/7xtaTxNiNcWRTeZkV86eNy/710bfd3c7f7c7c9c88eeb3638ba4be43/ext_list_Jun_2026.xlsx"
     )
 
+    validate_manuscript(document)
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     MARKDOWN.parent.mkdir(parents=True, exist_ok=True)
     document.save(OUTPUT)

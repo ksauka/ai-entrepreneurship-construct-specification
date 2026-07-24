@@ -4,15 +4,17 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Construct Specification</title>
-<link rel="stylesheet" href="/static/esd.css" />
+<link rel="stylesheet" href="/static/esd.css?v=publication-counts-20260724" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
-<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
+<script src="/static/paper_inspection.js?v=reference-model-20260724"></script>
+<script src="/static/scope_context.js?v=domain-scope-info-20260724"></script>
+<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
 <div class="container composition-container">
   <header class="app-header">
-    <h1>Construct specification</h1>
+    <div class="platform-name">AI-Entrepreneurship Construct Specification Platform</div>
     <p>How the retrieved literature specifies AI across the eight coded dimensions, with full and observed distributions shown separately.</p>
     <nav class="nav-links">
       <a class="nav-link" href="/">Analytics Dashboard</a>
@@ -36,9 +38,7 @@
       </label>
       <span id="status" class="status-pill warn">loading</span>
     </div>
-    <div class="view-tabs" aria-label="Construct specification workspaces">
-      <a class="view-tab active" href="/composition">Specification results</a>
-    </div>
+    <div id="currentDatasetContext" class="selection-context" aria-live="polite"></div>
     <details class="method-info">
       <summary>How this analysis works</summary>
       <p>The selected dataset and coding model define the analytical population. Filter dimension and Filter value then condition every chart and matrix on one exact coded subgroup. Full retains all papers after those selections. Observed excludes only the missing or unspecified categories registered for the dimension being displayed.</p>
@@ -52,6 +52,7 @@
       <button class="btn btn-outline" id="compositionReport" type="button">Generate filtered report</button>
       <button class="btn btn-outline" type="button" data-composition-download="composition">Download composition data</button>
       <button class="btn btn-outline" type="button" data-composition-download="irr">Download IRR tables</button>
+      <button class="btn btn-outline" id="coderRobustnessDownload" type="button">Download coder robustness</button>
       <button class="btn" type="button" data-composition-download="release">Download complete release</button>
     </div>
   </section>
@@ -85,27 +86,62 @@
     <div id="compositionMatrix" class="contrasting-matrix-wrap"></div>
   </section>
 
+  <section class="card" id="coderRobustnessCard">
+    <h2>Coder robustness <span class="sub">same analyses, selected coding models</span></h2>
+    <div class="toolbar compact-analysis-controls coder-robustness-controls">
+      <label>Reference coding model <select id="robustReferenceModel"></select></label>
+      <label>Comparison coding model <select id="robustComparisonModel"></select></label>
+      <label>Relation threshold
+        <select id="robustSupportThreshold">
+          <option value="10">10 papers</option>
+          <option value="20" selected>20 papers</option>
+          <option value="30">30 papers</option>
+          <option value="50">50 papers</option>
+        </select>
+      </label>
+      <span id="robustnessStatus" class="status-pill warn">loading</span>
+    </div>
+    <p class="chart-note" id="coderRobustnessNote">Recalculating the Combined entrepreneurship analyses with the selected model pair.</p>
+    <div class="stat-grid coder-robustness-stats">
+      <button class="stat-tile stat-tile-button" type="button" data-robustness-detail="aggregate"><div class="n" id="robustAggregate">–</div><div class="l">Aggregate leaders retained</div><span>Inspect dimensions</span></button>
+      <button class="stat-tile stat-tile-button" type="button" data-robustness-detail="nested"><div class="n" id="robustNested">–</div><div class="l">Status-filtered leaders retained</div><span>Inspect six-dimension results</span></button>
+      <button class="stat-tile stat-tile-button" type="button" data-robustness-detail="boundaries"><div class="n" id="robustBoundaries">–</div><div class="l">Boundary directions retained</div><span>Inspect Leading and Additional</span></button>
+      <button class="stat-tile stat-tile-button" type="button" data-robustness-detail="levels"><div class="n" id="robustLevels">–</div><div class="l">Role-level leaders retained</div><span>Inspect role by level</span></button>
+      <button class="stat-tile stat-tile-button" type="button" data-robustness-detail="relations"><div class="n" id="robustRelations">–</div><div class="l">Relations above threshold in both</div><span>Inspect relations and papers</span></button>
+    </div>
+    <details class="method-info coder-robustness-details">
+      <summary>View the coder-dependent summary</summary>
+      <p>This check does not select a model by agreement and does not replace either model's codes. It holds the Combined entrepreneurship population, specified-category rules, selected contrasts, and support threshold constant while changing the source of the paper-level classifications. Combined entrepreneurship is the union of Leading and Additional entrepreneurship; “core dimensions” refers only to the six main coding dimensions, not to a journal population.</p>
+      <div class="topic-review-table-wrap">
+        <table class="composition-table">
+          <thead><tr><th>Analysis</th><th>Coder-dependent result</th></tr></thead>
+          <tbody id="coderRobustnessRows"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
   <section class="card">
-    <h2>Model inter-rater reliability <span class="sub">eight dimensions; six core</span></h2>
+    <h2>Model inter-rater reliability <span class="sub">eight dimensions; six core dimensions</span><button class="info-button" id="irrDimensionInfoButton" type="button" aria-label="Explain core and exploratory dimensions" title="Explain core and exploratory dimensions">i</button></h2>
     <div class="toolbar">
       <span id="irrStatus" class="status-pill warn">loading</span>
       <a class="btn btn-outline" href="/human-annotation">Open human annotation</a>
     </div>
-    <p class="chart-note">Each cell compares a model pair on its exact common-paper intersection in the selected dataset scope. The study-status filter is not applied because study status is itself one of the rated dimensions.</p>
+    <p class="chart-note" id="irrCohortNote">Every model pair uses one balanced common-paper cohort. The study-status filter is not applied because study status is itself one of the rated dimensions.</p>
     <div class="grid-2 irr-matrix-grid">
       <div class="irr-matrix-card">
         <h3>Mean exact agreement</h3>
         <div class="irr-matrix-wrap" id="irrAgreementMatrix"></div>
       </div>
       <div class="irr-matrix-card">
-        <h3>Mean nominal Krippendorff alpha</h3>
+        <h3>Mean pairwise nominal Krippendorff’s α</h3>
         <div class="irr-matrix-wrap" id="irrAlphaMatrix"></div>
       </div>
     </div>
-    <p class="chart-note">Matrix cells are arithmetic means across the six core dimensions and provide orientation only. The table reports all eight dimensions and identifies the two exploratory fields.</p>
-    <div class="topic-review-table-wrap">
-      <table class="composition-table">
-        <thead><tr><th>Model pair</th><th>Common papers</th><th>Dimension</th><th>Use</th><th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff alpha</th></tr></thead>
+    <p class="chart-note">Matrix cells are arithmetic means across the six core dimensions and provide orientation only. The table reports all eight dimensions and separates agreement across all categories, agreement on whether evidence is present, and category agreement where both models found evidence. Every α coefficient is pairwise nominal Krippendorff’s α.</p>
+    <div class="topic-review-table-wrap irr-detail-table-wrap">
+      <table class="composition-table irr-decomposition-table">
+        <thead><tr><th>Model pair</th><th>Dimension</th><th>Analytical status</th><th>All balanced papers</th><th>All-category exact agreement</th><th>All-category pairwise nominal Krippendorff’s α</th><th>Evidence-presence exact agreement</th><th>Evidence-presence pairwise nominal Krippendorff’s α</th><th>Both found evidence</th><th>Category exact agreement where both found evidence</th><th>Category pairwise nominal Krippendorff’s α where both found evidence</th></tr></thead>
         <tbody id="irrRows"></tbody>
       </table>
     </div>
@@ -134,13 +170,13 @@
           <div class="irr-matrix-wrap" id="humanAgreementMatrix"></div>
         </div>
         <div class="irr-matrix-card">
-          <h3>Mean nominal Krippendorff alpha</h3>
+          <h3>Mean nominal Krippendorff α</h3>
           <div class="irr-matrix-wrap" id="humanAlphaMatrix"></div>
         </div>
       </div>
       <div class="topic-review-table-wrap">
         <table class="composition-table">
-          <thead><tr><th>Rater pair</th><th>Balanced papers</th><th>Dimension</th><th>Use</th><th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff alpha</th></tr></thead>
+          <thead><tr><th>Rater pair</th><th>Balanced papers</th><th>Dimension</th><th>Use</th><th>Comparable papers</th><th>Exact agreement</th><th>Krippendorff α</th></tr></thead>
           <tbody id="humanIrrRows"></tbody>
         </table>
       </div>
@@ -163,6 +199,16 @@ const el = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"]/g, character => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;",
 }[character]));
+const CHART_FONT_SANS = '"IBM Plex Sans", Arial, sans-serif';
+const CHART_FONT_MONO = '"IBM Plex Mono", monospace';
+Chart.defaults.font.family = CHART_FONT_SANS;
+Chart.defaults.font.weight = "400";
+Chart.defaults.color = "#455663";
+const formatAlpha = value => {
+  if (value === null || value === undefined) return "Not estimable";
+  const text = Number(value).toFixed(2);
+  return text.startsWith("-0") ? `-${text.slice(2)}` : (text.startsWith("0") ? text.slice(1) : text);
+};
 const params = new URLSearchParams(window.location.search);
 let scope = params.get("scope") || "full_corpus";
 let codingModel = params.get("model") || "";
@@ -179,8 +225,30 @@ const EVIDENCE_LIMITS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 50000];
 const requestedEvidenceLimit = Number.parseInt(params.get("evidence_limit"), 10);
 let evidenceLimit = EVIDENCE_LIMITS.includes(requestedEvidenceLimit)
   ? requestedEvidenceLimit : 100;
+let evidenceMinimumAgreement = 1;
+let evidencePreferredOnly = false;
 let activeEvidence = null;
 let charts = [];
+let availableModels = [];
+let availableScopes = [];
+let robustReferenceModel = params.get("robust_reference") || "";
+let robustComparisonModel = params.get("robust_comparison") || "";
+let robustSupportThreshold = Number.parseInt(params.get("robust_support"), 10) || 20;
+let coderRobustnessData = null;
+let activeRobustnessEvidence = null;
+let robustnessEvidenceLimit = 100;
+let robustnessEvidenceMatchMode = "either";
+
+const ROBUSTNESS_COLUMNS = {
+  study_status: "ai_method_or_phenomenon",
+  ai_role: "ai_role_function",
+  technical_type: "ai_type_form",
+  mechanism: "ai_mechanism_analysis",
+  level: "level_of_analysis",
+  process_stage: "entrepreneurial_process_stage",
+  scope: "scope_conditions",
+  definition: "definition_construct_clarity",
+};
 
 async function init() {
   const [health, scopes, models] = await Promise.all([
@@ -189,27 +257,38 @@ async function init() {
     api("/api/specification/models"),
   ]);
   if (!scopes.some(item => item.id === scope)) scope = scopes[0]?.id || "full_corpus";
+  availableScopes = scopes;
   if (!models.some(item => item.id === codingModel)) codingModel = models[0]?.id || "";
+  availableModels = models;
+  if (!models.some(item => item.id === robustReferenceModel)) robustReferenceModel = codingModel;
+  ensureRobustnessModelPair();
   el("scope").innerHTML = scopes.map(item =>
     `<option value="${esc(item.id)}">${esc(item.label)} (${item.papers.toLocaleString()})</option>`
   ).join("");
+  ScopeContext.attachInfo("scope", scopes);
   el("codingModel").innerHTML = models.map(item =>
     `<option value="${esc(item.id)}">${esc(item.label)} (${(item.coverage_share * 100).toFixed(2)}% coverage)</option>`
   ).join("");
   el("scope").value = scope;
   el("codingModel").value = codingModel;
+  updateCurrentDatasetContext();
+  syncRobustnessModelControls();
   el("distributionView").value = distributionView;
   el("status").className = "status-pill " + (health.has_specifications ? "ok" : "warn");
   el("status").textContent = `${health.papers_loaded.toLocaleString()} papers · live dataset`;
   el("scope").onchange = event => {
     scope = event.target.value;
+    updateCurrentDatasetContext();
     updateLocation();
     Promise.all([render(), renderIrr()]);
   };
   el("codingModel").onchange = event => {
     codingModel = event.target.value;
+    robustReferenceModel = codingModel;
+    ensureRobustnessModelPair();
+    syncRobustnessModelControls();
     updateLocation();
-    render();
+    Promise.all([render(), renderCoderRobustness()]);
   };
   el("filterDimension").onchange = event => {
     filterDimension = event.target.value;
@@ -229,10 +308,37 @@ async function init() {
     render();
   };
   el("compositionReport").onclick = openCompositionReport;
+  el("coderRobustnessDownload").onclick = () => {
+    const query = robustnessQuery();
+    window.location.assign(`/api/composition/coder-robustness/download?${query}`);
+  };
+  el("robustReferenceModel").onchange = event => {
+    robustReferenceModel = event.target.value;
+    ensureRobustnessModelPair("reference");
+    syncRobustnessModelControls();
+    updateLocation();
+    renderCoderRobustness();
+  };
+  el("robustComparisonModel").onchange = event => {
+    robustComparisonModel = event.target.value;
+    ensureRobustnessModelPair("comparison");
+    syncRobustnessModelControls();
+    updateLocation();
+    renderCoderRobustness();
+  };
+  el("robustSupportThreshold").onchange = event => {
+    robustSupportThreshold = Number(event.target.value);
+    updateLocation();
+    renderCoderRobustness();
+  };
+  document.querySelectorAll("[data-robustness-detail]").forEach(button => {
+    button.onclick = () => showRobustnessDetail(button.dataset.robustnessDetail);
+  });
   document.querySelectorAll("[data-composition-download]").forEach(button => {
     button.onclick = () => downloadCompositionBundle(button.dataset.compositionDownload);
   });
   el("refreshHumanIrr").onclick = () => renderHumanIrr(true);
+  el("irrDimensionInfoButton").onclick = showIrrDimensionInfo;
   el("matrixRows").onchange = event => {
     matrixRowDimension = event.target.value;
     if (matrixRowDimension === matrixColumnDimension) {
@@ -254,7 +360,14 @@ async function init() {
     updateLocation(); renderMatrix();
   };
   updateLocation();
-  await Promise.all([render(), renderIrr(), renderHumanIrr()]);
+  await Promise.all([render(), renderCoderRobustness(), renderIrr(), renderHumanIrr()]);
+}
+
+function updateCurrentDatasetContext() {
+  ScopeContext.render(
+    "currentDatasetContext",
+    availableScopes.find(item => item.id === scope),
+  );
 }
 
 function updateLocation() {
@@ -266,12 +379,48 @@ function updateLocation() {
     matrix_rows: matrixRowDimension,
     matrix_columns: matrixColumnDimension,
     matrix_metric: matrixMetric,
+    robust_reference: robustReferenceModel,
+    robust_comparison: robustComparisonModel,
+    robust_support: String(robustSupportThreshold),
   });
   if (filterDimension && filterValue !== "") {
     query.set("filter_dimension", filterDimension);
     query.set("filter_value", filterValue);
   }
   window.history.replaceState({}, "", `/composition?${query}`);
+}
+
+function ensureRobustnessModelPair(changed = "") {
+  const ids = availableModels.map(item => item.id);
+  if (!ids.includes(robustReferenceModel)) robustReferenceModel = codingModel || ids[0] || "";
+  if (!ids.includes(robustComparisonModel) || robustComparisonModel === robustReferenceModel) {
+    const preferred = ids.includes("gemini-3.1-pro-preview") && robustReferenceModel !== "gemini-3.1-pro-preview"
+      ? "gemini-3.1-pro-preview" : "";
+    if (changed === "comparison" && robustComparisonModel === robustReferenceModel) {
+      robustReferenceModel = ids.find(id => id !== robustComparisonModel) || robustReferenceModel;
+    } else {
+      robustComparisonModel = preferred || ids.find(id => id !== robustReferenceModel) || "";
+    }
+  }
+}
+
+function syncRobustnessModelControls() {
+  const options = availableModels.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)} (${(item.coverage_share * 100).toFixed(2)}%)</option>`
+  ).join("");
+  el("robustReferenceModel").innerHTML = options;
+  el("robustComparisonModel").innerHTML = options;
+  el("robustReferenceModel").value = robustReferenceModel;
+  el("robustComparisonModel").value = robustComparisonModel;
+  el("robustSupportThreshold").value = String(robustSupportThreshold);
+}
+
+function robustnessQuery() {
+  return new URLSearchParams({
+    reference_model: robustReferenceModel,
+    comparison_model: robustComparisonModel,
+    min_support: String(robustSupportThreshold),
+  });
 }
 
 async function render() {
@@ -307,18 +456,315 @@ async function renderIrr() {
   el("irrStatus").className = "status-pill warn";
   el("irrStatus").textContent = "calculating";
   const data = await api(`/api/scope/${encodeURIComponent(scope)}/composition/irr/matrix`);
+  el("irrCohortNote").textContent =
+    `Every model pair uses the same ${data.balanced_common_papers.toLocaleString()} papers ` +
+    `available to all ${data.models.length.toLocaleString()} models within the ` +
+    `${data.reference_label || "reference-model"} successful-paper cohort ` +
+    `(n = ${data.reference_cohort_papers.toLocaleString()}). ` +
+    `The study-status filter is not applied because study status is itself one of the rated dimensions.`;
   el("irrAgreementMatrix").innerHTML = irrMatrixMarkup(data, "mean_percent_agreement", true);
   el("irrAlphaMatrix").innerHTML = irrMatrixMarkup(data, "mean_krippendorff_alpha", false);
   el("irrRows").innerHTML = data.pairs.flatMap(pair => pair.dimensions.map(item =>
     `<tr><td>${esc(pair.left_label)} / ${esc(pair.right_label)}</td>` +
-    `<td>${pair.intersection_papers.toLocaleString()}</td>` +
-    `<td>${esc(item.label)}</td><td><span class="pill">${esc(item.classification)}</span></td>` +
+    `<td>${esc(item.label)}</td><td><span class="pill">${esc(item.classification === "Core" ? "Core dimension" : "Exploratory dimension")}</span></td>` +
     `<td>${item.comparable_papers.toLocaleString()}</td>` +
     `<td>${item.percent_agreement === null ? "Not estimable" : `${(item.percent_agreement * 100).toFixed(2)}%`}</td>` +
-    `<td>${item.krippendorff_alpha === null ? "Not estimable" : item.krippendorff_alpha.toFixed(2)}</td></tr>`
+    `<td>${formatAlpha(item.krippendorff_alpha)}</td>` +
+    `<td>${item.observability_percent_agreement === null ? "Not estimable" : `${(item.observability_percent_agreement * 100).toFixed(2)}%`}</td>` +
+    `<td>${formatAlpha(item.observability_krippendorff_alpha)}</td>` +
+    `<td>${item.jointly_observed_papers.toLocaleString()}</td>` +
+    `<td>${item.observed_category_percent_agreement === null ? "Not estimable" : `${(item.observed_category_percent_agreement * 100).toFixed(2)}%`}</td>` +
+    `<td>${formatAlpha(item.observed_category_krippendorff_alpha)}</td></tr>`
   )).join("");
   el("irrStatus").className = "status-pill ok";
-  el("irrStatus").textContent = `${data.models.length.toLocaleString()} models · ${data.pairs.length.toLocaleString()} pairs`;
+  el("irrStatus").textContent = `${data.models.length.toLocaleString()} models · ` +
+    `${data.pairs.length.toLocaleString()} pairs · ${data.balanced_common_papers.toLocaleString()} balanced papers`;
+}
+
+async function renderCoderRobustness() {
+  el("robustnessStatus").className = "status-pill warn";
+  el("robustnessStatus").textContent = "calculating";
+  try {
+    const data = await api(`/api/composition/coder-robustness?${robustnessQuery()}`);
+    coderRobustnessData = data;
+    const summary = data.summary;
+    const reference = data.reference_model.label;
+    const comparison = data.comparison_model.label;
+    el("robustAggregate").textContent = `${summary.aggregate_leading_matches}/${summary.aggregate_dimensions}`;
+    el("robustNested").textContent = `${summary.core_nested_leading_matches}/${summary.core_nested_cells}`;
+    el("robustBoundaries").textContent = `${summary.entrepreneurship_contrast_directions_preserved}/${summary.entrepreneurship_contrasts}`;
+    el("robustLevels").textContent = `${summary.role_leading_levels_preserved}/${summary.roles_compared}`;
+    el("robustRelations").textContent = `${summary.selected_relations_retained_by_both}/${summary.selected_relations}`;
+    const registered = data.reference_is_registered_primary
+      ? `${reference} is the registered primary coder.`
+      : `${reference} is the selected reference coder; ${data.registered_primary_model.label} remains the registered primary coder.`;
+    el("coderRobustnessNote").innerHTML =
+      `<strong>${esc(registered)}</strong> The figures compare ${esc(reference)} with ${esc(comparison)} ` +
+      `on the same five Combined entrepreneurship checks. Click any figure to inspect the exact retained and changed results, then open their supporting papers.`;
+
+    const nestedChanges = data.nested_comparison.filter(item =>
+      item.analytical_status === "Core" && !item.same_leading_category
+    ).map(item =>
+      `${item.study_status}: ${item.dimension_label} changes from ${item.primary.category || "no observed leader"} ` +
+      `to ${item.alternative.category || "no observed leader"}`
+    );
+    const relationChanges = data.selected_relations.filter(item => !item.retained_by_both).map(item => {
+      const below = [];
+      if (!item.primary.meets_support_threshold) below.push(reference);
+      if (!item.alternative.meets_support_threshold) below.push(comparison);
+      return `${item.relation}: ${reference} ${item.primary.papers.toLocaleString()}, ` +
+        `${comparison} ${item.alternative.papers.toLocaleString()}; ${below.join(" and ")} below ` +
+        `${item.min_support.toLocaleString()} papers`;
+    });
+    const statusReference = data.aggregate_distributions.filter(item =>
+      item.model_role === "primary" && item.dimension_id === "study_status"
+    );
+    const statusComparison = data.aggregate_distributions.filter(item =>
+      item.model_role === "alternative" && item.dimension_id === "study_status"
+    );
+    const statusText = rows => rows.map(item =>
+      `${item.category} ${(item.share * 100).toFixed(2)}% (n = ${item.papers.toLocaleString()})`
+    ).join("; ");
+    const evidenceMatches = data.selected_relations.filter(item =>
+      item.primary.evidence_paper_matches_relation && item.alternative.evidence_paper_matches_relation
+    ).length;
+    const rows = [
+      ["Study-status composition", `${reference}: ${statusText(statusReference)}. ${comparison}: ${statusText(statusComparison)}.`],
+      ["Changed Core nested leaders", nestedChanges.length ? nestedChanges.join("; ") : "No Core nested leader changes for this model pair."],
+      ["Relations below the common threshold", relationChanges.length ? relationChanges.join("; ") : "All selected relations meet the common threshold under both models."],
+      ["Selected evidence-paper check", `${evidenceMatches} of ${summary.selected_relations} selected evidence papers receive the same registered role-mechanism relation from both selected models.`],
+    ];
+    el("coderRobustnessRows").innerHTML = rows.map(([analysis, finding]) =>
+      `<tr><td><strong>${esc(analysis)}</strong></td><td>${esc(finding)}</td></tr>`
+    ).join("");
+    el("robustnessStatus").className = "status-pill ok";
+    el("robustnessStatus").textContent = `${reference} / ${comparison}`;
+  } catch (error) {
+    coderRobustnessData = null;
+    el("robustnessStatus").className = "status-pill bad";
+    el("robustnessStatus").textContent = error.message;
+    el("coderRobustnessNote").textContent = "The selected robustness comparison could not be calculated.";
+  }
+}
+
+const robustnessEvidenceButton = (label, config) =>
+  `<button class="btn btn-outline robustness-evidence-button" type="button" ` +
+  `data-robustness-evidence="${encodeURIComponent(JSON.stringify(config))}">${esc(label)}</button>`;
+
+function showRobustnessDetail(kind) {
+  const data = coderRobustnessData;
+  if (!data) return;
+  const reference = data.reference_model.label;
+  const comparison = data.comparison_model.label;
+  let title = "Coder robustness";
+  let explanation = "";
+  let headings = [];
+  let rows = [];
+  if (kind === "aggregate") {
+    title = "Aggregate leading categories";
+    explanation = "For each dimension, this check asks whether the same observed category is most prevalent under both selected models. A retained leader does not mean that every paper has the same code.";
+    headings = ["Dimension", reference, comparison, "Result", "Evidence"];
+    rows = data.aggregate_comparison.map(item => {
+      const referenceButton = robustnessEvidenceButton(`${reference}: papers`, {
+        title: `${item.dimension_label}: ${item.primary.category}`,
+        population: "combined", column: ROBUSTNESS_COLUMNS[item.dimension_id], value: item.primary.category,
+        match_mode: "reference",
+      });
+      const comparisonButton = item.primary.category === item.alternative.category ? "" : robustnessEvidenceButton(`${comparison}: papers`, {
+        title: `${item.dimension_label}: ${item.alternative.category}`,
+        population: "combined", column: ROBUSTNESS_COLUMNS[item.dimension_id], value: item.alternative.category,
+        match_mode: "comparison",
+      });
+      return [
+        item.dimension_label,
+        `${item.primary.category || "No observed leader"} | ${(item.primary.share * 100).toFixed(2)}% | n = ${item.primary.papers.toLocaleString()}`,
+        `${item.alternative.category || "No observed leader"} | ${(item.alternative.share * 100).toFixed(2)}% | n = ${item.alternative.papers.toLocaleString()}`,
+        robustnessResult(item.same_leading_category),
+        `<div class="table-action-row">${referenceButton}${comparisonButton}</div>`,
+      ];
+    });
+  } else if (kind === "nested") {
+    title = "Study-status-conditioned leading categories";
+    explanation = "Within phenomenon, method, and both, this check compares the leading observed category for each Core dimension. The study-status and outcome codes are both supplied by the selected model.";
+    headings = ["Study status", "Dimension", reference, comparison, "Result", "Evidence"];
+    rows = data.nested_comparison.filter(item => item.analytical_status === "Core").map(item => {
+      const baseConfig = {
+        population: "combined",
+        column: ROBUSTNESS_COLUMNS.study_status,
+        value: item.study_status,
+        secondary_column: ROBUSTNESS_COLUMNS[item.dimension_id],
+      };
+      const referenceButton = robustnessEvidenceButton(`${reference}: papers`, {
+        ...baseConfig, title: `${item.study_status}: ${item.dimension_label} = ${item.primary.category}`,
+        secondary_value: item.primary.category, match_mode: "reference",
+      });
+      const comparisonButton = item.primary.category === item.alternative.category ? "" : robustnessEvidenceButton(`${comparison}: papers`, {
+        ...baseConfig, title: `${item.study_status}: ${item.dimension_label} = ${item.alternative.category}`,
+        secondary_value: item.alternative.category, match_mode: "comparison",
+      });
+      return [
+        item.study_status, item.dimension_label,
+        `${item.primary.category || "No observed leader"} | ${(item.primary.share * 100).toFixed(2)}% | n = ${item.primary.papers.toLocaleString()}`,
+        `${item.alternative.category || "No observed leader"} | ${(item.alternative.share * 100).toFixed(2)}% | n = ${item.alternative.papers.toLocaleString()}`,
+        robustnessResult(item.same_leading_category),
+        `<div class="table-action-row">${referenceButton}${comparisonButton}</div>`,
+      ];
+    });
+  } else if (kind === "boundaries") {
+    title = "Leading-Additional contrast directions";
+    explanation = "For each registered category, this check compares its observed-category share in Leading and Additional entrepreneurship journals. Direction is retained when both models identify the same side as higher; it does not test statistical significance.";
+    headings = ["Dimension and category", reference, comparison, "Result", "Evidence"];
+    rows = data.entrepreneurship_contrasts.map(item => [
+      `${item.dimension_label}: ${item.category}`,
+      `${item.primary.direction} | Leading ${(item.primary.core_share * 100).toFixed(2)}%; Additional ${(item.primary.additional_share * 100).toFixed(2)}%`,
+      `${item.alternative.direction} | Leading ${(item.alternative.core_share * 100).toFixed(2)}%; Additional ${(item.alternative.additional_share * 100).toFixed(2)}%`,
+      robustnessResult(item.direction_preserved),
+      `<div class="table-action-row">` + robustnessEvidenceButton("Leading-journal papers", {
+        title: `Leading entrepreneurship journals: ${item.dimension_label} = ${item.category}`,
+        population: "core", column: ROBUSTNESS_COLUMNS[item.dimension_id], value: item.category, match_mode: "either",
+      }) + robustnessEvidenceButton("Additional papers", {
+        title: `Additional entrepreneurship: ${item.dimension_label} = ${item.category}`,
+        population: "additional", column: ROBUSTNESS_COLUMNS[item.dimension_id], value: item.category, match_mode: "either",
+      }) + `</div>`,
+    ]);
+  } else if (kind === "levels") {
+    title = "Leading level for each AI role";
+    explanation = "Within each selected AI role, this check asks which observed level of analysis is most prevalent. It compares the location of the leader, not equality of the complete role-by-level distribution.";
+    headings = ["AI role", reference, comparison, "Result", "Evidence"];
+    rows = data.role_level_comparison.map(item => {
+      const referenceButton = robustnessEvidenceButton(`${reference}: papers`, {
+        title: `${item.role} at ${item.primary_leading_level}`,
+        population: "combined", column: ROBUSTNESS_COLUMNS.ai_role, value: item.role,
+        secondary_column: ROBUSTNESS_COLUMNS.level, secondary_value: item.primary_leading_level, match_mode: "reference",
+      });
+      const comparisonButton = item.primary_leading_level === item.alternative_leading_level ? "" : robustnessEvidenceButton(`${comparison}: papers`, {
+        title: `${item.role} at ${item.alternative_leading_level}`,
+        population: "combined", column: ROBUSTNESS_COLUMNS.ai_role, value: item.role,
+        secondary_column: ROBUSTNESS_COLUMNS.level, secondary_value: item.alternative_leading_level, match_mode: "comparison",
+      });
+      return [item.role, item.primary_leading_level, item.alternative_leading_level,
+        robustnessResult(item.same_leading_level), `<div class="table-action-row">${referenceButton}${comparisonButton}</div>`];
+    });
+  } else if (kind === "relations") {
+    title = "Selected role-mechanism relations";
+    explanation = `A relation is retained by both when each model assigns the same role-mechanism combination to at least ${data.min_support.toLocaleString()} papers in Combined entrepreneurship. This is a transparent support rule, not a significance test.`;
+    headings = ["Relation", reference, comparison, "Result", "Evidence"];
+    rows = data.selected_relations.map(item => [
+      item.relation,
+      `${item.primary.papers.toLocaleString()} papers | ${item.primary.meets_support_threshold ? "meets" : "below"} threshold`,
+      `${item.alternative.papers.toLocaleString()} papers | ${item.alternative.meets_support_threshold ? "meets" : "below"} threshold`,
+      robustnessResult(item.retained_by_both),
+      robustnessEvidenceButton("Inspect papers", {
+        title: item.relation, population: "combined",
+        column: ROBUSTNESS_COLUMNS.ai_role, value: item.role,
+        secondary_column: ROBUSTNESS_COLUMNS.mechanism, secondary_value: item.mechanism,
+        match_mode: "either",
+      }),
+    ]);
+  } else {
+    return;
+  }
+  el("panel").classList.add("open");
+  el("panelBody").innerHTML = `<h2>${esc(title)}</h2>` +
+    `<p class="chart-note"><strong>Selected comparison:</strong> ${esc(reference)} and ${esc(comparison)}.</p>` +
+    `<section class="contrast-interpretation"><p>${esc(explanation)}</p></section>` +
+    robustnessTable(headings, rows);
+  wireRobustnessEvidenceButtons();
+}
+
+function robustnessResult(retained) {
+  return `<span class="pill ${retained ? "robustness-retained" : "robustness-changed"}">` +
+    `${retained ? "Retained" : "Changed"}</span>`;
+}
+
+function robustnessTable(headings, rows) {
+  return `<div class="topic-review-table-wrap robustness-detail-table"><table class="composition-table">` +
+    `<thead><tr>${headings.map(heading => `<th>${esc(heading)}</th>`).join("")}</tr></thead>` +
+    `<tbody>${rows.map(row => `<tr>${row.map((cell, index) =>
+      `<td>${index === 0 ? `<strong>${esc(cell)}</strong>` : robustnessCell(cell)}</td>`
+    ).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function robustnessCell(value) {
+  const text = String(value ?? "");
+  const markup = text.trimStart();
+  return markup.startsWith('<span class="pill ') ||
+    markup.startsWith('<div class="table-action-row">') ||
+    markup.startsWith('<button class="btn btn-outline robustness-evidence-button"')
+    ? text : esc(text);
+}
+
+function wireRobustnessEvidenceButtons() {
+  document.querySelectorAll(".robustness-evidence-button").forEach(button => {
+    button.onclick = () => {
+      const config = JSON.parse(decodeURIComponent(button.dataset.robustnessEvidence));
+      showRobustnessEvidence(config);
+    };
+  });
+}
+
+async function showRobustnessEvidence(config) {
+  activeRobustnessEvidence = {...config};
+  const query = new URLSearchParams({
+    reference_model: robustReferenceModel,
+    comparison_model: robustComparisonModel,
+    population: config.population || "combined",
+    column: config.column,
+    value: config.value,
+    match_mode: config.match_mode || robustnessEvidenceMatchMode,
+    limit: String(robustnessEvidenceLimit),
+  });
+  if (config.secondary_column) {
+    query.set("secondary_column", config.secondary_column);
+    query.set("secondary_value", config.secondary_value);
+  }
+  el("panel").classList.add("open");
+  el("panelBody").innerHTML = `<h2>${esc(config.title)}</h2><p class="muted">Loading model assignments and evidence papers...</p>`;
+  const result = await api(`/api/composition/coder-robustness/evidence?${query}`);
+  const reference = result.reference_model.label;
+  const comparison = result.comparison_model.label;
+  const mode = result.match_mode;
+  robustnessEvidenceMatchMode = mode;
+  const limitOptions = EVIDENCE_LIMITS.map(limit =>
+    `<option value="${limit}" ${limit === robustnessEvidenceLimit ? "selected" : ""}>${limit === 50000 ? "All" : limit.toLocaleString()}</option>`
+  ).join("");
+  const modeOptions = [
+    ["either", "Either selected model matches"],
+    ["both", "Both selected models match"],
+    ["reference", `${reference} matches`],
+    ["comparison", `${comparison} matches`],
+    ["different", "Only one selected model matches"],
+  ].map(([value, label]) => `<option value="${value}" ${value === mode ? "selected" : ""}>${esc(label)}</option>`).join("");
+  const showing = result.returned_papers >= result.selected_papers
+    ? `Showing all ${result.selected_papers.toLocaleString()} selected papers.`
+    : `Showing ${result.returned_papers.toLocaleString()} of ${result.selected_papers.toLocaleString()} selected papers.`;
+  const selectedColumns = [config.column, config.secondary_column].filter(Boolean);
+  const selectionContext = `This paper is included because at least one selected model assigns the displayed robustness pattern. Compare the two assignments below to see whether the models agree.`;
+  el("panelBody").innerHTML = `<h2>${esc(config.title)}</h2>` +
+    `<p class="chart-note"><strong>${esc(result.population_label)}.</strong> ${showing}</p>` +
+    `<div class="stat-grid robustness-evidence-stats">` +
+      `<div class="stat-tile"><div class="n">${result.reference_supporting_papers.toLocaleString()}</div><div class="l">${esc(reference)}</div></div>` +
+      `<div class="stat-tile"><div class="n">${result.comparison_supporting_papers.toLocaleString()}</div><div class="l">${esc(comparison)}</div></div>` +
+      `<div class="stat-tile"><div class="n">${result.both_supporting_papers.toLocaleString()}</div><div class="l">Both models</div></div>` +
+      `<div class="stat-tile"><div class="n">${result.different_supporting_papers.toLocaleString()}</div><div class="l">Only one model</div></div>` +
+    `</div>` +
+    `<p class="chart-note">Both models means both selected models assign every category in the displayed pattern to the same paper. Only one model means the paper matches the complete pattern under one selected model but not the other.</p>` +
+    `<div class="evidence-controls"><label for="robustnessEvidenceMode">Papers included</label>` +
+      `<select id="robustnessEvidenceMode">${modeOptions}</select>` +
+      `<label for="robustnessEvidenceLimit">Papers displayed</label>` +
+      `<select id="robustnessEvidenceLimit">${limitOptions}</select></div>` +
+    (result.papers.length
+      ? result.papers.map(paper => paperInspectionCard(paper, selectedColumns, selectionContext)).join("")
+      : `<div class="empty-state">No papers match this selection.</div>`);
+  el("robustnessEvidenceMode").onchange = event => {
+    activeRobustnessEvidence.match_mode = event.target.value;
+    robustnessEvidenceMatchMode = event.target.value;
+    showRobustnessEvidence(activeRobustnessEvidence);
+  };
+  el("robustnessEvidenceLimit").onchange = event => {
+    robustnessEvidenceLimit = Number.parseInt(event.target.value, 10);
+    showRobustnessEvidence(activeRobustnessEvidence);
+  };
 }
 
 function irrMatrixMarkup(data, metric, percent) {
@@ -333,12 +779,12 @@ function irrMatrixMarkup(data, metric, percent) {
       const pair = diagonal ? null : pairLookup.get([left.id, right.id].sort().join("::"));
       const value = diagonal ? 1 : pair?.[metric];
       const displayed = value === null || value === undefined
-        ? "N/A" : (percent ? `${(value * 100).toFixed(2)}%` : value.toFixed(2));
+        ? "N/A" : (percent ? `${(value * 100).toFixed(2)}%` : formatAlpha(value));
       const background = value === null || value === undefined
         ? "#eef1f4" : irrCellColour(value, metric);
       const title = diagonal
         ? `${left.label}: self-comparison`
-        : `${left.label} / ${right.label}: ${pair?.intersection_papers?.toLocaleString() || 0} common papers`;
+        : `${left.label} / ${right.label}: ${pair?.intersection_papers?.toLocaleString() || 0} balanced papers`;
       return `<td class="irr-heat-cell" style="background:${background}" title="${esc(title)}">${displayed}</td>`;
     }).join("");
     return `<tr><th>${esc(left.label)}</th>${cells}</tr>`;
@@ -353,6 +799,37 @@ function irrCellColour(value, metric) {
   }
   const bounded = Math.max(0, Math.min(1, value));
   return `rgba(47,158,114,${(0.12 + bounded * 0.76).toFixed(2)})`;
+}
+
+function showIrrDimensionInfo() {
+  el("panel").classList.add("open");
+  el("panelBody").innerHTML = `<h2>Core and exploratory dimensions</h2>
+    <section class="contrast-interpretation">
+      <p>All eight dimensions were coded for every successfully processed paper. All eight remain available for filtering, comparison, evidence inspection, per-dimension reliability assessment, and download.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Six core dimensions</h3>
+      <p><strong>Study status, technical AI type, AI role, mechanism, level of analysis, and scope conditions</strong> form the main dimension-level construct-specification and model-reliability record.</p>
+      <p>The two model-agreement heatmaps average these six dimensions only. Their averages provide orientation; the individual dimension results remain the primary evidence.</p>
+      <p>Here, <strong>core</strong> is an analytical status: it identifies the six dimensions used in the summary heatmaps. It does not mean Leading entrepreneurship journals and it does not identify a dataset population. Mechanism has the smallest common-evidence base among these dimensions, so mechanism-dependent results must retain that denominator even when models agree more strongly on the category after both find evidence.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Two exploratory dimensions</h3>
+      <p><strong>Process stage and definition clarity</strong> are reported separately for different empirical reasons.</p>
+      <p>For process stage, the main weakness is agreement about whether a stage is observable in the available evidence. Category agreement is stronger when both models identify a stage, but findings still require cautious interpretation.</p>
+      <p>For definition clarity, high raw agreement is dominated by papers for which models jointly record no definitional signal. Agreement remains weak after separating signal detection from classification of the observed definitional form. This field records only the signal observable in the title, abstract, or author keywords; it is not a verdict on whether the full paper defines AI adequately.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>Why the agreement table separates three questions</h3>
+      <p><strong>All-category agreement</strong> uses every balanced paper and retains missing or unspecified values as categories.</p>
+      <p><strong>Evidence-presence agreement</strong> asks whether both models find substantive evidence for the dimension, irrespective of which category they assign.</p>
+      <p><strong>Category agreement where both found evidence</strong> then asks whether the models choose the same substantive category within that common-evidence subset. The table reports its denominator as “Both found evidence.”</p>
+      <p>The separation prevents agreement that a field is missing from being mistaken for agreement about the substantive category. “Category exact” and “Category α” must therefore be read together with evidence-presence agreement and the common-evidence count.</p>
+    </section>
+    <section class="contrast-interpretation">
+      <h3>How to interpret exploratory</h3>
+      <p>Exploratory does not mean excluded, invalid, or unavailable. These fields retain their paper counts, distributions, evidence papers, exact agreement, and Krippendorff α. They are not included in the six-dimension heatmap averages, and conclusions based on them must be identified as exploratory.</p>
+    </section>`;
 }
 
 async function renderHumanIrr(useSelection = false) {
@@ -407,7 +884,7 @@ async function renderHumanIrr(useSelection = false) {
       `<td>${esc(item.label)}</td><td><span class="pill">${esc(item.classification)}</span></td>` +
       `<td>${item.comparable_papers.toLocaleString()}</td>` +
       `<td>${item.percent_agreement === null ? "Not estimable" : `${(item.percent_agreement * 100).toFixed(2)}%`}</td>` +
-      `<td>${item.krippendorff_alpha === null ? "Not estimable" : item.krippendorff_alpha.toFixed(2)}</td></tr>`
+      `<td>${formatAlpha(item.krippendorff_alpha)}</td></tr>`
     )
   ).join("");
   el("humanIrrStatus").className = `status-pill ${data.provisional ? "warn" : "ok"}`;
@@ -531,7 +1008,7 @@ async function renderMatrix() {
       const value = Number(item[matrixMetric] || 0);
       const label = matrixMetric === "papers" ? item.papers.toLocaleString() : `${(value * 100).toFixed(2)}%`;
       const alpha = Math.min(0.88, 0.10 + value / maximum * 0.70);
-      return `<td><button class="heatmap-cell composition-matrix-cell" style="background:rgba(52,152,219,${alpha})" ` +
+      return `<td><button class="heatmap-cell composition-matrix-cell" style="background:rgba(47,111,109,${alpha})" ` +
         `data-row-column="${esc(matrix.row_column)}" data-row-value="${esc(rawRow)}" ` +
         `data-column-column="${esc(matrix.column_column)}" data-column-value="${esc(rawColumn)}" ` +
         `data-row-label="${esc(matrix.row_label)}" data-column-label="${esc(matrix.column_label)}" ` +
@@ -633,8 +1110,8 @@ function renderPanelChart(panel, index) {
       distribution: "full",
       data: chartCategories.map(item => Number((item.full_share * 100).toFixed(2))),
       counts: chartCategories.map(item => item.full_count),
-      backgroundColor: "#9aa9b8",
-      borderColor: "#7d8c9b",
+      backgroundColor: "#a7b0b3",
+      borderColor: "#7e8a8e",
       borderWidth: 1,
     });
   }
@@ -644,8 +1121,8 @@ function renderPanelChart(panel, index) {
       distribution: "observed",
       data: chartCategories.map(item => item.observed_share === null ? null : Number((item.observed_share * 100).toFixed(2))),
       counts: chartCategories.map(item => item.observed_share === null ? null : item.observed_count),
-      backgroundColor: "#327bd3",
-      borderColor: "#2569b8",
+      backgroundColor: "#4f8582",
+      borderColor: "#2f6f6d",
       borderWidth: 1,
     });
   }
@@ -673,11 +1150,14 @@ function renderPanelChart(panel, index) {
           beginAtZero: true,
           suggestedMax: maximum,
           max: maximum,
-          ticks: {callback: value => `${Number(value).toFixed(2)}%`},
+          ticks: {
+            font: {family: CHART_FONT_MONO, size: 10},
+            callback: value => `${Number(value).toFixed(2)}%`,
+          },
           title: {display: true, text: distributionView === "full" ? "% of full coded papers" :
             (distributionView === "observed" ? "% among observed codes" : "% of corresponding denominator")},
         },
-        y: {ticks: {autoSkip: false}},
+        y: {ticks: {font: {family: CHART_FONT_SANS, size: 10}, autoSkip: false}},
       },
       onClick: (_event, elements) => {
         if (!elements.length) return;
@@ -711,6 +1191,8 @@ async function showEvidence(column, value, panelLabel, count, secondaryColumn = 
     column,
     value,
     limit: String(evidenceLimit),
+    minimum_agreement: String(evidenceMinimumAgreement),
+    preferred_only: String(evidencePreferredOnly),
   });
   if (filterDimension && filterValue !== "") {
     query.set("filter_dimension", filterDimension);
@@ -722,27 +1204,85 @@ async function showEvidence(column, value, panelLabel, count, secondaryColumn = 
   }
   el("panel").classList.add("open");
   el("panelBody").innerHTML = `<h2>${esc(panelLabel)}: ${esc(displayValue)}</h2><p class="muted">Loading evidence papers…</p>`;
-  const papers = await api(`/api/scope/${encodeURIComponent(scope)}/composition/evidence?${query}`);
+  const result = await api(`/api/scope/${encodeURIComponent(scope)}/composition/evidence?${query}`);
+  const papers = result.papers;
+  const referenceLabel = result.reference_model?.label || el("codingModel").selectedOptions[0].textContent;
   const filterLabel = filterDimension && filterValue !== ""
     ? `${el("filterDimension").selectedOptions[0].textContent} = ${el("filterValue").selectedOptions[0].textContent}`
     : "the full selected dataset scope";
-  const showingAll = papers.length >= count;
+  const filteredTotal = result.filtered_agreement_papers;
+  const showingAll = papers.length >= filteredTotal;
   const limitOptions = EVIDENCE_LIMITS.map(limit =>
     `<option value="${limit}" ${limit === evidenceLimit ? "selected" : ""}>` +
     `${limit === 50000 ? "All" : limit.toLocaleString()}</option>`
   ).join("");
+  const thresholdRows = Array.isArray(result.agreement_threshold_counts)
+    ? result.agreement_threshold_counts
+    : [];
+  const thresholdByMinimum = new Map(
+    thresholdRows.map(item => [Number(item.minimum_models), Number(item.papers)])
+  );
+  const selectedRule = evidencePreferredOnly
+    ? `${result.preferred_agreement_label} matches the selected pattern`
+    : evidenceMinimumAgreement <= 1
+      ? `no cross-model requirement; ${referenceLabel} supplies the reference code`
+      : evidenceMinimumAgreement === result.models.length
+        ? `all ${result.models.length} available models match the ${referenceLabel} code`
+        : `${referenceLabel} plus at least ${evidenceMinimumAgreement - 1} other ` +
+          `${evidenceMinimumAgreement === 2 ? "model matches" : "models match"} the selected code`;
   const displaySummary = showingAll
-    ? `Showing all ${count.toLocaleString()} supporting papers under ${esc(filterLabel)}.`
-    : `Showing ${papers.length.toLocaleString()} of ${count.toLocaleString()} supporting papers under ${esc(filterLabel)}.`;
+    ? `Showing all ${filteredTotal.toLocaleString()} ${esc(referenceLabel)}-based papers after applying: ${esc(selectedRule)}. Dataset filter: ${esc(filterLabel)}.`
+    : `Showing ${papers.length.toLocaleString()} of ${filteredTotal.toLocaleString()} ${esc(referenceLabel)}-based papers after applying: ${esc(selectedRule)}. Dataset filter: ${esc(filterLabel)}.`;
+  const numericAgreementOptions = thresholdRows
+    .filter(item => Number(item.minimum_models) >= 2)
+    .map(item => {
+      const number = Number(item.minimum_models);
+      const papersAtThreshold = Number(item.papers || 0);
+      const label = number === result.models.length
+        ? `All ${number} models agree`
+        : `${referenceLabel} + at least ${number - 1} other ${number === 2 ? "model" : "models"}`;
+      return `<option value="${number}" ${!evidencePreferredOnly && number === evidenceMinimumAgreement ? "selected" : ""}>` +
+        `${esc(label)} (${papersAtThreshold.toLocaleString()} papers)</option>`;
+    }).join("");
+  const agreementOptions =
+    `<option value="1" ${!evidencePreferredOnly && evidenceMinimumAgreement === 1 ? "selected" : ""}>` +
+    `All ${esc(referenceLabel)} supporting papers; no cross-model requirement ` +
+    `(${Number(thresholdByMinimum.get(1) || result.supporting_papers).toLocaleString()} papers)</option>` +
+    `<option value="preferred" ${evidencePreferredOnly ? "selected" : ""}>` +
+    `${esc(result.preferred_agreement_label)} matches selected pattern ` +
+    `(${result.preferred_agreement_papers.toLocaleString()} papers)</option>` +
+    numericAgreementOptions;
   el("panelBody").innerHTML =
     `<h2>${esc(panelLabel)}: ${esc(displayValue)}</h2>` +
+    `<p class="chart-note"><strong>Evidence base:</strong> These supporting papers are selected from ` +
+    `${esc(referenceLabel)} classifications. Agreement asks which other available models assigned ` +
+    `the same selected pattern to those papers.</p>` +
+    `<p class="chart-note"><strong>Reference-model support:</strong> ${result.supporting_papers.toLocaleString()} papers receive this code from ${esc(referenceLabel)}.</p>` +
+    `<p class="chart-note"><strong>Cross-model confirmation:</strong> ${result.agreement_papers.toLocaleString()} of those papers receive the same selected pattern from ${esc(referenceLabel)} and at least one other model.</p>` +
+    `<p class="chart-note"><strong>${esc(result.preferred_agreement_label)}:</strong> ` +
+    `${result.preferred_agreement_papers.toLocaleString()} papers.</p>` +
     `<p class="chart-note">${displaySummary}</p>` +
     `<div class="evidence-controls"><label for="compositionEvidenceLimit">Papers displayed</label>` +
-    `<select id="compositionEvidenceLimit">${limitOptions}</select></div>` +
+    `<select id="compositionEvidenceLimit">${limitOptions}</select>` +
+    `<label for="compositionAgreementMinimum">Agreement threshold</label>` +
+    `<select id="compositionAgreementMinimum">${agreementOptions}</select></div>` +
     papers.map(paper => paperInspectionCard(paper, [column, secondaryColumn].filter(Boolean))).join("");
   el("compositionEvidenceLimit").onchange = event => {
     evidenceLimit = Number.parseInt(event.target.value, 10);
     updateLocation();
+    showEvidence(
+      activeEvidence.column,
+      activeEvidence.value,
+      activeEvidence.panelLabel,
+      activeEvidence.count,
+      activeEvidence.secondaryColumn,
+      activeEvidence.secondaryValue,
+    );
+  };
+  el("compositionAgreementMinimum").onchange = event => {
+    evidencePreferredOnly = event.target.value === "preferred";
+    evidenceMinimumAgreement = evidencePreferredOnly
+      ? 1 : Number.parseInt(event.target.value, 10);
     showEvidence(
       activeEvidence.column,
       activeEvidence.value,

@@ -139,7 +139,44 @@ def test_annotators_have_separate_records_and_one_common_blinded_order(
     assert instrument["model_protocol_label"] == "System prompt V3"
     assert "CODING DISCIPLINE:" in instrument["full_model_prompt"]
     assert "Mechanism requires causal logic" in instrument["full_model_prompt"]
+    assert "JOURNAL: {source_journal} ({publication_year})" in instrument[
+        "full_model_user_prompt"
+    ]
+    response_schema = json.loads(instrument["full_model_response_schema"])
+    properties = response_schema["schema"]["properties"]
+    assert properties["ai_method_or_phenomenon"]["enum"] == [
+        "method",
+        "phenomenon",
+        "both",
+        "unclear",
+    ]
+    assert "ai_method_or_phenomenon" in response_schema["schema"]["required"]
+    assert "seven evidence-bearing construct dimensions" in instrument[
+        "full_prompt_note"
+    ]
+    assert "Unlike the seven evidence-bearing dimensions" in instrument[
+        "study_status_schema_note"
+    ]
     assert len(instrument["model_protocol_fingerprint"]) == 64
+    dimensions = {
+        item["column"]: item for item in instrument["dimensions"]
+    }
+    assert dimensions["ai_type_form"]["references"][0]["url"] == (
+        "https://doi.org/10.1177/10422587241304676"
+    )
+    assert {
+        reference["label"]
+        for reference in dimensions["ai_mechanism"]["references"]
+    } == {"Wiklund", "Maula et al."}
+    assert dimensions["level_of_analysis"]["references"][0]["label"] == (
+        "Fisher & Aguinis"
+    )
+    assert len(
+        dimensions["entrepreneurial_process_stage"]["references"]
+    ) == 2
+    assert dimensions["scope_conditions"]["references"][0]["url"] == (
+        "https://doi.org/10.5465/amr.35.3.zok346"
+    )
 
     first = store.paper("human_a")
     second = store.paper("human_b")

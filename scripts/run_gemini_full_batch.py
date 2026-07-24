@@ -39,6 +39,8 @@ MAX_TIER_1_SAFE_CHUNK_SIZE = 2_500
 OBSERVED_INPUT_TOKENS_PER_PAPER = 1_439.23
 TIER_1_ENQUEUED_TOKEN_LIMIT = 5_000_000
 CACHE_ROOT = PROJECT_ROOT / "data/interim/spec_cache"
+QUOTA_RETRY_EXIT_CODE = 75
+DEFAULT_QUOTA_RETRY_SECONDS = 300
 
 
 def file_sha256(path: Path) -> str:
@@ -196,6 +198,7 @@ def invoke_runner(
     paper_ids_file: Path,
     yes: bool = False,
     poll_seconds: int = 15,
+    skip_export: bool = False,
 ) -> None:
     args = [
         sys.executable,
@@ -210,6 +213,8 @@ def invoke_runner(
     ]
     if yes:
         args.append("--yes")
+    if skip_export:
+        args.append("--skip-export")
     subprocess.run(args, cwd=PROJECT_ROOT, check=True)
 
 
@@ -220,6 +225,8 @@ def run_sequential(
     model: str,
     poll_seconds: int,
     between_shards: int,
+    aggregate_target: Path,
+    quota_retry_seconds: int = DEFAULT_QUOTA_RETRY_SECONDS,
 ) -> None:
     for position, shard in enumerate(manifest["shards"], start=1):
         shard_path = plan_dir / shard["path"]
@@ -227,12 +234,36 @@ def run_sequential(
             f"\nGemini shard {position:,}/{len(manifest['shards']):,}: "
             f"{shard_path.name} ({shard['papers']:,} papers)"
         )
+        quota_attempt = 0
+        while True:
+            try:
+                invoke_runner(
+                    "run",
+                    model=model,
+                    paper_ids_file=shard_path,
+                    yes=True,
+                    poll_seconds=poll_seconds,
+                    skip_export=True,
+                )
+                break
+            except subprocess.CalledProcessError as error:
+                if error.returncode != QUOTA_RETRY_EXIT_CODE:
+                    raise
+                quota_attempt += 1
+                print(
+                    "Gemini quota has not released for "
+                    f"{shard_path.name}; waiting {quota_retry_seconds}s before "
+                    f"retry {quota_attempt:,}. No Batch job was created.",
+                    flush=True,
+                )
+                time.sleep(quota_retry_seconds)
+        # Rebuild the one model-level CSV from every cached paper after each
+        # successful shard. If a later shard is quota-blocked, the processed
+        # dataset therefore remains a complete aggregate of work to date.
         invoke_runner(
-            "run",
+            "export",
             model=model,
-            paper_ids_file=shard_path,
-            yes=True,
-            poll_seconds=poll_seconds,
+            paper_ids_file=aggregate_target,
         )
         if position < len(manifest["shards"]) and between_shards:
             print(f"Waiting {between_shards}s before enqueuing the next shard")
@@ -249,12 +280,23 @@ def main() -> None:
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--between-shards", type=int, default=30)
+    parser.add_argument(
+        "--quota-retry-seconds",
+        type=int,
+        default=DEFAULT_QUOTA_RETRY_SECONDS,
+        help=(
+            "Seconds to wait before retrying an unsubmitted shard after a "
+            "Gemini 429 RESOURCE_EXHAUSTED response."
+        ),
+    )
     parser.add_argument("--yes", action="store_true")
     args = parser.parse_args()
     if args.poll_seconds < 5:
         parser.error("--poll-seconds must be at least 5")
     if args.between_shards < 0:
         parser.error("--between-shards cannot be negative")
+    if args.quota_retry_seconds < 30:
+        parser.error("--quota-retry-seconds must be at least 30")
 
     target = args.paper_ids_file.resolve()
     plan_dir, manifest = create_plan(
@@ -291,6 +333,8 @@ def main() -> None:
         model=args.model,
         poll_seconds=args.poll_seconds,
         between_shards=args.between_shards,
+        aggregate_target=target,
+        quota_retry_seconds=args.quota_retry_seconds,
     )
     invoke_runner("export", model=args.model, paper_ids_file=target)
 

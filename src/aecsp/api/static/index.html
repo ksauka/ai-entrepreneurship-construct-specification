@@ -4,15 +4,17 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI-Entrepreneurship Construct Specification Platform - Analytics Dashboard</title>
-<link rel="stylesheet" href="/static/esd.css" />
+<link rel="stylesheet" href="/static/esd.css?v=publication-counts-20260724" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
-<script src="/static/paper_inspection.js?v=evidence-first-20260721"></script>
+<script src="/static/paper_inspection.js?v=reference-model-20260724"></script>
+<script src="/static/scope_context.js?v=domain-scope-info-20260724"></script>
+<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
 <div class="container">
   <header class="app-header">
-    <h1>AI-Entrepreneurship Construct Specification Platform</h1>
+    <div class="platform-name">AI-Entrepreneurship Construct Specification Platform</div>
     <p>This platform examines how entrepreneurship research specifies artificial intelligence, and shows where those specifications agree, differ, or break down.</p>
     <nav class="nav-links">
       <a class="nav-link active" href="/">Analytics Dashboard</a>
@@ -26,19 +28,51 @@
       <label>Dataset scope
         <select id="scope"></select>
       </label>
-      <span id="scopeActionSummary" class="muted"></span>
-      <span id="status" class="status-pill warn">loading</span>
       <button class="btn" id="reportButton" onclick="openReport()">Generate scope report</button>
       <button class="btn btn-outline" id="downloadButton" onclick="downloadScopeData()">Download scope data</button>
     </div>
+    <div id="scopeActionSummary" class="selection-context" aria-live="polite"></div>
   </header>
 
   <div class="card">
-    <h2>Performance analysis <span class="sub">productivity and citation impact</span></h2>
+    <h2>Corpus overview</h2>
     <div class="stat-grid" id="perfCards"></div>
-    <h3 style="margin-top:18px">Annual and cumulative publication output</h3>
-    <p class="chart-note" id="publicationTrendNote"></p>
-    <div class="chart-wrap publication-chart"><canvas id="annualChart"></canvas></div>
+    <section class="publication-growth-trace">
+      <div class="publication-growth-heading">
+        <div>
+          <h3>Annual and cumulative publication output</h3>
+          <p class="chart-note" id="publicationTrendNote"></p>
+        </div>
+        <div class="publication-growth-controls">
+          <label>Time window
+            <select id="growthPeriod">
+              <option value="all_recorded">All recorded publication years</option>
+              <option value="1976__2026" selected>1976 to 2026</option>
+              <option value="1976__2000">1976 to 2000</option>
+              <option value="2000__2026">2000 to 2026</option>
+              <option value="2000__2010">2000 to 2010</option>
+              <option value="2010__2020">2010 to 2020</option>
+              <option value="2020__2023">2020 to 2023</option>
+              <option value="2023__2026">2023 to 2026</option>
+            </select>
+          </label>
+          <label>Plot
+            <select id="growthPlotMode">
+              <option value="annual_growth">Annual papers and cumulative growth</option>
+              <option value="annual_cumulative">Annual and cumulative papers</option>
+              <option value="annual">Annual papers</option>
+              <option value="cumulative">Cumulative papers</option>
+              <option value="growth">Cumulative growth</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <details class="growth-calculation-details">
+        <summary id="growthTraceSummary">Calculation details</summary>
+        <p class="metric-definition" id="growthTraceDefinition"></p>
+      </details>
+      <div class="chart-wrap publication-chart"><canvas id="growthTraceChart"></canvas></div>
+    </section>
     <div class="grid-2" style="margin-top:18px">
       <div>
         <h3>Most productive journals</h3>
@@ -107,20 +141,32 @@
 <aside id="panel" class="side-panel"><span class="close" onclick="closePanel()">close</span><div id="panelBody"></div></aside>
 
 <script>
-let scope = "full_corpus", annualChart = null, keywordChart = null, keywordData = null;
+let scope = "full_corpus", growthTraceChart = null, keywordChart = null, keywordData = null;
+let performanceData = null, healthData = null, selectedScope = null;
 let keywordPlottedSeries = [], keywordSearchResults = [], keywordPinned = new Map();
 const api = (p) => fetch(p).then(r => r.json());
 const el = (id) => document.getElementById(id);
 const fmt = (x) => (x == null ? "n/a" : Number(x).toFixed(2));
+const compactPercentageTick = (value) => {
+  const number = Number(value);
+  const absolute = Math.abs(number);
+  if (absolute >= 1_000_000) return `${(number / 1_000_000).toFixed(1).replace(/\.0$/, "")}m%`;
+  if (absolute >= 1_000) return `${Math.round(number / 1_000)}k%`;
+  return `${Math.round(number)}%`;
+};
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const CHART_FONT_SANS = '"IBM Plex Sans", Arial, sans-serif';
+const CHART_FONT_MONO = '"IBM Plex Mono", monospace';
+Chart.defaults.font.family = CHART_FONT_SANS;
+Chart.defaults.font.weight = "400";
+Chart.defaults.color = "#455663";
 
 async function init() {
   const h = await api("/api/health");
-  const neo = h.neo4j ? "Neo4j connected" : "CSV mode";
-  el("status").className = "status-pill " + (h.has_specifications ? "ok" : "warn");
-  el("status").textContent = `${h.papers_loaded.toLocaleString()} papers · specifications: ${h.has_specifications ? "coded" : "not yet"} · ${neo}`;
+  healthData = h;
   const scopes = await api("/api/scopes");
   el("scope").innerHTML = scopes.map(s => `<option value="${s.id}">${esc(s.label)} (${s.papers.toLocaleString()})</option>`).join("");
+  ScopeContext.attachInfo("scope", scopes);
   updateScopeActions(scopes);
   el("scope").onchange = e => {
     scope = e.target.value;
@@ -133,6 +179,8 @@ async function init() {
     keywordPinned.clear();
     renderKeywordEvolution();
   };
+  el("growthPeriod").onchange = renderGrowthTraceSelection;
+  el("growthPlotMode").onchange = renderGrowthTraceSelection;
   el("keywordPeriod").onchange = renderKeywordPeriod;
   el("keywordMode").onchange = renderKeywordPeriod;
   el("keywordSearchButton").onclick = searchKeywords;
@@ -147,23 +195,211 @@ async function render() {
   renderKeywordEvolution();
 }
 
+function renderGrowthTraceSelection() {
+  if (!performanceData) return;
+  const p = performanceData;
+  const selectedWindow = el("growthPeriod").value;
+  const allRows = p.annual_production;
+  if (!allRows.length) return;
+  const [startYear, endYear] = selectedWindow === "all_recorded"
+    ? [allRows[0].year, allRows[allRows.length - 1].year]
+    : selectedWindow.split("__").map(Number);
+  const trace = allRows.filter(item => item.year >= startYear && item.year <= endYear);
+  if (!trace.length) return;
+  const startRow = allRows.filter(item => item.year <= startYear).at(-1);
+  const endRow = allRows.filter(item => item.year <= endYear).at(-1);
+  const startCumulative = startRow?.cumulative_papers || 0;
+  const endCumulative = endRow?.cumulative_papers || 0;
+  const addedPapers = endCumulative - startCumulative;
+  const percentage = startCumulative > 0
+    ? (addedPapers / startCumulative) * 100
+    : null;
+  const values = trace.map(item => ({
+    ...item,
+    growth_percentage: startCumulative > 0
+      ? ((item.cumulative_papers - startCumulative) / startCumulative) * 100
+      : null,
+  }));
+  const formula = percentage == null
+    ? `The selected window begins in ${startYear}, when this dataset has 0 cumulative papers. Percentage growth is therefore undefined, while annual and cumulative counts remain visible from the first observed publication year, ${allRows[0].year}.`
+    : `${startCumulative.toLocaleString()} cumulative papers through ${startYear} to ` +
+      `${endCumulative.toLocaleString()} through ${endYear}: ` +
+      `${addedPapers >= 0 ? "+" : ""}${addedPapers.toLocaleString()} papers; ` +
+      `(${endCumulative.toLocaleString()} - ${startCumulative.toLocaleString()}) ` +
+      `÷ ${startCumulative.toLocaleString()} × 100 = ${percentage.toFixed(2)}%.`;
+  const scopeLabel = el("scope").selectedOptions[0]?.textContent.replace(/\s+\([\d,]+\)$/, "") || "Selected dataset scope";
+  el("growthTraceSummary").textContent =
+    `${scopeLabel}: ${startCumulative.toLocaleString()} to ${endCumulative.toLocaleString()} cumulative papers`;
+  const retrievalNote = endYear === p.search_cutoff.year
+    ? `The ${endYear} endpoint uses records retrieved from Scopus on ${p.search_cutoff.label}.`
+    : endYear > p.search_cutoff.year
+      ? `The later-dated ${endYear} records were already present in the Scopus export retrieved on ${p.search_cutoff.label}.`
+      : `All records were retrieved from Scopus on ${p.search_cutoff.label}.`;
+  el("growthTraceDefinition").innerHTML =
+    `<strong>${esc(scopeLabel)}:</strong> ${esc(formula)} ` +
+    esc(retrievalNote);
+  if (growthTraceChart) growthTraceChart.destroy();
+  const plotMode = el("growthPlotMode").value;
+  const showAnnual = ["annual_growth", "annual_cumulative", "annual"].includes(plotMode);
+  const showCumulative = ["annual_cumulative", "cumulative"].includes(plotMode);
+  const showGrowth = ["annual_growth", "growth"].includes(plotMode);
+  const datasets = [];
+  if (showAnnual) datasets.push({
+    type: "bar",
+    metric: "annual",
+    label: "Papers published in year",
+    data: values.map(item => item.papers),
+    borderColor: values.map(item => item.year > p.search_cutoff.year ? "#6f7773" : "#8b918e"),
+    backgroundColor: values.map(item => item.year > p.search_cutoff.year ? "rgba(111,119,115,.62)" : "rgba(139,145,142,.46)"),
+    borderWidth: 1,
+    minBarLength: 4,
+    order: 3,
+    yAxisID: "yAnnual",
+  });
+  if (showCumulative) datasets.push({
+    type: "line",
+    metric: "cumulative",
+    label: "Cumulative papers",
+    data: values.map(item => item.cumulative_papers),
+    borderColor: "#2f6f6d",
+    backgroundColor: "rgba(47,111,109,.10)",
+    borderWidth: 4,
+    pointRadius: values.map((_item, index) => index === 0 || index === values.length - 1 ? 5 : 1.5),
+    pointHoverRadius: 7,
+    fill: false,
+    tension: 0.22,
+    order: 2,
+    yAxisID: "yCumulative",
+  });
+  if (showGrowth) datasets.push({
+    type: "line",
+    metric: "growth",
+    label: "Cumulative publication growth",
+    data: values.map(item => item.growth_percentage),
+    borderColor: "#315b78",
+    backgroundColor: "rgba(49,91,120,.10)",
+    borderWidth: 4,
+    pointRadius: values.map((_item, index) => index === 0 || index === values.length - 1 ? 5 : 1.5),
+    pointHoverRadius: 7,
+    fill: false,
+    tension: 0.22,
+    order: 1,
+    yAxisID: "yGrowth",
+  });
+  const chartLabels = values.map(item => item.year === p.search_cutoff.year
+    ? `${item.year} (retrieved ${p.search_cutoff.label})`
+    : item.year > p.search_cutoff.year
+      ? `${item.year} (retrieved ${p.search_cutoff.label})`
+      : String(item.year));
+  const cutoffIncluded = values.some(item => item.year === p.search_cutoff.year);
+  const laterYears = values
+    .filter(item => item.year > p.search_cutoff.year)
+    .map(item => item.year);
+  const publicationYearTitle = ["Publication year"];
+  if (cutoffIncluded) {
+    publicationYearTitle.push(`* ${p.search_cutoff.year} values as at ${p.search_cutoff.label}.`);
+  }
+  if (laterYears.length) {
+    publicationYearTitle.push(
+      `** ${laterYears.join(", ")} records were already present in the Scopus retrieval of ${p.search_cutoff.label}.`
+    );
+  }
+  growthTraceChart = new Chart(el("growthTraceChart"), {
+    type: "bar",
+    data: {
+      labels: chartLabels,
+      datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      onClick: (_event, elements) => {
+        if (!elements.length) return;
+        showPublicationPapers(values[elements[0].index].year);
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = context.parsed.y;
+              if (context.dataset.metric === "growth") {
+                return `Cumulative publication growth from ${startYear}: ` +
+                  `${value == null ? "n/a" : value.toFixed(2) + "%"}`;
+              }
+              return `${context.dataset.label}: ${Number(value).toLocaleString()}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: publicationYearTitle,
+            font: { family: CHART_FONT_SANS, size: 11, weight: "400" },
+            padding: { top: 8 },
+          },
+          ticks: {
+            font: { family: CHART_FONT_MONO, size: 10 },
+            autoSkip: false,
+            maxRotation: 55,
+            minRotation: 0,
+            callback: (_value, index) => values[index].year === startYear ||
+              values[index].year % 5 === 0 || values[index].year >= p.search_cutoff.year
+              ? values[index].year === p.search_cutoff.year
+                ? `${values[index].year}*`
+                : values[index].year > p.search_cutoff.year
+                  ? `${values[index].year}**`
+                  : chartLabels[index]
+              : "",
+          },
+        },
+        yAnnual: {
+          display: showAnnual,
+          beginAtZero: true,
+          title: { display: showAnnual, text: "Papers published in year" },
+          ticks: { font: { family: CHART_FONT_MONO, size: 10 } },
+        },
+        yCumulative: {
+          display: showCumulative,
+          beginAtZero: true,
+          position: showAnnual ? "right" : "left",
+          title: { display: showCumulative, text: "Cumulative papers" },
+          ticks: { font: { family: CHART_FONT_MONO, size: 10 } },
+          grid: { drawOnChartArea: !showAnnual },
+        },
+        yGrowth: {
+          display: showGrowth,
+          beginAtZero: true,
+          position: showAnnual || showCumulative ? "right" : "left",
+          title: {
+            display: showGrowth,
+            text: `Cumulative growth from ${startYear} (%)`,
+          },
+          ticks: {
+            font: { family: CHART_FONT_MONO, size: 10 },
+            maxTicksLimit: 6,
+            callback: compactPercentageTick,
+          },
+          grid: { drawOnChartArea: !showAnnual && !showCumulative },
+        },
+      },
+    },
+  });
+}
+
 async function renderPerformance() {
   const p = await api(`/api/scope/${scope}/performance`);
+  performanceData = p;
+  renderPlatformState();
   const s = p.summary;
   el("perfCards").innerHTML = `
     <div class="stat-tile"><div class="n">${s.papers.toLocaleString()}</div><div class="l">Papers</div></div>
     <div class="stat-tile"><div class="n">${s.total_citations.toLocaleString()}</div><div class="l">Total citations</div></div>
     <div class="stat-tile"><div class="n">${fmt(s.mean_citations)}</div><div class="l">Mean citations per paper</div></div>
-    <div class="stat-tile"><div class="n">${(s.cited_share*100).toFixed(2)}%</div><div class="l">Papers cited at least once</div></div>
-    <div class="stat-tile"><div class="n">${s.year_min ? s.year_min + " to " + s.year_max : "n/a"}</div><div class="l">Publication years</div></div>`;
+    <div class="stat-tile"><div class="n">${(s.cited_share*100).toFixed(2)}%</div><div class="l">Papers cited at least once</div></div>`;
 
-  const labels = p.annual_production.map(a =>
-    a.year === p.search_cutoff.year
-      ? `${a.year} (retrieved ${p.search_cutoff.label})`
-      : a.year > p.search_cutoff.year
-        ? `${a.year} (retrieved ${p.search_cutoff.label})`
-      : String(a.year)
-  );
   const reconciliation = p.trend_reconciliation;
   const laterDatedRows = p.annual_production.filter(
     row => row.publication_year_after_retrieval_year && row.papers > 0
@@ -178,59 +414,10 @@ async function renderPerformance() {
     ? ` The final cumulative point matches all ${s.papers.toLocaleString()} papers in this dataset view.`
     : ` The final cumulative point covers ${reconciliation.final_cumulative_papers.toLocaleString()} of ${s.papers.toLocaleString()} papers because ${reconciliation.invalid_year.toLocaleString()} record(s) have no usable publication year.`;
   el("publicationTrendNote").textContent =
-    `Bars show papers by the publication year recorded in Scopus. The line shows the running total through each recorded publication year. ` +
+    `The selected Dataset scope controls this graph and every result on this page. Choose annual papers, cumulative papers, cumulative growth, or a combined view. ` +
     `All records were downloaded from Scopus on ${p.search_cutoff.label}.${laterDated}` +
     `${reconciliationText} Click a chart point to inspect its papers.`;
-  if (annualChart) annualChart.destroy();
-  const annualBarColours = p.annual_production.map(row =>
-    row.publication_year_after_retrieval_year
-      ? "rgba(230,126,34,.68)"
-      : "rgba(52,152,219,.42)"
-  );
-  const annualBarBorders = p.annual_production.map(row =>
-    row.publication_year_after_retrieval_year ? "#e67e22" : "#3498db"
-  );
-  annualChart = new Chart(el("annualChart"), {
-    type: "bar",
-    data: { labels, datasets: [
-      { type: "bar", label: "Papers published in year", data: p.annual_production.map(a => a.papers),
-        borderColor: annualBarBorders, backgroundColor: annualBarColours,
-        borderWidth: 1, minBarLength: 4, order: 2, yAxisID: "y" },
-      { type: "line", label: "Cumulative papers", data: p.annual_production.map(a => a.cumulative_papers),
-        borderColor: "#167354", backgroundColor: "rgba(33,144,107,.10)", borderWidth: 4,
-        pointRadius: p.annual_production.map(row =>
-          row.year >= p.search_cutoff.year ? 5 : 1.5
-        ),
-        pointHoverRadius: 7, pointBackgroundColor: "#167354",
-        pointBorderColor: "#ffffff", pointBorderWidth: 1.5,
-        fill: false, tension: 0.22, order: 1, yAxisID: "y1" },
-    ]},
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
-      onClick: (_event, elements) => {
-        if (!elements.length) return;
-        const year = p.annual_production[elements[0].index].year;
-        showPublicationPapers(year);
-      },
-      scales: {
-        x: {
-          ticks: {
-            autoSkip: false,
-            maxRotation: 55,
-            minRotation: 0,
-            callback: (_value, index) => {
-              const row = p.annual_production[index];
-              return row.year === p.annual_production[0].year ||
-                row.year % 5 === 0 ||
-                row.year >= p.search_cutoff.year
-                ? labels[index]
-                : "";
-            },
-          },
-        },
-        y: { beginAtZero: true, title: { display: true, text: "Papers published in year" } },
-        y1: { beginAtZero: true, position: "right", title: { display: true, text: "Cumulative papers" }, grid: { drawOnChartArea: false } },
-      } },
-  });
+  renderGrowthTraceSelection();
 
   el("perfJournals").querySelector("thead").innerHTML =
     `<tr><th>Journal</th><th>Papers</th><th>Citations</th></tr>`;
@@ -345,8 +532,8 @@ async function loadPublicationYearKeywords(year, mode, paperLimit) {
 }
 
 const KEYWORD_COLORS = [
-  "#3498db", "#e74c3c", "#2ecc71", "#9b59b6", "#f39c12",
-  "#1abc9c", "#34495e", "#e67e22", "#16a085", "#8e44ad",
+  "#315b78", "#8c5a44", "#2f6f6d", "#6d6688", "#a17a35",
+  "#4d7f83", "#425363", "#a36a45", "#4d7563", "#765b78",
 ];
 const KEYWORD_SOURCE_LABELS = {
   author: "Author keywords",
@@ -453,12 +640,20 @@ function renderKeywordChart(period) {
       scales: {
         y: {
           beginAtZero: true,
-          ticks: { callback: value => `${Number(value).toFixed(2)}%` },
+          ticks: {
+            font: { family: CHART_FONT_MONO, size: 10 },
+            callback: value => `${Number(value).toFixed(2)}%`,
+          },
           title: { display: true, text: "% of papers with ≥1 selected-source keyword" },
         },
         x: {
           title: { display: true, text: "Publication year" },
-          ticks: {autoSkip: true, maxTicksLimit: period.id === "all_time" ? 14 : 20, maxRotation: 0},
+          ticks: {
+            font: { family: CHART_FONT_MONO, size: 10 },
+            autoSkip: true,
+            maxTicksLimit: period.id === "all_time" ? 14 : 20,
+            maxRotation: 0,
+          },
         },
       },
       onClick: (_event, elements) => {
@@ -646,9 +841,43 @@ function downloadScopeData(){ window.location.assign(`/api/scope/${scope}/downlo
 function updateScopeActions(scopes) {
   const selected = scopes.find(item => item.id === scope);
   if (!selected) return;
-  el("scopeActionSummary").textContent = `${selected.papers.toLocaleString()} papers selected`;
+  selectedScope = selected;
+  performanceData = null;
+  renderPlatformState();
   el("reportButton").title = `Generate a report for ${selected.label}`;
   el("downloadButton").title = `Download ${selected.papers.toLocaleString()} papers from ${selected.label}`;
+}
+
+function renderPlatformState() {
+  if (!selectedScope) return;
+  const scopeTypes = {
+    retrieval_scope: "retrieval scope",
+    business_domain: "business domain",
+    analytical_residual: "analytical residual",
+    exclusive_complement: "exclusive complement",
+    analytical_population: "analytical population",
+  };
+  const parts = [
+    selectedScope.label,
+    `${selectedScope.papers.toLocaleString()} papers`,
+    scopeTypes[selectedScope.scope_type] || "dataset scope",
+  ];
+  if (healthData) {
+    parts.push(healthData.has_specifications ? "specifications coded" : "specifications not yet coded");
+    parts.push(healthData.neo4j ? "Neo4j connected" : "CSV mode");
+  }
+  const summary = performanceData?.summary;
+  if (summary?.year_min && summary?.year_max) {
+    parts.push(`observed publication years: ${summary.year_min}–${summary.year_max}`);
+  }
+  if (performanceData?.search_cutoff) {
+    parts.push(`trend analysis through ${performanceData.search_cutoff.year}`);
+    parts.push(`retrieved ${performanceData.search_cutoff.label}`);
+  }
+  const stateLine = parts.join(" · ");
+  el("scopeActionSummary").textContent = stateLine;
+  el("scopeActionSummary").title = selectedScope.definition || "";
+  el("scopeActionSummary").setAttribute("aria-label", stateLine);
 }
 init();
 </script>

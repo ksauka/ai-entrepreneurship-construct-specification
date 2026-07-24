@@ -4,14 +4,16 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI-Entrepreneurship Construct Specification Platform: Knowledge Graph</title>
-<link rel="stylesheet" href="/static/esd.css" />
+<link rel="stylesheet" href="/static/esd.css?v=publication-counts-20260724" />
 <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
+<script src="/static/scope_context.js?v=domain-scope-info-20260724"></script>
+<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
 <div class="container kg-container">
   <header class="app-header">
-    <h1>Knowledge Graph Explorer</h1>
+    <div class="platform-name">AI-Entrepreneurship Construct Specification Platform</div>
     <p>Explore a scoped Neo4j graph without loading the full corpus into the browser.</p>
     <nav class="nav-links">
       <a class="nav-link" href="/">Analytics Dashboard</a>
@@ -52,6 +54,7 @@
         <button id="resetGraph" class="btn" type="button">Reset seed</button>
       </div>
     </div>
+    <div id="currentDatasetContext" class="selection-context" aria-live="polite"></div>
 
     <details class="kg-query-builder" open>
       <summary>Guided graph query</summary>
@@ -128,6 +131,6 @@ LIMIT 50</textarea>
   <div id="panelBody"></div>
 </aside>
 
-<script src="/static/knowledge_graph.js"></script>
+<script src="/static/knowledge_graph.js?v=ibm-plex-20260724"></script>
 </body>
 </html>

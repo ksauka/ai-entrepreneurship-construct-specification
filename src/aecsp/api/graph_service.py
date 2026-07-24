@@ -6,6 +6,7 @@ Outputs: scope metrics, evidence records, and graph traversal results.
 
 from __future__ import annotations
 
+import json
 import re
 from itertools import combinations
 from pathlib import Path
@@ -19,6 +20,7 @@ from aecsp.analytics.convergence import (
     dimension_profile,
     group_convergence,
 )
+from aecsp.analytics.coder_robustness import build_coder_robustness
 from aecsp.analytics.agreement import (
     krippendorff_alpha_nominal,
     pairwise_percent_agreement,
@@ -33,9 +35,15 @@ from aecsp.analytics.keyword_trends import (
     search_keyword_series,
 )
 from aecsp.analytics.observed_composition import (
+    OBSERVED_COMPOSITION_PANELS,
     STUDY_STATUS_FILTERS,
     analyze_observed_composition,
     observed_composition_evidence_mask,
+)
+from aecsp.analytics.publication_growth import (
+    DEFAULT_GROWTH_PERIODS,
+    cumulative_trace,
+    growth_records,
 )
 from aecsp.analytics.theory_contrasting import (
     DIMENSIONS as THEORY_DIMENSIONS,
@@ -44,11 +52,17 @@ from aecsp.analytics.theory_contrasting import (
     dimension_column,
     distribution as theory_distribution,
     filter_study_status,
+    observed_mask as theory_observed_mask,
     recurring_configurations,
     relationship_matrix,
 )
 from aecsp.corpus.business_domains import REGISTERED_QUERY_DOMAIN_RULES
-from aecsp.corpus.scopes import DATASET_SCOPES, STRICT_AI_ENT_SCOPE, scope_frame
+from aecsp.corpus.scopes import (
+    DATASET_SCOPES,
+    SCOPE_BY_ID,
+    ScopeError,
+    scope_frame,
+)
 from aecsp.knowledge_graph.neo4j_reader import (
     GraphQueryError,
     Neo4jGraphReader,
@@ -68,7 +82,9 @@ from aecsp.specification.paths import (
     specification_csv_path,
 )
 
-PROCESSED_DIR = Path(__file__).resolve().parents[3] / "data" / "processed"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+MODEL_COMPARISON_CONFIG = PROJECT_ROOT / "configs" / "model_comparison.json"
 
 MODEL_DISPLAY_NAMES = {
     "gpt-5.4-mini-2026-03-17": "GPT-5.4 Mini",
@@ -76,6 +92,8 @@ MODEL_DISPLAY_NAMES = {
     "claude-sonnet-5": "Claude Sonnet 5",
     "gemini-2.5-pro": "Gemini 2.5 Pro",
     "gemini-3.1-pro-preview": "Gemini 3.1 Pro Preview",
+    "llama3.2": "Llama 3.2",
+    "gemma4:31b": "Gemma 4 31B",
 }
 
 CORE_IRR_DIMENSIONS = (
@@ -98,6 +116,11 @@ DISPLAY_IRR_DIMENSIONS = tuple(
     (column, label, "Exploratory")
     for column, label in EXPLORATORY_IRR_DIMENSIONS
 )
+
+IRR_UNOBSERVED_VALUES = {
+    panel["column"]: frozenset(str(value).strip() for value in panel["excluded"])
+    for panel in OBSERVED_COMPOSITION_PANELS
+}
 
 # Evidence columns surfaced whenever we return a paper list. DOI and Link let
 # the UI build an in-text citation that links out to the article.
@@ -137,22 +160,21 @@ DIMENSION_EVIDENCE_COLUMNS = tuple(
 SCOPE_LABEL_BY_ID = {scope.id: scope.label for scope in DATASET_SCOPES}
 
 THEORY_POPULATIONS = (
-    ("core", "Core entrepreneurship"),
+    ("core", "Leading entrepreneurship journals"),
     ("other", "Additional entrepreneurship"),
     ("combined", "Combined entrepreneurship"),
 )
 
 PENDING_ASJC_DOMAIN_LABELS = {
-    "innovation": "Innovation",
-    "strategy": "Strategy",
+    "innovation": "Management of Technology and Innovation",
+    "strategy": "Strategy and Management",
     "marketing": "Marketing",
     "information_systems": "Information systems",
     "finance": "Finance",
-    "operations": "Operations",
+    "operations": "Management Science and Operations Research",
     "organization_studies": "Organization studies",
     "environmental_and_sustainability": "Environmental and sustainability",
-    "ethics_and_corporate_social_responsibility": "Ethics and CSR",
-    "tourism": "Tourism",
+    "tourism": "Tourism, Leisure and Hospitality Management",
 }
 
 
@@ -188,6 +210,10 @@ class GraphService:
         self.model = model
         self.papers = self._load_papers()
         self._composition_frames: dict[str, pd.DataFrame] = {}
+        self._composition_frame_signatures: dict[str, tuple] = {}
+        self._comparison_config = self._load_comparison_config()
+        self._reference_ids: frozenset[str] | None = None
+        self._reference_signature: tuple | None = None
 
     # ---- loading --------------------------------------------------------
     def _load_papers(self) -> pd.DataFrame:
@@ -223,7 +249,35 @@ class GraphService:
             specs = pd.read_csv(spec_path, dtype=str, keep_default_na=False)
             keep = ["paper_id"] + [c for c in SPECIFICATION_COLUMNS if c in specs.columns]
             papers = papers.merge(specs[keep], on="paper_id", how="left", suffixes=("", "_spec"))
-        return self._apply_topic_review_display_labels(papers.fillna(""))
+        papers = self._apply_source_title_display_aliases(papers.fillna(""))
+        return self._apply_topic_review_display_labels(papers)
+
+    def _apply_source_title_display_aliases(
+        self, papers: pd.DataFrame
+    ) -> pd.DataFrame:
+        """Merge reviewed punctuation variants without altering raw source files."""
+
+        alias_path = PROJECT_ROOT / "configs/business_domain_journal_aliases.csv"
+        if "Source title" not in papers.columns or not alias_path.exists():
+            return papers
+        aliases = pd.read_csv(alias_path, dtype=str, keep_default_na=False)
+        required = {"registered_title", "corpus_title", "review_status"}
+        if not required.issubset(aliases.columns):
+            return papers
+        approved = aliases[
+            aliases["review_status"].str.strip().str.lower().eq("approved")
+        ]
+        mapping = {
+            str(row["corpus_title"]).strip(): str(row["registered_title"]).strip()
+            for _, row in approved.iterrows()
+            if str(row["corpus_title"]).strip()
+            and str(row["registered_title"]).strip()
+        }
+        if not mapping:
+            return papers
+        result = papers.copy()
+        result["Source title"] = result["Source title"].replace(mapping)
+        return result
 
     def _apply_topic_review_display_labels(self, papers: pd.DataFrame) -> pd.DataFrame:
         """Apply saved UI labels in memory without changing processed datasets."""
@@ -278,6 +332,9 @@ class GraphService:
 
         self.papers = self._load_papers()
         self._composition_frames.clear()
+        self._composition_frame_signatures.clear()
+        self._reference_ids = None
+        self._reference_signature = None
         return len(self.papers)
 
     @property
@@ -287,10 +344,23 @@ class GraphService:
         )
 
     def _scope(self, scope_id: str) -> pd.DataFrame:
-        return scope_frame(self.papers, scope_id)
+        try:
+            return scope_frame(self.papers, scope_id)
+        except ScopeError as error:
+            for population_id, _label, _definition, frame, _exclusive in (
+                self._publication_growth_population_frames()
+            ):
+                if population_id == scope_id:
+                    return frame.reset_index(drop=True)
+            raise error
 
     def _registered_composition_models(self) -> list[tuple[str, str]]:
-        """Return the primary and full-corpus baseline models in stable order."""
+        """Return every model eligible for an analytical model selector.
+
+        The comparison configuration defines the prespecified IRR cohort.
+        Supplementary validation models can still become selectable when a
+        usable analytical export exists, without altering that cohort.
+        """
 
         register = load_experiment_register()
         primary = str(register["primary_model"])
@@ -300,23 +370,166 @@ class GraphService:
             for model in register.get("baseline_models", [])
             if str(model) != primary
         )
+        existing = {model for model, _role in registered}
+        for model in self._comparison_config.get("models", []):
+            model = str(model)
+            if model and model not in existing:
+                registered.append((model, "independent"))
+                existing.add(model)
+        for model in register.get("validation_models", []):
+            model = str(model)
+            if model and model not in existing:
+                registered.append((model, "supplementary"))
+                existing.add(model)
         return registered
 
+    def _irr_composition_models(self) -> list[dict]:
+        """Return fixed and coverage-qualified supplementary IRR models."""
+
+        available = {item["id"]: item for item in self.composition_models()}
+        selected = [
+            available[str(model)]
+            for model in self._comparison_config.get("models", [])
+            if str(model) in available
+        ]
+        selected_ids = {item["id"] for item in selected}
+        for model, minimum in self._supplementary_irr_thresholds().items():
+            candidate = available.get(model)
+            if (
+                candidate is not None
+                and model not in selected_ids
+                and int(candidate["coded_papers"]) >= minimum
+            ):
+                selected.append(candidate)
+                selected_ids.add(model)
+        return selected
+
+    def _cross_model_agreement_models(
+        self,
+        reference_model: str | None = None,
+    ) -> list[dict]:
+        """Return available models admitted to paper-level agreement evidence."""
+
+        available = {item["id"]: item for item in self.composition_models()}
+        configured = self._comparison_config.get(
+            "cross_model_agreement_models",
+            self._comparison_config.get("models", []),
+        )
+        if not isinstance(configured, list):
+            raise ValueError(
+                "Cross-model agreement configuration must contain a model list"
+            )
+        selected = [
+            available[str(model)]
+            for model in configured
+            if str(model) in available
+        ]
+        selected_ids = {item["id"] for item in selected}
+        if reference_model and reference_model in available and reference_model not in selected_ids:
+            selected.append(available[reference_model])
+        return selected
+
+    def _supplementary_irr_thresholds(self) -> dict[str, int]:
+        """Return validated model-specific minimum coverage counts for IRR."""
+
+        thresholds: dict[str, int] = {}
+        rules = self._comparison_config.get("supplementary_irr_models", [])
+        if not isinstance(rules, list):
+            raise ValueError(
+                "Supplementary IRR model configuration must be a list"
+            )
+        for rule in rules:
+            if not isinstance(rule, dict):
+                raise ValueError(
+                    "Every supplementary IRR model rule must be an object"
+                )
+            model = str(rule.get("model", "")).strip()
+            minimum = int(rule.get("minimum_coded_papers", 0))
+            if not model or minimum < 1:
+                raise ValueError(
+                    "Supplementary IRR rules require a model and positive "
+                    "minimum_coded_papers"
+                )
+            thresholds[model] = minimum
+        return thresholds
+
+    @staticmethod
+    def _load_comparison_config() -> dict:
+        """Load the transparent model-comparison cohort contract."""
+
+        if not MODEL_COMPARISON_CONFIG.exists():
+            return {}
+        payload = json.loads(MODEL_COMPARISON_CONFIG.read_text(encoding="utf-8"))
+        if not isinstance(payload.get("models", []), list):
+            raise ValueError("Model-comparison configuration must contain a model list")
+        return payload
+
+    @staticmethod
+    def _file_signature(path: Path) -> tuple:
+        if not path.exists():
+            return (False, 0, 0)
+        stat = path.stat()
+        return (True, stat.st_mtime_ns, stat.st_size)
+
+    def _comparison_reference_model(self) -> str | None:
+        model = str(self._comparison_config.get("reference_model", "")).strip()
+        if not model:
+            return None
+        path = specification_csv_path(self.processed_dir, model=model)
+        return model if path.exists() else None
+
+    def _comparison_reference_ids(self) -> frozenset[str]:
+        """Return the successful reference-model IDs that bound model IRR."""
+
+        reference_model = self._comparison_reference_model()
+        if reference_model is None:
+            return frozenset(self.papers.get("paper_id", pd.Series(dtype=str)).astype(str))
+        path = specification_csv_path(self.processed_dir, model=reference_model)
+        signature = (reference_model, *self._file_signature(path))
+        if self._reference_ids is not None and signature == self._reference_signature:
+            return self._reference_ids
+        frame = pd.read_csv(
+            path,
+            usecols=["paper_id"],
+            dtype=str,
+            keep_default_na=False,
+        )
+        paper_ids = frame["paper_id"].astype(str).str.strip()
+        if paper_ids.eq("").any():
+            raise ValueError("Reference-model results contain blank paper IDs")
+        if paper_ids.duplicated().any():
+            raise ValueError("Reference-model results contain duplicate paper IDs")
+        corpus_ids = set(self.papers["paper_id"].astype(str))
+        self._reference_ids = frozenset(paper_ids[paper_ids.isin(corpus_ids)])
+        self._reference_signature = signature
+        return self._reference_ids
+
+    def _comparison_reference_frame(self) -> pd.DataFrame:
+        reference_ids = self._comparison_reference_ids()
+        return self.papers[
+            self.papers["paper_id"].astype(str).isin(reference_ids)
+        ].copy()
+
     def _composition_model_frame(self, model: str) -> pd.DataFrame:
-        """Join one model's successful codes to the common corpus metadata."""
+        """Join every successful code from one model to corpus metadata."""
 
         registered = {item[0] for item in self._registered_composition_models()}
         if model not in registered:
             raise ValueError(f"Unknown specification model: {model}")
-        if model in self._composition_frames:
+        spec_path = specification_csv_path(self.processed_dir, model=model)
+        signature = self._file_signature(spec_path)
+        if (
+            model in self._composition_frames
+            and self._composition_frame_signatures.get(model) == signature
+        ):
             return self._composition_frames[model]
 
-        spec_path = specification_csv_path(self.processed_dir, model=model)
         primary_model = resolve_primary_model()
         if not spec_path.exists():
             if model == primary_model and self.has_specifications:
                 frame = self.papers.copy()
                 self._composition_frames[model] = frame
+                self._composition_frame_signatures[model] = signature
                 return frame
             raise ValueError(f"Specification results are unavailable for model: {model}")
 
@@ -352,18 +565,28 @@ class GraphService:
             validate="one_to_one",
         ).fillna("")
         self._composition_frames[model] = frame
+        self._composition_frame_signatures[model] = signature
         return frame
 
     def composition_models(self) -> list[dict]:
         """Describe model outputs currently safe for full-corpus comparison."""
 
+        reference_model = self._comparison_reference_model()
         corpus_n = len(self.papers)
+        fixed_irr_models = {
+            str(model) for model in self._comparison_config.get("models", [])
+        }
+        supplementary_thresholds = self._supplementary_irr_thresholds()
         models = []
         for model, role in self._registered_composition_models():
             try:
                 coded_n = len(self._composition_model_frame(model))
             except ValueError:
                 continue
+            irr_minimum = supplementary_thresholds.get(model)
+            irr_eligible = model in fixed_irr_models or (
+                irr_minimum is not None and coded_n >= irr_minimum
+            )
             models.append(
                 {
                     "id": model,
@@ -373,13 +596,32 @@ class GraphService:
                     "corpus_papers": corpus_n,
                     "missing_papers": max(0, corpus_n - coded_n),
                     "coverage_share": round(coded_n / corpus_n, 6) if corpus_n else 0.0,
+                    "irr_eligible": irr_eligible,
+                    "irr_minimum_coded_papers": irr_minimum,
+                    "irr_status": (
+                        "included"
+                        if irr_eligible
+                        else "pending_threshold"
+                        if irr_minimum is not None
+                        else "not_configured"
+                    ),
+                    "comparison_cohort": self._comparison_config.get("comparison_id", ""),
+                    "reference_model": reference_model,
+                    "reference_label": MODEL_DISPLAY_NAMES.get(
+                        reference_model, reference_model
+                    ) if reference_model else "Full available corpus",
                 }
             )
         return models
 
     def _composition_scope(self, scope_id: str, model: str) -> tuple[pd.DataFrame, int]:
-        corpus_scope_n = len(self._scope(scope_id))
-        return scope_frame(self._composition_model_frame(model), scope_id), corpus_scope_n
+        corpus_scope = self._scope(scope_id)
+        corpus_ids = set(corpus_scope["paper_id"].astype(str))
+        model_frame = self._composition_model_frame(model)
+        selected = model_frame[
+            model_frame["paper_id"].astype(str).isin(corpus_ids)
+        ].copy()
+        return selected.reset_index(drop=True), len(corpus_scope)
 
     def _paper_inspection_records(
         self,
@@ -450,6 +692,265 @@ class GraphService:
             records.append(record)
         return records
 
+    @staticmethod
+    def _agreement_dimension_label(column: str) -> str:
+        """Return the instrument label for one exact-match agreement column."""
+
+        for dimension in INSPECTION_DIMENSIONS:
+            aliases = {dimension.column}
+            if dimension.column == "ai_mechanism":
+                aliases.add("ai_mechanism_analysis")
+            if column in aliases:
+                return dimension.label
+        return column.replace("_", " ").strip().title()
+
+    def _model_pattern_agreement(
+        self,
+        paper_ids: list[str],
+        filters: dict[str, str],
+        reference_model: str | None = None,
+    ) -> dict[str, dict]:
+        """Compare other assignments with the selected model's evidence pattern."""
+
+        models = self._cross_model_agreement_models(reference_model)
+        normalized_filters = {
+            str(column): str(value).strip()
+            for column, value in filters.items()
+        }
+        pattern = [
+            {
+                "column": column,
+                "label": self._agreement_dimension_label(column),
+                "value": value,
+                "display_value": value or "Missing value",
+            }
+            for column, value in normalized_filters.items()
+        ]
+        paper_ids = [str(paper_id) for paper_id in paper_ids]
+        assignments: dict[str, list[dict]] = {paper_id: [] for paper_id in paper_ids}
+        for model in models:
+            frame = self._composition_model_frame(model["id"])
+            subset = frame[frame["paper_id"].astype(str).isin(paper_ids)].copy()
+            subset["paper_id"] = subset["paper_id"].astype(str)
+            indexed = subset.set_index("paper_id", drop=False)
+            for paper_id in paper_ids:
+                available = paper_id in indexed.index
+                values = {}
+                matches = available and bool(normalized_filters)
+                if available:
+                    row = indexed.loc[paper_id]
+                    if isinstance(row, pd.DataFrame):
+                        row = row.iloc[0]
+                    for column, expected in normalized_filters.items():
+                        assigned = str(row.get(column, "")).strip()
+                        values[column] = assigned
+                        if assigned != expected:
+                            matches = False
+                else:
+                    values = {column: "" for column in normalized_filters}
+                assignments[paper_id].append(
+                    {
+                        "model": model["id"],
+                        "label": model["label"],
+                        "is_reference": model["id"] == reference_model,
+                        "available": available,
+                        "matches": matches,
+                        "values": values,
+                    }
+                )
+
+        result = {}
+        model_count = len(models)
+        preferred_ids = {
+            str(model)
+            for model in self._comparison_config.get(
+                "preferred_agreement_models", []
+            )
+        }
+        for paper_id in paper_ids:
+            rows = assignments[paper_id]
+            agreeing = [row for row in rows if row["matches"]]
+            available = [row for row in rows if row["available"]]
+            preferred_rows = [row for row in rows if row["model"] in preferred_ids]
+            preferred_agreeing = [row for row in preferred_rows if row["matches"]]
+            reference_row = next(
+                (row for row in rows if row["model"] == reference_model),
+                None,
+            )
+            result[paper_id] = {
+                "pattern": pattern,
+                "reference_model": (
+                    {
+                        "id": reference_row["model"],
+                        "label": reference_row["label"],
+                    }
+                    if reference_row
+                    else None
+                ),
+                "reference_model_matches": (
+                    bool(reference_row["matches"]) if reference_row else None
+                ),
+                "models_total": model_count,
+                "models_available": len(available),
+                "models_agreeing": len(agreeing),
+                "agreement_models": [
+                    {"id": row["model"], "label": row["label"]}
+                    for row in agreeing
+                ],
+                "all_models_agree": bool(pattern)
+                and model_count > 0
+                and len(agreeing) == model_count,
+                "preferred_agreement_label": self._comparison_config.get(
+                    "preferred_agreement_label",
+                    "Preferred-model sweet spot",
+                ),
+                "preferred_models_total": len(preferred_ids),
+                "preferred_models_agreeing": len(preferred_agreeing),
+                "preferred_agreement_models": [
+                    {"id": row["model"], "label": row["label"]}
+                    for row in preferred_agreeing
+                ],
+                "preferred_sweet_spot": bool(pattern)
+                and bool(preferred_ids)
+                and len(preferred_rows) == len(preferred_ids)
+                and len(preferred_agreeing) == len(preferred_ids),
+                "assignments": rows,
+            }
+        return result
+
+    def _agreement_evidence_bundle(
+        self,
+        frame: pd.DataFrame,
+        filters: dict[str, str],
+        selected_columns: tuple[str, ...],
+        limit: int,
+        minimum_agreement: int = 1,
+        preferred_only: bool = False,
+        reference_model: str | None = None,
+    ) -> dict:
+        """Attach model agreement and optionally require a minimum model count."""
+
+        agreement_models = self._cross_model_agreement_models(reference_model)
+        model_count = len(agreement_models)
+        if minimum_agreement < 1 or minimum_agreement > max(1, model_count):
+            raise ValueError(
+                f"Minimum model agreement must be between 1 and {max(1, model_count)}"
+            )
+        paper_ids = frame["paper_id"].astype(str).tolist()
+        agreement = self._model_pattern_agreement(
+            paper_ids,
+            filters,
+            reference_model=reference_model,
+        )
+        if reference_model and filters:
+            invalid_reference_ids = [
+                paper_id
+                for paper_id, detail in agreement.items()
+                if detail["reference_model_matches"] is not True
+            ]
+            if invalid_reference_ids:
+                raise ValueError(
+                    "Evidence selection contains papers that do not match the "
+                    f"selected model {reference_model}"
+                )
+        agreement_ids = {
+            paper_id
+            for paper_id, detail in agreement.items()
+            if detail["models_agreeing"] >= minimum_agreement
+        }
+        two_model_ids = {
+            paper_id
+            for paper_id, detail in agreement.items()
+            if detail["models_agreeing"] >= 2
+        }
+        all_model_ids = {
+            paper_id
+            for paper_id, detail in agreement.items()
+            if detail["all_models_agree"]
+        }
+        preferred_ids = {
+            paper_id
+            for paper_id, detail in agreement.items()
+            if detail["preferred_sweet_spot"]
+        }
+        agreement_threshold_counts = [
+            {
+                "minimum_models": threshold,
+                "papers": sum(
+                    detail["models_agreeing"] >= threshold
+                    for detail in agreement.values()
+                ),
+                "additional_models_beyond_reference": (
+                    threshold - 1 if reference_model else threshold
+                ),
+            }
+            for threshold in range(1, model_count + 1)
+        ]
+        if not filters:
+            selected_ids = set(paper_ids) if minimum_agreement == 1 and not preferred_only else set()
+        else:
+            selected_ids = preferred_ids if preferred_only else agreement_ids
+        selected = frame[frame["paper_id"].astype(str).isin(selected_ids)]
+        if not selected.empty:
+            order = selected["paper_id"].astype(str).map(
+                lambda paper_id: (
+                    int(agreement[paper_id]["preferred_sweet_spot"]),
+                    int(agreement[paper_id]["all_models_agree"]),
+                    agreement[paper_id]["models_agreeing"],
+                )
+            )
+            selected = selected.assign(
+                _agreement_preferred=[item[0] for item in order],
+                _agreement_all=[item[1] for item in order],
+                _agreement_count=[item[2] for item in order],
+            ).sort_values(
+                ["_agreement_preferred", "_agreement_all", "_agreement_count"],
+                ascending=[False, False, False],
+                kind="stable",
+            )
+        records = self._paper_inspection_records(
+            selected,
+            selected_columns=selected_columns,
+            limit=limit,
+        )
+        for record in records:
+            record["_model_agreement"] = agreement.get(str(record.get("paper_id")), {})
+        return {
+            "minimum_agreement": minimum_agreement,
+            "preferred_only": preferred_only,
+            "total_papers": len(frame),
+            "supporting_papers": len(frame),
+            "agreement_papers": len(two_model_ids),
+            "agreement_threshold_counts": agreement_threshold_counts,
+            "all_model_agreement_papers": len(all_model_ids),
+            "preferred_agreement_papers": len(preferred_ids),
+            "preferred_agreement_label": self._comparison_config.get(
+                "preferred_agreement_label",
+                "Preferred-model sweet spot",
+            ),
+            "reference_model": (
+                {
+                    "id": reference_model,
+                    "label": MODEL_DISPLAY_NAMES.get(reference_model, reference_model),
+                }
+                if reference_model
+                else None
+            ),
+            "agreement_rule": (
+                "The selected model defines the supporting-paper set and "
+                "selected pattern; agreement counts other available models "
+                "that assigned the same pattern to those papers."
+            ),
+            "filtered_agreement_papers": len(selected),
+            "returned_papers": len(records),
+            "models": [
+                {"id": item["id"], "label": item["label"]}
+                for item in agreement_models
+            ],
+            "pattern": next(iter(agreement.values()), {}).get("pattern", []),
+            "papers": records,
+        }
+
     def composition_export(
         self,
         scope_id: str,
@@ -498,16 +999,23 @@ class GraphService:
         scope_id: str,
         left_model: str,
         right_model: str,
+        common_paper_ids: frozenset[str] | set[str] | None = None,
     ) -> pd.DataFrame:
-        """Return paper-aligned ratings for all eight displayed dimensions."""
+        """Return paper-aligned ratings on one balanced comparison cohort."""
 
         if left_model == right_model:
             raise ValueError("IRR requires two different specification models")
+        if common_paper_ids is None:
+            common_paper_ids = self._balanced_composition_ids(scope_id)
         dimension_columns = [column for column, _, _ in DISPLAY_IRR_DIMENSIONS]
         left, _ = self._composition_scope(scope_id, left_model)
         right, _ = self._composition_scope(scope_id, right_model)
-        left = left.copy()
-        right = right.copy()
+        left = left[
+            left["paper_id"].astype(str).isin(common_paper_ids)
+        ].copy()
+        right = right[
+            right["paper_id"].astype(str).isin(common_paper_ids)
+        ].copy()
         for column in dimension_columns:
             if column not in left.columns:
                 left[column] = ""
@@ -526,22 +1034,89 @@ class GraphService:
             validate="one_to_one",
         ).sort_values("paper_id").reset_index(drop=True)
 
+    def _balanced_composition_ids(
+        self,
+        scope_id: str,
+        model_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> frozenset[str]:
+        """Return the exact paper-ID intersection shared by all comparison models."""
+
+        if model_ids is None:
+            model_ids = [
+                item["id"] for item in self._irr_composition_models()
+            ]
+        scope_ids = set(self._scope(scope_id)["paper_id"].astype(str))
+        reference_ids = set(
+            self._comparison_reference_frame()["paper_id"].astype(str)
+        )
+        paper_sets = [scope_ids & reference_ids]
+        for model_id in model_ids:
+            frame, _ = self._composition_scope(scope_id, model_id)
+            paper_sets.append(set(frame["paper_id"].astype(str)))
+        if not paper_sets:
+            return frozenset()
+        return frozenset(set.intersection(*paper_sets))
+
     def composition_irr(
         self,
         scope_id: str,
         left_model: str,
         right_model: str,
+        common_paper_ids: frozenset[str] | set[str] | None = None,
     ) -> dict:
-        """Calculate exact agreement and nominal alpha on the common papers."""
+        """Calculate exact agreement and nominal alpha on the balanced papers."""
 
-        units = self.composition_irr_units(scope_id, left_model, right_model)
+        if common_paper_ids is None:
+            common_paper_ids = self._balanced_composition_ids(scope_id)
+        units = self.composition_irr_units(
+            scope_id,
+            left_model,
+            right_model,
+            common_paper_ids,
+        )
         dimensions = []
         for column, label, classification in DISPLAY_IRR_DIMENSIONS:
-            left_values = units[f"left__{column}"].tolist()
-            right_values = units[f"right__{column}"].tolist()
+            left_series = units[f"left__{column}"].fillna("").astype(str).str.strip()
+            right_series = units[f"right__{column}"].fillna("").astype(str).str.strip()
+            left_values = left_series.tolist()
+            right_values = right_series.tolist()
             exact = pairwise_percent_agreement(left_values, right_values)
             alpha = krippendorff_alpha_nominal(
                 [list(pair) for pair in zip(left_values, right_values)]
+            )
+            excluded = IRR_UNOBSERVED_VALUES.get(column, frozenset())
+            left_observed = left_series.ne("") & ~left_series.isin(excluded)
+            right_observed = right_series.ne("") & ~right_series.isin(excluded)
+
+            observability_left = left_observed.map(
+                {True: "observed", False: "unobserved"}
+            ).tolist()
+            observability_right = right_observed.map(
+                {True: "observed", False: "unobserved"}
+            ).tolist()
+            observability_exact = pairwise_percent_agreement(
+                observability_left,
+                observability_right,
+            )
+            observability_alpha = krippendorff_alpha_nominal(
+                [
+                    list(pair)
+                    for pair in zip(observability_left, observability_right)
+                ]
+            )
+
+            jointly_observed = left_observed & right_observed
+            observed_left_values = left_series.loc[jointly_observed].tolist()
+            observed_right_values = right_series.loc[jointly_observed].tolist()
+            observed_category_exact = pairwise_percent_agreement(
+                observed_left_values,
+                observed_right_values,
+            )
+            observed_category_alpha = krippendorff_alpha_nominal(
+                [
+                    list(pair)
+                    for pair in zip(observed_left_values, observed_right_values)
+                ]
             )
             dimensions.append(
                 {
@@ -553,6 +1128,14 @@ class GraphService:
                     "disagreements": exact.comparable - exact.agreements,
                     "percent_agreement": exact.percent_agreement,
                     "krippendorff_alpha": alpha,
+                    "observability_comparable_papers": observability_exact.comparable,
+                    "observability_agreements": observability_exact.agreements,
+                    "observability_percent_agreement": observability_exact.percent_agreement,
+                    "observability_krippendorff_alpha": observability_alpha,
+                    "jointly_observed_papers": observed_category_exact.comparable,
+                    "observed_category_agreements": observed_category_exact.agreements,
+                    "observed_category_percent_agreement": observed_category_exact.percent_agreement,
+                    "observed_category_krippendorff_alpha": observed_category_alpha,
                 }
             )
         return {
@@ -562,6 +1145,7 @@ class GraphService:
             "right_model": right_model,
             "right_label": MODEL_DISPLAY_NAMES.get(right_model, right_model),
             "intersection_papers": len(units),
+            "balanced_common_papers": len(common_paper_ids),
             "dimensions": dimensions,
             "study_status_filter_applied": False,
         }
@@ -574,10 +1158,17 @@ class GraphService:
         the means are compact orientation measures for the matrix display.
         """
 
-        models = self.composition_models()
+        models = self._irr_composition_models()
+        model_ids = [item["id"] for item in models]
+        balanced_ids = self._balanced_composition_ids(scope_id, model_ids)
         pairs = []
         for left, right in combinations(models, 2):
-            result = self.composition_irr(scope_id, left["id"], right["id"])
+            result = self.composition_irr(
+                scope_id,
+                left["id"],
+                right["id"],
+                balanced_ids,
+            )
             core_dimensions = [
                 row for row in result["dimensions"] if row["classification"] == "Core"
             ]
@@ -610,6 +1201,272 @@ class GraphService:
             "core_dimension_count": len(CORE_IRR_DIMENSIONS),
             "study_status_filter_applied": False,
             "summary_method": "arithmetic mean across the six estimable core dimensions",
+            "balanced_common_papers": len(balanced_ids),
+            "reference_model": self._comparison_reference_model(),
+            "reference_label": MODEL_DISPLAY_NAMES.get(
+                self._comparison_reference_model(),
+                self._comparison_reference_model(),
+            ),
+            "reference_cohort_papers": len(self._comparison_reference_ids()),
+            "comparison_cohort": self._comparison_config.get("comparison_id", ""),
+            "cohort_rule": self._comparison_config.get("cohort_rule", ""),
+            "irr_rule": self._comparison_config.get("irr_rule", ""),
+        }
+
+    def primary_coder_robustness(
+        self,
+        reference_model: str | None = None,
+        comparison_model: str | None = None,
+        min_support: int = 20,
+    ) -> dict:
+        """Re-estimate the five registered findings with any two available coders.
+
+        The default remains the manuscript's Mini-to-Gemini check. Model
+        selection changes only the source of the paper-level classifications;
+        populations, observed-category rules, selected contrasts, and the
+        support threshold remain constant.
+        """
+
+        registered_primary = resolve_primary_model()
+        model_rows = self.composition_models()
+        available = {row["id"] for row in model_rows}
+        reference_model = reference_model or registered_primary
+        if reference_model not in available:
+            raise ValueError(f"Unknown robustness reference model: {reference_model}")
+        if comparison_model is None:
+            preferred = "gemini-3.1-pro-preview"
+            comparison_model = (
+                preferred
+                if preferred in available and preferred != reference_model
+                else next(
+                    (row["id"] for row in model_rows if row["id"] != reference_model),
+                    "",
+                )
+            )
+        if comparison_model not in available:
+            raise ValueError(f"Unknown robustness comparison model: {comparison_model}")
+        if comparison_model == reference_model:
+            raise ValueError("Coder robustness requires two different models")
+        if min_support < 1:
+            raise ValueError("Coder robustness support threshold must be positive")
+
+        result = build_coder_robustness(
+            self._composition_model_frame(reference_model),
+            self._composition_model_frame(comparison_model),
+            primary_model=reference_model,
+            primary_label=MODEL_DISPLAY_NAMES.get(reference_model, reference_model),
+            alternative_model=comparison_model,
+            alternative_label=MODEL_DISPLAY_NAMES.get(
+                comparison_model, comparison_model
+            ),
+            min_support=min_support,
+        )
+        result.update(
+            {
+                "reference_model": result["primary_model"],
+                "comparison_model": result["alternative_model"],
+                "registered_primary_model": {
+                    "id": registered_primary,
+                    "label": MODEL_DISPLAY_NAMES.get(
+                        registered_primary, registered_primary
+                    ),
+                },
+                "reference_is_registered_primary": reference_model
+                == registered_primary,
+                "available_models": model_rows,
+            }
+        )
+        return result
+
+    @staticmethod
+    def _coder_robustness_population(
+        frame: pd.DataFrame,
+        population: str,
+    ) -> pd.DataFrame:
+        """Restrict a model frame to one entrepreneurship population."""
+
+        core = frame["in_query_3"].astype(str).str.strip().str.lower().isin(
+            {"1", "true", "yes", "y", "x"}
+        )
+        additional = frame["in_query_4"].astype(str).str.strip().str.lower().isin(
+            {"1", "true", "yes", "y", "x"}
+        )
+        masks = {
+            "core": core,
+            "additional": additional,
+            "combined": core | additional,
+        }
+        if population not in masks:
+            raise ValueError(f"Unknown robustness population: {population}")
+        return frame[masks[population]].copy()
+
+    def _selected_model_pattern_agreement(
+        self,
+        paper_ids: list[str],
+        filters: dict[str, str],
+        model_ids: tuple[str, str],
+    ) -> dict[str, dict]:
+        """Return exact pattern assignments for one selected model pair."""
+
+        all_agreement = self._model_pattern_agreement(paper_ids, filters)
+        selected = set(model_ids)
+        result: dict[str, dict] = {}
+        for paper_id, detail in all_agreement.items():
+            assignments = [
+                row for row in detail["assignments"] if row["model"] in selected
+            ]
+            assignments.sort(key=lambda row: model_ids.index(row["model"]))
+            agreeing = [row for row in assignments if row["matches"]]
+            available = [row for row in assignments if row["available"]]
+            result[paper_id] = {
+                "pattern": detail["pattern"],
+                "models_total": len(model_ids),
+                "models_available": len(available),
+                "models_agreeing": len(agreeing),
+                "agreement_models": [
+                    {"id": row["model"], "label": row["label"]}
+                    for row in agreeing
+                ],
+                "all_models_agree": len(agreeing) == len(model_ids),
+                "preferred_agreement_label": "Selected-model pair",
+                "preferred_models_total": 0,
+                "preferred_models_agreeing": 0,
+                "preferred_agreement_models": [],
+                "preferred_sweet_spot": False,
+                "assignments": assignments,
+            }
+        return result
+
+    def coder_robustness_evidence(
+        self,
+        reference_model: str,
+        comparison_model: str,
+        population: str,
+        column: str,
+        value: str,
+        limit: int = 100,
+        secondary_column: str | None = None,
+        secondary_value: str | None = None,
+        match_mode: str = "either",
+    ) -> dict:
+        """Return paper evidence behind one dynamic coder-robustness result."""
+
+        if reference_model == comparison_model:
+            raise ValueError("Coder robustness evidence requires two different models")
+        allowed_columns = {
+            AI_STUDY_STATUS_COLUMN,
+            *(panel["column"] for panel in OBSERVED_COMPOSITION_PANELS),
+        }
+        if column not in allowed_columns:
+            raise ValueError(f"Unknown robustness evidence column: {column}")
+        if bool(secondary_column) != (secondary_value is not None):
+            raise ValueError(
+                "Secondary evidence column and value must be supplied together"
+            )
+        if secondary_column and secondary_column not in allowed_columns:
+            raise ValueError(
+                f"Unknown secondary robustness evidence column: {secondary_column}"
+            )
+        if match_mode not in {"either", "both", "reference", "comparison", "different"}:
+            raise ValueError(f"Unknown robustness evidence match mode: {match_mode}")
+
+        model_frames = {
+            "reference": self._coder_robustness_population(
+                self._composition_model_frame(reference_model), population
+            ),
+            "comparison": self._coder_robustness_population(
+                self._composition_model_frame(comparison_model), population
+            ),
+        }
+        filters = {column: str(value).strip()}
+        if secondary_column:
+            filters[secondary_column] = str(secondary_value).strip()
+
+        supporting_ids: dict[str, set[str]] = {}
+        for role, frame in model_frames.items():
+            mask = pd.Series(True, index=frame.index)
+            for filter_column, expected in filters.items():
+                mask &= frame[filter_column].astype(str).str.strip().eq(expected)
+            supporting_ids[role] = set(frame.loc[mask, "paper_id"].astype(str))
+
+        reference_ids = supporting_ids["reference"]
+        comparison_ids = supporting_ids["comparison"]
+        both_ids = reference_ids & comparison_ids
+        either_ids = reference_ids | comparison_ids
+        selected_ids = {
+            "either": either_ids,
+            "both": both_ids,
+            "reference": reference_ids,
+            "comparison": comparison_ids,
+            "different": either_ids - both_ids,
+        }[match_mode]
+
+        reference_frame = model_frames["reference"]
+        comparison_frame = model_frames["comparison"]
+        base = reference_frame[
+            reference_frame["paper_id"].astype(str).isin(selected_ids)
+        ].copy()
+        present = set(base["paper_id"].astype(str))
+        if present != selected_ids:
+            base = pd.concat(
+                [
+                    base,
+                    comparison_frame[
+                        comparison_frame["paper_id"].astype(str).isin(
+                            selected_ids - present
+                        )
+                    ],
+                ],
+                ignore_index=True,
+            )
+        base["_robustness_rank"] = base["paper_id"].astype(str).map(
+            lambda paper_id: (
+                0 if paper_id in both_ids else 1,
+                0 if paper_id in reference_ids else 1,
+            )
+        )
+        base = base.sort_values("_robustness_rank", kind="stable")
+        paper_ids = base["paper_id"].astype(str).tolist()
+        agreement = self._selected_model_pattern_agreement(
+            paper_ids,
+            filters,
+            (reference_model, comparison_model),
+        )
+        records = self._paper_inspection_records(
+            base,
+            selected_columns=tuple(filters),
+            limit=limit,
+        )
+        for record in records:
+            record["_model_agreement"] = agreement.get(
+                str(record.get("paper_id")), {}
+            )
+        population_labels = {
+            "core": "Leading entrepreneurship journals",
+            "additional": "Additional entrepreneurship",
+            "combined": "Combined entrepreneurship",
+        }
+        return {
+            "reference_model": {
+                "id": reference_model,
+                "label": MODEL_DISPLAY_NAMES.get(reference_model, reference_model),
+            },
+            "comparison_model": {
+                "id": comparison_model,
+                "label": MODEL_DISPLAY_NAMES.get(comparison_model, comparison_model),
+            },
+            "population": population,
+            "population_label": population_labels[population],
+            "match_mode": match_mode,
+            "pattern": next(iter(agreement.values()), {}).get("pattern", []),
+            "reference_supporting_papers": len(reference_ids),
+            "comparison_supporting_papers": len(comparison_ids),
+            "both_supporting_papers": len(both_ids),
+            "either_supporting_papers": len(either_ids),
+            "different_supporting_papers": len(either_ids - both_ids),
+            "selected_papers": len(selected_ids),
+            "returned_papers": len(records),
+            "papers": records,
         }
 
     def export_scope(
@@ -626,13 +1483,94 @@ class GraphService:
 
     # ---- overview -------------------------------------------------------
     def scopes(self) -> list[dict]:
+        """Return one shared dataset-scope registry for every public page."""
+
         scopes = list(DATASET_SCOPES)
-        if STRICT_AI_ENT_SCOPE.filter_column in self.papers.columns:
-            scopes.append(STRICT_AI_ENT_SCOPE)
-        return [
-            {"id": s.id, "label": s.label, "papers": len(self._scope(s.id))}
-            for s in scopes
+        retrieval_definitions = {
+            "full_corpus": (
+                "All papers in the retained analytical corpus. This baseline "
+                "includes papers outside the selected business-domain rows."
+            ),
+            "query_1": (
+                "Papers retrieved through the broad business and management "
+                "journal query."
+            ),
+            "query_2": (
+                "Papers from source titles in the prespecified FT50 journal set."
+            ),
+            "query_3": (
+                "Papers from the 14 Leading entrepreneurship journals."
+            ),
+            "query_4": (
+                "Papers from the 13 Additional entrepreneurship journals."
+            ),
+        }
+        rows = [
+            {
+                "id": scope.id,
+                "label": scope.label,
+                "papers": len(scope_frame(self.papers, scope.id)),
+                "definition": retrieval_definitions.get(
+                    scope.id,
+                    "Papers inherited from this prespecified retrieval scope.",
+                ),
+                "scope_type": "retrieval_scope",
+            }
+            for scope in scopes
         ]
+        existing = {row["id"] for row in rows}
+        aliases_already_present = {
+            "broad_business_management",
+            "ft50",
+            "core_entrepreneurship",
+            "additional_entrepreneurship",
+        }
+        business_domain_ids = set(self._business_domain_manifest().get("domains", {}))
+        for population_id, label, definition, frame, exclusive in (
+            self._publication_growth_population_frames()
+        ):
+            if population_id in existing or population_id in aliases_already_present:
+                continue
+            if population_id in business_domain_ids:
+                scope_type = "business_domain"
+            elif population_id == "outside_selected_business_domains":
+                scope_type = "analytical_residual"
+            elif exclusive:
+                scope_type = "exclusive_complement"
+            else:
+                scope_type = "analytical_population"
+            rows.append(
+                {
+                    "id": population_id,
+                    "label": label,
+                    "papers": len(frame),
+                    "definition": definition,
+                    "scope_type": scope_type,
+                }
+            )
+            existing.add(population_id)
+        return rows
+
+    def analytics_scopes(self) -> list[dict]:
+        """Compatibility alias for the shared public dataset-scope registry."""
+
+        return self.scopes()
+
+    def scope_label(self, scope_id: str) -> str:
+        """Resolve a public label for canonical and Analytics-only scopes."""
+
+        canonical = next(
+            (row["label"] for row in self.scopes() if row["id"] == scope_id),
+            None,
+        )
+        if canonical is not None:
+            return canonical
+        for population_id, label, _definition, _frame, _exclusive in (
+            self._publication_growth_population_frames()
+        ):
+            if population_id == scope_id:
+                return label
+        raise ScopeError(f"Unknown scope {scope_id!r}")
 
     def scope_overview(self, scope_id: str) -> dict:
         frame = self._scope(scope_id)
@@ -749,46 +1687,15 @@ class GraphService:
                     ),
                 })
 
-        cumulative_by_year = {
-            row["year"]: row["cumulative_papers"] for row in annual
-        }
-
-        def cumulative_at(year: int) -> int:
-            eligible = [
-                value
-                for current_year, value in cumulative_by_year.items()
-                if current_year <= year
-            ]
-            return max(eligible, default=0)
-
-        growth_periods = (
-            (2000, SEARCH_CUTOFF_YEAR),
-            (2010, 2020),
-            (2020, 2023),
-            (2023, SEARCH_CUTOFF_YEAR),
-        )
-        publication_growth = []
-        for start_year, end_year in growth_periods:
-            start_count = cumulative_at(start_year)
-            end_count = cumulative_at(end_year)
-            added = end_count - start_count
-            publication_growth.append(
-                {
-                    "start_year": start_year,
-                    "end_year": end_year,
-                    "start_cumulative_papers": start_count,
-                    "end_cumulative_papers": end_count,
-                    "added_papers": added,
-                    "percent_growth": (
-                        round(added / start_count, 6)
-                        if start_count > 0
-                        else None
-                    ),
-                    "end_is_retrieval_year": (
-                        end_year == SEARCH_CUTOFF_YEAR
-                    ),
-                }
-            )
+        publication_growth = [
+            {
+                **record,
+                "end_is_retrieval_year": (
+                    record["end_year"] == SEARCH_CUTOFF_YEAR
+                ),
+            }
+            for record in growth_records(frame, DEFAULT_GROWTH_PERIODS)
+        ]
 
         top_journals = self._top_counts(frame, "Source title", citations, top_n)
         top_authors = self._top_authors(frame, top_n)
@@ -882,10 +1789,13 @@ class GraphService:
         }
 
     def publication_growth_comparison(self) -> dict:
-        """Compare cumulative publication growth across every dataset view."""
+        """Compare cumulative publication growth across scopes and populations."""
 
         rows = []
-        for scope in self.scopes():
+        for scope in (
+            item for item in self.scopes()
+            if item["scope_type"] == "retrieval_scope"
+        ):
             performance = self.performance(scope["id"])
             rows.append(
                 {
@@ -895,6 +1805,31 @@ class GraphService:
                     "growth": performance["publication_growth"],
                 }
             )
+        population_frames = self._publication_growth_population_frames()
+        populations = []
+        for (
+            population_id,
+            label,
+            definition,
+            population,
+            exclusive,
+        ) in population_frames:
+            populations.append(
+                {
+                    "id": population_id,
+                    "label": label,
+                    "definition": definition,
+                    "papers": len(population),
+                    "exclusive_complement": exclusive,
+                    "growth": growth_records(population),
+                    "trace": cumulative_trace(
+                        population,
+                        min(start for start, _ in DEFAULT_GROWTH_PERIODS),
+                        max(end for _, end in DEFAULT_GROWTH_PERIODS),
+                    ),
+                }
+            )
+
         return {
             "search_cutoff": {
                 "date": SEARCH_CUTOFF_DATE.isoformat(),
@@ -907,7 +1842,231 @@ class GraphService:
             ),
             "scopes_overlap": True,
             "views": rows,
+            "population_overlap_note": (
+                "Registered business domains may overlap. Full corpus excluding "
+                "Combined entrepreneurship is the exclusive entrepreneurship "
+                "complement; it is not the outside-domain residual."
+            ),
+            "populations": populations,
         }
+
+    def _publication_growth_population_frames(
+        self,
+    ) -> list[tuple[str, str, str, pd.DataFrame, bool]]:
+        """Return the selectable populations behind the publication chart."""
+
+        frame = self.papers.copy()
+        def flag(column: str) -> pd.Series:
+            return pd.to_numeric(
+                frame.get(column, pd.Series(0, index=frame.index)),
+                errors="coerce",
+            ).fillna(0).eq(1)
+
+        query_1 = flag("in_query_1")
+        query_2 = flag("in_query_2")
+        query_3 = flag("in_query_3")
+        query_4 = flag("in_query_4")
+        combined_mask = query_3 | query_4
+        population_frames: list[tuple[str, str, str, pd.DataFrame, bool]] = [
+            (
+                "full_corpus",
+                "Full corpus",
+                "All papers in the frozen analytical corpus.",
+                frame.copy(),
+                False,
+            ),
+            (
+                "broad_business_management",
+                "Broad business and management journals",
+                "Papers retrieved through the registered broad business and management journal query.",
+                frame.loc[query_1].copy(),
+                False,
+            ),
+            (
+                "ft50",
+                "FT50 journals",
+                "Papers from source titles in the registered FT50 journal set.",
+                frame.loc[query_2].copy(),
+                False,
+            ),
+            (
+                "core_entrepreneurship",
+                "Leading entrepreneurship journals",
+                "Papers from the registered leading entrepreneurship journal population.",
+                frame.loc[query_3].copy(),
+                False,
+            ),
+            (
+                "additional_entrepreneurship",
+                "Additional entrepreneurship",
+                "Papers from the registered additional entrepreneurship journal population.",
+                frame.loc[query_4].copy(),
+                False,
+            ),
+            (
+                "combined_entrepreneurship",
+                "Combined entrepreneurship",
+                "Union of the Leading and Additional entrepreneurship journal populations.",
+                frame.loc[combined_mask].copy(),
+                False,
+            ),
+            (
+                "remaining_full_corpus",
+                "Full corpus excluding Combined entrepreneurship",
+                f"The {len(frame) - int(combined_mask.sum()):,} papers remaining after "
+                "the exact Combined entrepreneurship population is removed from the "
+                f"{len(frame):,}-paper full corpus.",
+                frame.loc[~combined_mask].copy(),
+                True,
+            ),
+        ]
+        assignments = self._theory_domain_assignments(frame)
+        registered_query_domains = {
+            "ft50",
+            "core_entrepreneurship",
+            "other_entrepreneurship",
+        }
+        domain_manifest = self._business_domain_manifest().get("domains", {})
+        for domain_id, assigned in assignments.groupby("domain_id", sort=False):
+            domain_id = str(domain_id)
+            if domain_id in registered_query_domains:
+                continue
+            domain_frame = frame[
+                frame["paper_id"].isin(set(assigned["paper_id"]))
+            ].copy()
+            assignment_mode = str(
+                domain_manifest.get(domain_id, {}).get("mapping_mode", "")
+            )
+            definition = (
+                "Papers inherit this domain through the disclosed reviewed "
+                "source-title overlay."
+                if assignment_mode == "reviewed_source_overlay"
+                else "Papers inherit this domain through the explicit official "
+                "Scopus ASJC-code aggregation."
+            )
+            population_frames.append(
+                (
+                    domain_id,
+                    str(assigned["domain_label"].iloc[0]),
+                    definition,
+                    domain_frame,
+                    False,
+                )
+            )
+
+        business_domain_ids = set(domain_manifest)
+        assigned_business_ids = set(
+            assignments.loc[
+                assignments["domain_id"].isin(business_domain_ids), "paper_id"
+            ].astype(str)
+        )
+        outside_domains = frame[
+            ~frame["paper_id"].astype(str).isin(assigned_business_ids)
+        ].copy()
+        if business_domain_ids:
+            population_frames.append(
+                (
+                    "outside_selected_business_domains",
+                    "Outside selected business-domain rows",
+                    "Papers with official Scopus ASJC classifications that do not "
+                    f"map to any of the {len(business_domain_ids)} selected business "
+                    "domains. These papers "
+                    "remain part of the full-corpus comparison baseline.",
+                    outside_domains,
+                    True,
+                )
+            )
+
+        return population_frames
+
+    def _publication_growth_population_frame(
+        self, population_id: str
+    ) -> tuple[str, pd.DataFrame]:
+        """Resolve one publication-chart population by its stable ID."""
+
+        for current_id, label, _definition, frame, _exclusive in (
+            self._publication_growth_population_frames()
+        ):
+            if current_id == population_id:
+                return label, frame
+        raise ValueError(f"Unknown publication-growth population: {population_id}")
+
+    def publication_growth_population_papers(
+        self,
+        population_id: str,
+        year: int,
+        mode: str = "annual",
+        limit: int = 100,
+    ) -> dict:
+        """Return evidence papers behind a publication-population chart point."""
+
+        if mode not in {"annual", "cumulative"}:
+            raise ValueError("Publication-paper mode must be annual or cumulative")
+        label, frame = self._publication_growth_population_frame(population_id)
+        years = self._numeric(frame, "Year")
+        subset = (
+            frame[years == year].copy()
+            if mode == "annual"
+            else frame[(years > 0) & (years <= year)].copy()
+        )
+        subset["_year_sort"] = self._numeric(subset, "Year")
+        subset["_citation_sort"] = self._numeric(subset, "Cited by")
+        subset["_title_sort"] = (
+            subset["Title"].astype(str)
+            if "Title" in subset.columns
+            else pd.Series("", index=subset.index)
+        )
+        subset = subset.sort_values(
+            ["_year_sort", "_citation_sort", "_title_sort"],
+            ascending=[False, False, True],
+            kind="stable",
+        )
+        return {
+            "population": population_id,
+            "population_label": label,
+            "year": year,
+            "mode": mode,
+            "total_papers": len(subset),
+            "returned_papers": min(limit, len(subset)),
+            "papers": self._paper_inspection_records(subset, limit=limit),
+            "search_cutoff": {
+                "date": SEARCH_CUTOFF_DATE.isoformat(),
+                "label": SEARCH_CUTOFF_LABEL,
+                "year": SEARCH_CUTOFF_YEAR,
+            },
+        }
+
+    def publication_growth_population_keyword_year(
+        self,
+        population_id: str,
+        source: str,
+        year: int,
+        limit: int = 20,
+    ) -> dict:
+        """Return top keywords for one publication-chart population and year."""
+
+        label, frame = self._publication_growth_population_frame(population_id)
+        result = keyword_year_summary(
+            frame, source=source, year=year, limit=limit
+        )
+        result.update({"population": population_id, "population_label": label})
+        return result
+
+    def publication_growth_population_keyword_evidence(
+        self,
+        population_id: str,
+        source: str,
+        keyword: str,
+        year: int,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Return papers behind one population-year keyword count."""
+
+        _label, frame = self._publication_growth_population_frame(population_id)
+        mask = keyword_evidence_mask(
+            frame, source, keyword, None, year=year
+        )
+        return self._paper_inspection_records(frame[mask], limit=limit)
 
     # ---- keyword evolution --------------------------------------------
     def keyword_evolution(
@@ -1010,6 +2169,15 @@ class GraphService:
             if corpus_scope_n
             else 0.0
         )
+        reference_model = self._comparison_reference_model()
+        result["comparison_reference_model"] = reference_model
+        result["comparison_reference_label"] = MODEL_DISPLAY_NAMES.get(
+            reference_model,
+            reference_model,
+        ) if reference_model else "Full available corpus"
+        result["comparison_cohort"] = self._comparison_config.get(
+            "comparison_id", ""
+        )
         result["control"] = control
         result["filter_options"] = filter_options
         return result
@@ -1096,9 +2264,39 @@ class GraphService:
     ) -> list[dict]:
         """Return papers supporting one observed-composition bar."""
 
+        return self.observed_composition_evidence_bundle(
+            scope_id,
+            study_status,
+            column,
+            value,
+            limit,
+            model,
+            filter_dimension,
+            filter_value,
+            secondary_column,
+            secondary_value,
+        )["papers"]
+
+    def observed_composition_evidence_bundle(
+        self,
+        scope_id: str,
+        study_status: str,
+        column: str,
+        value: str,
+        limit: int = 100,
+        model: str | None = None,
+        filter_dimension: str | None = None,
+        filter_value: str | None = None,
+        secondary_column: str | None = None,
+        secondary_value: str | None = None,
+        minimum_agreement: int = 1,
+        preferred_only: bool = False,
+    ) -> dict:
+        """Return traceable evidence plus exact cross-model pattern agreement."""
+
         selected_model = model or resolve_primary_model()
         frame, _ = self._composition_scope(scope_id, selected_model)
-        frame, _ = self._theory_controlled_frame(
+        frame, control = self._theory_controlled_frame(
             frame, filter_dimension, filter_value
         )
         mask = observed_composition_evidence_mask(
@@ -1118,12 +2316,22 @@ class GraphService:
                 str(secondary_value).strip()
             )
         subset = frame[mask]
-        return self._paper_inspection_records(
+        agreement_filters: dict[str, str] = {}
+        if study_status != "all":
+            agreement_filters[AI_STUDY_STATUS_COLUMN] = study_status
+        if control:
+            agreement_filters[str(control["column"])] = str(control["value"])
+        agreement_filters[column] = str(value)
+        if secondary_column:
+            agreement_filters[secondary_column] = str(secondary_value)
+        return self._agreement_evidence_bundle(
             subset,
-            selected_columns=tuple(
-                item for item in (column, secondary_column) if item
-            ),
+            agreement_filters,
+            selected_columns=tuple(agreement_filters),
             limit=limit,
+            minimum_agreement=minimum_agreement,
+            preferred_only=preferred_only,
+            reference_model=selected_model,
         )
 
     # ---- theory elaboration and construct contrasting -----------------
@@ -1210,12 +2418,77 @@ class GraphService:
             drop=True
         )
 
+    def _business_domain_manifest(self) -> dict:
+        """Return the frozen ASJC aggregation manifest when it is available."""
+
+        path = (
+            self.processed_dir
+            / "analysis/theory_elaboration/domains/business_domain_manifest.json"
+        )
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _theory_domain_coverage(
+        self,
+        frame: pd.DataFrame,
+        assignments: pd.DataFrame,
+    ) -> dict:
+        """Audit coverage without treating the multi-label rows as additive."""
+
+        manifest = self._business_domain_manifest()
+        business_domain_ids = set(manifest.get("domains", {}))
+        frame_ids = set(frame["paper_id"].astype(str))
+        business_ids = set(
+            assignments.loc[
+                assignments["domain_id"].isin(business_domain_ids), "paper_id"
+            ].astype(str)
+        )
+        all_registered_ids = set(assignments["paper_id"].astype(str))
+        total = len(frame_ids)
+
+        def share(value: int) -> float:
+            return round(value / total * 100, 4) if total else 0.0
+
+        return {
+            "baseline_papers": total,
+            "business_domain_count": len(business_domain_ids),
+            "inside_selected_business_domains": len(business_ids),
+            "inside_selected_business_domains_percent": share(len(business_ids)),
+            "outside_selected_business_domains": len(frame_ids - business_ids),
+            "outside_selected_business_domains_percent": share(
+                len(frame_ids - business_ids)
+            ),
+            "inside_all_registered_groups": len(all_registered_ids),
+            "inside_all_registered_groups_percent": share(len(all_registered_ids)),
+            "outside_all_registered_groups": len(frame_ids - all_registered_ids),
+            "outside_all_registered_groups_percent": share(
+                len(frame_ids - all_registered_ids)
+            ),
+            "all_papers_have_official_asjc": bool(
+                manifest.get("validation", {}).get(
+                    "all_corpus_papers_have_official_asjc", False
+                )
+            ),
+            "baseline_rule": str(
+                manifest.get("aggregation", {}).get("baseline_rule", "")
+            ).strip(),
+            "residual_label": str(
+                manifest.get("aggregation", {}).get(
+                    "residual_label", "Outside selected analytical domains"
+                )
+            ),
+        }
+
     def theory_contrasting_metadata(self, model: str | None = None) -> dict:
         """Describe available populations, domains, dimensions and model coverage."""
 
         selected_model = model or resolve_primary_model()
         frame = self._composition_model_frame(selected_model)
         assignments = self._theory_domain_assignments(frame)
+        manifest = self._business_domain_manifest()
+        manifest_domains = manifest.get("domains", {})
+        domain_coverage = self._theory_domain_coverage(frame, assignments)
         domains = []
         query_domain_definitions = {
             "ft50": (
@@ -1229,7 +2502,8 @@ class GraphService:
             ),
         }
         for domain_id, group in assignments.groupby("domain_id", sort=False):
-            assignment_basis = str(group["assignment_basis"].iloc[0])
+            domain_id = str(domain_id)
+            domain_manifest = manifest_domains.get(domain_id, {})
             paper_ids = set(group["paper_id"])
             source_counts = (
                 frame.loc[frame["paper_id"].isin(paper_ids), "Source title"]
@@ -1238,30 +2512,40 @@ class GraphService:
                 .loc[lambda values: values.ne("")]
                 .value_counts()
             )
-            query_defined = str(domain_id) in query_domain_definitions
-            registry_field = (
-                assignment_basis.removeprefix("journal_registry:")
-                if assignment_basis.startswith("journal_registry:")
-                else ""
-            )
+            query_defined = domain_id in query_domain_definitions
+            mapping_mode = str(domain_manifest.get("mapping_mode", ""))
+            asjc_codes = dict(domain_manifest.get("asjc_codes", {}))
+            registry_field = str(domain_manifest.get("registry_field", ""))
+            if query_defined:
+                assignment_basis = str(group["assignment_basis"].iloc[0])
+                assignment_type = "Registered journal population"
+                definition = query_domain_definitions[domain_id]
+            elif mapping_mode == "official_asjc":
+                assignment_basis = "official_scopus_asjc:" + ",".join(asjc_codes)
+                assignment_type = "Official Scopus ASJC aggregation"
+                definition = (
+                    "Papers inherit this domain when their source carries at least "
+                    "one of the explicitly registered official Scopus ASJC codes."
+                )
+            else:
+                assignment_basis = f"reviewed_source_overlay:{registry_field}"
+                assignment_type = "Reviewed source-title overlay"
+                definition = (
+                    "Papers inherit this domain through the disclosed reviewed "
+                    "source-title overlay because no direct Scopus business-category "
+                    "code represents this construct."
+                )
             domains.append(
                 {
-                    "id": str(domain_id),
+                    "id": domain_id,
                     "label": str(group["domain_label"].iloc[0]),
                     "papers": int(group["paper_id"].nunique()),
                     "assignment_basis": assignment_basis,
-                    "assignment_type": (
-                        "Registered journal population"
-                        if query_defined
-                        else "Reviewed journal-domain registry"
-                    ),
-                    "definition": query_domain_definitions.get(
-                        str(domain_id),
-                        (
-                            "Papers inherit this domain from their Scopus source "
-                            "title through the reviewed journal-domain registry."
-                        ),
-                    ),
+                    "assignment_type": assignment_type,
+                    "definition": definition,
+                    "mapping_mode": mapping_mode,
+                    "asjc_codes": asjc_codes,
+                    "rationale": str(domain_manifest.get("rationale", "")),
                     "registry_field": registry_field,
                     "source_title_count": int(len(source_counts)),
                     "source_titles": [
@@ -1312,6 +2596,23 @@ class GraphService:
                     "values": values,
                 }
             )
+        if domain_coverage["all_papers_have_official_asjc"]:
+            residual_explanation = (
+                f"All {domain_coverage['baseline_papers']:,} papers in this model "
+                "view have official Scopus ASJC classifications. "
+                f"{domain_coverage['outside_selected_business_domains']:,} "
+                f"({domain_coverage['outside_selected_business_domains_percent']:.2f}%) "
+                f"do not map to one of the {domain_coverage['business_domain_count']} "
+                "selected business-domain rows. "
+                "This is an analytical residual, not missing Scopus classification. "
+                "Those papers remain in the full-corpus baseline."
+            )
+        else:
+            residual_explanation = (
+                "The official ASJC aggregation manifest is not available in this "
+                "runtime. Papers outside the available registered rows remain in "
+                "the full-corpus baseline."
+            )
         return {
             "model": selected_model,
             "model_label": MODEL_DISPLAY_NAMES.get(selected_model, selected_model),
@@ -1327,30 +2628,33 @@ class GraphService:
             "vertical_row_dimensions": list(VERTICAL_ROW_DIMENSIONS),
             "horizontal_controls": horizontal_controls,
             "structuring_pairs": pair_options,
+            "domain_coverage": domain_coverage,
             "journal_scopes": [
                 {"id": "all", "label": "All journals"},
                 {"id": "ft50", "label": "FT50 robustness subset"},
             ],
             "domain_methodology": {
-                "unit": "Paper inherited from its source journal",
+                "unit": "Paper inherited from the official classifications of its source journal",
                 "construction": (
                     "Domains classify papers already present in the 22,345-paper "
                     "corpus. They do not retrieve or add papers."
                 ),
                 "classification": (
-                    "FT50, Core entrepreneurship, and Additional entrepreneurship "
-                    "use registered journal populations. The remaining business "
-                    "domains use reviewed journal-domain registries informed by "
-                    "Scopus ASJC source classifications."
+                    "FT50, Leading entrepreneurship journals, and Additional entrepreneurship "
+                    "use registered journal populations. "
+                    f"{domain_coverage['business_domain_count']} business domains are "
+                    "aggregated from explicitly registered official Scopus ASJC "
+                    "codes. No reviewed source-title overlay is included in the "
+                    "primary horizontal comparison."
                 ),
                 "overlap": (
                     "Domain membership is multi-label. A journal, and therefore a "
                     "paper, may belong to more than one domain; rows must not be summed."
                 ),
                 "unclassified": (
-                    "Papers whose source journal is not represented in a registered "
-                    "domain remain outside these domain rows but remain in the baseline."
+                    residual_explanation
                 ),
+                "baseline": domain_coverage["baseline_rule"],
             },
             "domain_assignment_complete": not pending,
         }
@@ -1401,10 +2705,22 @@ class GraphService:
         baseline = theory_distribution(
             frame, dimension_id, distribution_view, study_status
         )
+        baseline_frame = filter_study_status(frame, study_status)
+        if distribution_view == "observed":
+            baseline_frame = baseline_frame.loc[
+                theory_observed_mask(baseline_frame, dimension_id)
+            ].copy()
+        baseline_assignments = assignments[
+            assignments["paper_id"].isin(set(baseline_frame["paper_id"]))
+        ].copy()
+        baseline_domain_coverage = self._theory_domain_coverage(
+            baseline_frame, baseline_assignments
+        )
         baseline_shares = {
             item["raw_value"]: item["share"] for item in baseline["categories"]
         }
         metadata = self.theory_contrasting_metadata(model)
+        domain_metadata = {item["id"]: item for item in metadata["domains"]}
         groups = []
         for domain_id, assigned in assignments.groupby("domain_id", sort=False):
             # Under an FT50-only replication, the FT50 group is identical to
@@ -1425,7 +2741,11 @@ class GraphService:
                 {
                     "id": str(domain_id),
                     "label": str(assigned["domain_label"].iloc[0]),
-                    "assignment_basis": str(assigned["assignment_basis"].iloc[0]),
+                    "assignment_basis": str(
+                        domain_metadata.get(str(domain_id), {}).get(
+                            "assignment_basis", assigned["assignment_basis"].iloc[0]
+                        )
+                    ),
                     "eligible": True,
                     "eligibility_note": "",
                     **result,
@@ -1522,9 +2842,11 @@ class GraphService:
                 "FT50 corpus and is compared with all eligible FT50 papers."
                 if journal_scope == "ft50"
                 else "Every domain row is compared with all eligible papers "
-                "in the full corpus."
+                "in the full corpus, including papers outside the selected "
+                "domain rows."
             ),
             "baseline": baseline,
+            "baseline_domain_coverage": baseline_domain_coverage,
             "groups": groups,
             "pending_domains": metadata["pending_domains"],
             "overlap_warning": (
@@ -1781,7 +3103,7 @@ class GraphService:
             ),
             "benchmark_label": "Combined entrepreneurship",
             "comparison_definition": (
-                "Core and Additional entrepreneurship are disjoint registered "
+                "Leading and Additional entrepreneurship journals are disjoint registered "
                 "journal sets. Combined entrepreneurship is their union and is "
                 "reported as a benchmark, not as an independent third tier."
             ),
@@ -1870,6 +3192,8 @@ class GraphService:
         domain_id: str | None = None,
         filters: dict[str, str] | None = None,
         limit: int = 100,
+        minimum_agreement: int = 1,
+        preferred_only: bool = False,
     ) -> dict:
         """Return papers behind a construct-contrasting bar, cell or configuration."""
 
@@ -1897,23 +3221,26 @@ class GraphService:
             dimension_column(frame, definition["id"])
             for definition in THEORY_DIMENSIONS
         }
-        for column, value in (filters or {}).items():
+        exact_filters = {str(key): str(value) for key, value in (filters or {}).items()}
+        for column, value in exact_filters.items():
             if column not in allowed_columns:
                 raise ValueError(f"Unsupported evidence filter: {column}")
             if column not in frame.columns:
                 frame = frame.iloc[0:0]
                 break
             frame = frame[frame[column].astype(str).str.strip().eq(str(value))]
-        total = len(frame)
-        return {
-            "total_papers": total,
-            "returned_papers": min(total, limit),
-            "papers": self._paper_inspection_records(
-                frame,
-                selected_columns=tuple((filters or {}).keys()),
-                limit=limit,
-            ),
-        }
+        agreement_filters = dict(exact_filters)
+        if study_status != "all":
+            agreement_filters[AI_STUDY_STATUS_COLUMN] = study_status
+        return self._agreement_evidence_bundle(
+            frame,
+            agreement_filters,
+            selected_columns=tuple(agreement_filters),
+            limit=limit,
+            minimum_agreement=minimum_agreement,
+            preferred_only=preferred_only,
+            reference_model=model,
+        )
 
     def _numeric(self, frame: pd.DataFrame, column: str) -> pd.Series:
         if column not in frame.columns:
@@ -2314,7 +3641,8 @@ class GraphService:
     ) -> dict:
         """Return the Neo4j seed or a bounded dataframe fallback."""
 
-        if self.neo4j is not None:
+        neo4j_scope = scope_id in SCOPE_BY_ID
+        if self.neo4j is not None and neo4j_scope:
             return self.neo4j.seed(
                 scope_id,
                 limit=limit,
@@ -2331,7 +3659,11 @@ class GraphService:
                 "nodes": [],
                 "edges": [],
                 "counts": {},
-                "message": "Specification-guided graph filtering requires Neo4j.",
+                "message": (
+                    "Specification-guided graph filtering requires a Neo4j-backed "
+                    "retrieval scope. Reset the specification filter for this "
+                    "derived dataset scope."
+                ),
             }
         return self._publication_graph(
             self._scope(scope_id), scope_id, min(limit, 100), node_types
@@ -2348,6 +3680,11 @@ class GraphService:
 
         if self.neo4j is None:
             return self._graph_unavailable(scope_id, "Focus requires Neo4j.")
+        if scope_id not in SCOPE_BY_ID:
+            return self._graph_unavailable(
+                scope_id,
+                "Focus is unavailable for derived dataset scopes; reset the bounded scope seed.",
+            )
         return self.neo4j.neighborhood(
             scope_id, node_id, relationship_types=relationship_types
         )
@@ -2363,6 +3700,11 @@ class GraphService:
 
         if self.neo4j is None:
             return self._graph_unavailable(scope_id, "Expansion requires Neo4j.")
+        if scope_id not in SCOPE_BY_ID:
+            return self._graph_unavailable(
+                scope_id,
+                "Expansion is unavailable for derived dataset scopes; reset the bounded scope seed.",
+            )
         return self.neo4j.expand(
             scope_id, node_id, relationship_types=relationship_types
         )
@@ -2377,7 +3719,7 @@ class GraphService:
     ) -> list[dict]:
         """Search graph nodes within a scope."""
 
-        if self.neo4j is None:
+        if self.neo4j is None or scope_id not in SCOPE_BY_ID:
             return []
         return self.neo4j.search(
             scope_id, text, node_types=node_types, limit=limit

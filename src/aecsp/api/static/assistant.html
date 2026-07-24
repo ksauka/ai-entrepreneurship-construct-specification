@@ -4,14 +4,17 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI-Entrepreneurship Construct Specification Platform - Assistant</title>
-<link rel="stylesheet" href="/static/esd.css" />
+<link rel="stylesheet" href="/static/esd.css?v=publication-counts-20260724" />
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
+<script src="/static/scope_context.js?v=domain-scope-info-20260724"></script>
+<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 <style>
-  .q-list { display: flex; flex-direction: column; gap: 10px; }
-  .q-item { text-align: left; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line);
-            background: var(--bg-soft); cursor: pointer; transition: all 0.2s ease; font-size: 0.92em; color: var(--ink); }
-  .q-item:hover { border-color: var(--primary); transform: translateX(3px); }
-  .q-item.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .q-list { display: flex; flex-direction: column; gap: 7px; }
+  .q-item { text-align: left; padding: 13px 14px; border-radius: 4px; border: 1px solid var(--line);
+            background: var(--bg-soft); cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease;
+            font-size: 0.88em; line-height: 1.5; color: var(--ink); }
+  .q-item:hover { border-color: var(--primary); background: #e9f0ee; }
+  .q-item.active { background: var(--ink); color: #fff; border-color: var(--ink); }
   .controls-inline { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
   .answer { min-height: 200px; }
 </style>
@@ -19,7 +22,7 @@
 <body>
 <div class="container">
   <header class="app-header">
-    <h1>Construct Specification Assistant</h1>
+    <div class="platform-name">AI-Entrepreneurship Construct Specification Platform</div>
     <p>Ask how AI is specified across the corpus. Each answer links to the exact papers behind it.</p>
     <nav class="nav-links">
       <a class="nav-link" href="/">Analytics Dashboard</a>
@@ -33,6 +36,7 @@
       <label>Dataset scope <select id="scope"></select></label>
       <span id="status" class="status-pill warn">loading</span>
     </div>
+    <div id="currentDatasetContext" class="selection-context" aria-live="polite"></div>
   </header>
 
   <div class="grid-2">
@@ -57,6 +61,7 @@ const QUESTIONS = [
   { id:"typerole", text:"Same AI type but different role, a construct contrast",                     contrast:["ai_type_form","ai_role_function"] },
 ];
 let scope = "full_corpus";
+let availableScopes = [];
 const api = (p) => fetch(p).then(r => r.json());
 const el = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -66,9 +71,19 @@ async function init() {
   el("status").className = "status-pill " + (h.has_specifications ? "ok" : "warn");
   el("status").textContent = h.has_specifications ? "specifications coded" : "run Stage 2A.5 for full answers";
   const scopes = await api("/api/scopes");
+  availableScopes = scopes;
   el("scope").innerHTML = scopes.map(s => `<option value="${s.id}">${esc(s.label)} (${s.papers.toLocaleString()})</option>`).join("");
-  el("scope").onchange = e => { scope = e.target.value; el("controls").innerHTML=""; el("answer").innerHTML='<p class="muted">Pick a question.</p>'; };
+  ScopeContext.attachInfo("scope", scopes);
+  updateCurrentDatasetContext();
+  el("scope").onchange = e => { scope = e.target.value; updateCurrentDatasetContext(); el("controls").innerHTML=""; el("answer").innerHTML='<p class="muted">Pick a question.</p>'; };
   el("qlist").innerHTML = QUESTIONS.map(q => `<div class="q-item" data-id="${q.id}" onclick="pick('${q.id}')">${esc(q.text)}</div>`).join("");
+}
+
+function updateCurrentDatasetContext() {
+  ScopeContext.render(
+    "currentDatasetContext",
+    availableScopes.find(item => item.id === scope),
+  );
 }
 
 async function pick(id) {

@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=%h/projects/ETV_V2
 Environment=ETV_DASHBOARD_REQUIRE_AUTH=1
+Environment=ETV_DASHBOARD_READ_ONLY=0
 EnvironmentFile=%h/.config/etv-dashboard/auth.env
 ExecStart=%h/projects/ETV_V2/scripts/serve_dashboard.sh
 Restart=on-failure

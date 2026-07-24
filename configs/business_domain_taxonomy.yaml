@@ -1,15 +1,16 @@
 taxonomy:
-  id: scopus-asjc-with-legacy-domains-v4-draft
+  id: official-scopus-asjc-business-aggregation-v5
   title: Scopus ASJC source classification and derived business-domain taxonomy
   status: active_current_corpus_assignments_built
   created_on: "2026-07-20"
   assignment_levels:
     - scopus_source_inherited_by_paper
+    - explicit_asjc_code_to_analytical_domain
     - registered_query_membership_for_ft50_and_entrepreneurship_domains
-    - registered_journal_domain_membership_for_represented_sources
+    - reviewed_source_overlay_when_no_direct_asjc_category_exists
   assignment_mode: multilabel
   primary_domain_required: false
-  unmapped_value: Unclassified
+  unmapped_value: Outside selected analytical domains
 
 source_registry:
   path: configs/legacy_taxonomies/domains_custom_10_fields_2025-09-08.py
@@ -122,7 +123,7 @@ legacy_fields:
     registered_journals_in_legacy_source: 44
 
 final_analytical_domains:
-  count: 13
+  count: 12
   domains:
     - ft50
     - core_entrepreneurship
@@ -135,7 +136,6 @@ final_analytical_domains:
     - operations
     - organization_studies
     - environmental_and_sustainability
-    - ethics_and_corporate_social_responsibility
     - tourism
 
 required_theory_contrast_coverage:
@@ -145,7 +145,7 @@ required_theory_contrast_coverage:
     current_corpus_papers: 438
   core_entrepreneurship:
     basis: in_query_3
-    display_name: Core entrepreneurship
+    display_name: Leading entrepreneurship journals
     current_corpus_papers: 646
   other_entrepreneurship:
     basis: in_query_4
@@ -174,28 +174,31 @@ required_theory_contrast_coverage:
     refinement: retain_registered_multilabel_membership
   additional_registered_domains:
     - Environmental_and_Sustainability
-    - Ethics_CSR_and_Governance
     - Tourism_Leisure_Hospitality
 
 current_corpus_domain_construction:
   status: complete
   construction_rule: >
-    Use the preserved journal-domain registries as filters over source titles
-    represented in the existing corpus. No new papers are searched for or
-    added to populate a domain.
+    Apply the explicit ASJC-code aggregation in
+    configs/asjc_business_domain_aggregation.yaml to the completed official
+    paper-level source classifications. No new papers are searched for or added
+    to populate a domain. The active horizontal domains use official ASJC codes
+    only; the historical Ethics, CSR and governance journal overlay is retained
+    for provenance but excluded from the active comparison.
+  aggregation: configs/asjc_business_domain_aggregation.yaml
   aliases: configs/business_domain_journal_aliases.csv
   assignments: data/processed/analysis/theory_elaboration/domains/business_domain_assignments.csv
   represented_sources: data/processed/analysis/theory_elaboration/domains/business_domain_source_titles.csv
   manifest: data/processed/analysis/theory_elaboration/domains/business_domain_manifest.json
-  registered_domain_count: 10
-  combined_with_query_defined_domains: 13
+  registered_domain_count: 9
+  combined_with_query_defined_domains: 12
 
 registered_query_domain_construction:
   status: approved_by_user_2026-07-20
   reason: >
     FT50 remains a distinct analytical domain defined by registered Query 2.
     The historical registry combines entrepreneurship and innovation, so the
-    design separately defines core entrepreneurship through Query 3 and other
+    design separately defines leading entrepreneurship journals through Query 3 and additional
     entrepreneurship through Query 4, while retaining innovation as an
     ASJC-derived domain.
   domains:
@@ -206,11 +209,11 @@ registered_query_domain_construction:
       current_corpus_papers: 438
       current_corpus_source_titles: 37
     core_entrepreneurship:
-      display_name: Core entrepreneurship
+      display_name: Leading entrepreneurship journals
       basis: in_query_3
       source_scope_label: Leading entrepreneurship journals
       current_corpus_papers: 646
-      current_corpus_source_titles: 15
+      current_corpus_source_titles: 14
     other_entrepreneurship:
       display_name: Additional entrepreneurship
       basis: in_query_4
@@ -225,7 +228,7 @@ registered_query_domain_construction:
   interpretation: >
     These are corpus-specific domains defined by the registered search design.
     They are not official ASJC categories. FT50 can overlap another domain;
-    Core and Additional entrepreneurship are disjoint registered populations.
+    Leading and Additional entrepreneurship are disjoint registered populations.
   prohibited_basis:
     - automatic topic label
     - model-assigned AI specification code
@@ -250,34 +253,37 @@ normalization:
     silently strip punctuation.
 
 assignment_rules:
-  - A journal may belong to more than one field, exactly as in the legacy registry.
-  - A paper inherits every registered field of its source journal.
+  - A paper inherits every analytical domain mapped from the official ASJC codes of its source.
+  - Domain membership is multi-label and no arbitrary primary domain is imposed.
+  - A reviewed source-title overlay is permitted only when the domain has no direct ASJC category and its rationale is registered explicitly.
   - No arbitrary primary field is used in the horizontal contrast.
   - Multi-label incidence uses unique papers as its denominator, so field percentages may sum above 100 percent.
-  - Query membership is reported separately except for the explicitly registered Query 2 FT50, Query 3 Core entrepreneurship and Query 4 Additional entrepreneurship domains.
-  - FT50 is a separate analytical domain and may overlap Core entrepreneurship.
-  - Unmapped titles remain Unclassified until a reviewed crosswalk revision is approved.
+  - Query membership is reported separately except for the explicitly registered Query 2 FT50, Query 3 Leading entrepreneurship journals and Query 4 Additional entrepreneurship domains.
+  - FT50 is a separate analytical domain and may overlap Leading entrepreneurship journals.
+  - Papers carrying no selected domain code remain Outside selected analytical domains; they are not described as unclassified by Scopus.
   - Every alias, addition, deletion, and split decision retains its reviewer, rationale, date, and taxonomy version.
 
 current_corpus_audit:
-  audited_on: "2026-07-20"
+  audited_on: "2026-07-22"
   primary_dataset: data/processed/analysis/primary_analysis_dataset.csv
   papers: 22345
-  distinct_source_title_strings: 558
-  unique_normalized_source_titles: 554
-  legacy_fields: 10
-  source_title_strings_mapped: 226
-  source_title_strings_unclassified: 332
-  normalized_source_titles_mapped: 223
-  normalized_source_titles_unclassified: 331
-  papers_unclassified: 5243
-  papers_unclassified_percent: 23.46
-  papers_with_multiple_legacy_fields: 2002
-  status: baseline_only_not_final
+  analytical_domains: 9
+  unique_assigned_papers: 19505
+  assigned_papers_percent: 87.2902
+  paper_domain_rows: 29730
+  papers_with_multiple_domains: 8669
+  residual_papers: 2840
+  residual_papers_percent: 12.7098
+  residual_source_titles: 176
+  all_registered_group_count: 12
+  all_registered_group_unique_papers: 19748
+  all_registered_group_residual_papers: 2597
+  all_registered_group_residual_percent: 11.6223
+  status: complete_official_asjc_only_aggregation_with_disclosed_residual
   implication: >
-    This section records only the coverage of the historical custom 10-field
-    taxonomy. It is retained for provenance and must not be confused with the
-    official Scopus ASJC assignment audit below.
+    Every paper has an official Scopus ASJC assignment. Residual papers fall
+    outside the selected analytical-domain aggregation and remain in the full-
+    corpus comparison baseline; they are not missing classifications.
 
 official_asjc_corpus_audit:
   audited_on: "2026-07-20"
@@ -335,10 +341,14 @@ review:
     resolution: adjudication_record
 
 artifacts:
+  asjc_domain_aggregation: configs/asjc_business_domain_aggregation.yaml
   migrated_registry: configs/business_domain_journals.yaml
   journal_aliases: configs/business_domain_journal_aliases.yaml
   journal_crosswalk: data/processed/analysis/theory_elaboration/business_domain_crosswalk.csv
   assignment_audit: data/processed/analysis/theory_elaboration/domain_audit.csv
+  business_domain_assignments: data/processed/analysis/theory_elaboration/domains/business_domain_assignments.csv
+  business_domain_residual_papers: data/processed/analysis/theory_elaboration/domains/business_domain_residual_papers.csv
+  business_domain_residual_sources: data/processed/analysis/theory_elaboration/domains/business_domain_residual_source_titles.csv
   registered_query_domain_assignments: data/processed/analysis/theory_elaboration/domains/registered_query_domain_assignments.csv
   registered_query_domain_source_titles: data/processed/analysis/theory_elaboration/domains/registered_query_domain_source_titles.csv
   registered_query_domain_manifest: data/processed/analysis/theory_elaboration/domains/registered_query_domain_manifest.json

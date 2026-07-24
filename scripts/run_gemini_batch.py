@@ -43,6 +43,7 @@ CACHE_ROOT = PROJECT_ROOT / "data/interim/spec_cache"
 PROCESSED = PROJECT_ROOT / "data/processed"
 TERMINAL = {"JOB_STATE_SUCCEEDED", "JOB_STATE_FAILED", "JOB_STATE_CANCELLED", "JOB_STATE_EXPIRED"}
 MAX_TIER_1_SAFE_DIRECT_PAPERS = 2_500
+QUOTA_RETRY_EXIT_CODE = 75
 
 
 def sha256(path: Path) -> str:
@@ -188,6 +189,34 @@ def completion_counts(job: object, total: int) -> tuple[int, int]:
     return min(completed, total), failed
 
 
+def is_retryable_quota_error(error: Exception) -> bool:
+    """Identify a submission rejection that is safe to retry later."""
+
+    status = getattr(error, "status_code", None)
+    message = str(error).upper()
+    return status == 429 or "RESOURCE_EXHAUSTED" in message
+
+
+def create_batch_job(client, *, model: str, uploaded_file: str):
+    """Create one paid Batch job or signal a temporary quota rejection."""
+
+    try:
+        return client.batches.create(
+            model=model,
+            src=uploaded_file,
+            config={"display_name": "etv-spec-v3-gemini"},
+        )
+    except Exception as error:
+        if not is_retryable_quota_error(error):
+            raise
+        print(
+            "Gemini submission was not accepted because provider quota is "
+            "temporarily exhausted; the shard remains unsubmitted.",
+            flush=True,
+        )
+        raise SystemExit(QUOTA_RETRY_EXIT_CODE) from None
+
+
 def validate_one(client, types, model: str, paper: dict[str, str], batch_dir: Path) -> None:
     """Run one paid live request before permitting a Batch experiment."""
 
@@ -249,6 +278,14 @@ def main() -> None:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--paper-ids-file", type=Path, default=DEFAULT_TARGET)
     parser.add_argument("--yes", action="store_true")
+    parser.add_argument(
+        "--skip-export",
+        action="store_true",
+        help=(
+            "Do not write a target-scoped CSV after fetch. The full-corpus "
+            "shard driver uses this and rebuilds one aggregate export instead."
+        ),
+    )
     parser.add_argument("--poll-seconds", type=int, default=15)
     args = parser.parse_args()
     if args.poll_seconds < 5:
@@ -287,9 +324,10 @@ def main() -> None:
                 file=str(batch_dir / "requests.jsonl"),
                 config=types.UploadFileConfig(display_name="etv-spec-v3-gemini", mime_type="jsonl"),
             )
-            job = client.batches.create(
-                model=args.model, src=uploaded.name,
-                config={"display_name": "etv-spec-v3-gemini"},
+            job = create_batch_job(
+                client,
+                model=args.model,
+                uploaded_file=uploaded.name,
             )
             state = {
                 "job_name": job.name, "uploaded_file": uploaded.name,
@@ -313,7 +351,11 @@ def main() -> None:
         if not (batch_dir / "requests.jsonl").exists():
             prepare(args.model, papers, cache_dir, target)
         uploaded = client.files.upload(file=str(batch_dir / "requests.jsonl"), config=types.UploadFileConfig(display_name="etv-spec-v3-gemini", mime_type="jsonl"))
-        job = client.batches.create(model=args.model, src=uploaded.name, config={"display_name": "etv-spec-v3-gemini"})
+        job = create_batch_job(
+            client,
+            model=args.model,
+            uploaded_file=uploaded.name,
+        )
         state = {"job_name": job.name, "uploaded_file": uploaded.name, "state": job.state.name, "submitted_at": datetime.now().isoformat(), "fetched": False}
         save_state(state_path, state)
         print(f"Submitted {job.name} ({len(papers):,} target papers)")
@@ -385,7 +427,7 @@ def main() -> None:
     state["fetched"] = True; state["fetched_at"] = datetime.now().isoformat(); state["cached"] = ok; state["failed"] = failed
     save_state(state_path, state)
     print(f"Fetched {ok:,} successful records; {failed:,} failures")
-    if args.command in {"watch", "run"}:
+    if args.command in {"watch", "run"} and not args.skip_export:
         export(args.model, papers, cache_dir)
 
 

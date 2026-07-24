@@ -91,6 +91,7 @@ const NODE_KEYS = Object.freeze({
 });
 
 let graphScope = "full_corpus";
+let availableScopes = [];
 let graphStatus = null;
 let network = null;
 let graphNodes = new vis.DataSet([]);
@@ -152,16 +153,27 @@ async function initKnowledgeGraph() {
     api("/api/scopes"),
   ]);
   graphStatus = status;
+  availableScopes = scopes;
   renderConnectionStatus();
   el("graphScope").innerHTML = scopes.map(scope =>
     `<option value="${esc(scope.id)}">${esc(scope.label)} (${Number(scope.papers).toLocaleString()})</option>`
   ).join("");
+  ScopeContext.attachInfo("graphScope", scopes);
+  updateCurrentDatasetContext();
   await loadSeed();
+}
+
+function updateCurrentDatasetContext() {
+  ScopeContext.render(
+    "currentDatasetContext",
+    availableScopes.find(scope => scope.id === graphScope),
+  );
 }
 
 function wireControls() {
   el("graphScope").addEventListener("change", async event => {
     graphScope = event.target.value;
+    updateCurrentDatasetContext();
     await updateSpecificationValues();
     await loadSeed();
   });
@@ -298,7 +310,7 @@ function toVisNode(node) {
       hover: { background: colour, border: "#111827" },
     },
     shape: type === "Publication" ? "dot" : (type === "SpecificationProfile" ? "diamond" : "box"),
-    font: { size: type === "Publication" ? 13 : 11, color: "#1f2937", face: "Segoe UI" },
+    font: { size: type === "Publication" ? 13 : 11, color: "#1f2937", face: "IBM Plex Sans" },
     borderWidth: 1,
   };
 }
@@ -315,7 +327,7 @@ function toVisEdge(edge) {
     value: weight,
     arrows: { to: { enabled: true, scaleFactor: 0.45 } },
     color: { color: "#aab2bd", highlight: "#2c3e50", opacity: 0.75 },
-    font: { size: 9, color: "#5f6b76", strokeWidth: 4, strokeColor: "#ffffff", align: "middle" },
+    font: { size: 9, color: "#465763", face: "IBM Plex Mono", strokeWidth: 4, strokeColor: "#ffffff", align: "middle" },
     smooth: { type: "dynamic" },
   };
 }

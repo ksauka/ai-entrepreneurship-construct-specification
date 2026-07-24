@@ -1,0 +1,135 @@
+aggregation:
+  id: official-scopus-asjc-to-business-domains-2026-07-22
+  title: Official Scopus ASJC aggregation for the horizontal business-domain analysis
+  status: reviewed_for_current_corpus
+  source_release: June 2026
+  source_assignments: data/processed/analysis/theory_elaboration/asjc/paper_asjc_assignments_long.csv
+  assignment_mode: multilabel
+  primary_domain_required: false
+  rule: >
+    A paper inherits every analytical domain whose explicitly registered ASJC
+    code occurs among the official classifications of its Scopus source. Codes
+    are never inferred from paper text, topic labels, or model classifications.
+  residual_label: Outside selected analytical domains
+  residual_rule: >
+    A residual paper has an official Scopus ASJC assignment but none of its
+    source codes maps to one of the selected analytical domains and it does not
+    enter an approved source-title overlay. Residual does not mean unclassified
+    by Scopus.
+  baseline_rule: >
+    The full-corpus baseline retains every successfully coded paper, including
+    papers outside the selected domain rows. In observed views the denominator
+    is the subset with a substantive code for the displayed dimension.
+
+domains:
+  innovation:
+    label: Management of Technology and Innovation
+    mapping_mode: official_asjc
+    asjc_codes:
+      "1405": Management of Technology and Innovation
+    rationale: >
+      Exact label and direct correspondence to Scopus ASJC 1405. This is a
+      source-level category and is not interpreted as a narrow article-level
+      innovation classification.
+
+  strategy:
+    label: Strategy and Management
+    mapping_mode: official_asjc
+    asjc_codes:
+      "1408": Strategy and Management
+    rationale: >
+      Exact label and direct correspondence to Scopus ASJC 1408. This is a
+      broad source-level management category and is not interpreted as a
+      narrow article-level strategy classification.
+
+  marketing:
+    label: Marketing
+    mapping_mode: official_asjc
+    asjc_codes:
+      "1406": Marketing
+    rationale: Direct correspondence to the named Scopus business category.
+
+  information_systems:
+    label: Information systems
+    mapping_mode: official_asjc
+    asjc_codes:
+      "1404": Management Information Systems
+      "1710": Information Systems
+      "1802": Information Systems and Management
+    rationale: >
+      The analytical domain joins the three official Scopus categories that
+      explicitly name information systems, including the management and
+      decision-sciences variants.
+
+  finance:
+    label: Finance
+    mapping_mode: official_asjc
+    asjc_codes:
+      "2003": Finance
+    rationale: Direct correspondence to the named Scopus category; general economics is not forced into Finance.
+
+  operations:
+    label: Management Science and Operations Research
+    mapping_mode: official_asjc
+    asjc_codes:
+      "1803": Management Science and Operations Research
+    rationale: >
+      Exact label and direct correspondence to Scopus ASJC 1803. This is a
+      source-level decision-sciences category; engineering-only classifications
+      are not treated as management science and operations research.
+
+  organization_studies:
+    label: Organization studies
+    mapping_mode: official_asjc
+    asjc_codes:
+      "1407": Organizational Behavior and Human Resource Management
+      "1410": Industrial relations
+    rationale: >
+      Organization studies is an analytical umbrella, not an official Scopus
+      category label. It joins the two disclosed official business categories
+      that locate organizational behavior, employment relations, and
+      human-resource scholarship.
+
+  environmental_and_sustainability:
+    label: Environmental and sustainability
+    mapping_mode: official_asjc
+    asjc_codes:
+      "2105": Renewable Energy, Sustainability and the Environment
+      "2300": General Environmental Science
+      "2301": Environmental Science (miscellaneous)
+      "2302": Ecological Modeling
+      "2303": Ecology
+      "2304": Environmental Chemistry
+      "2305": Environmental Engineering
+      "2306": Global and Planetary Change
+      "2307": Health, Toxicology and Mutagenesis
+      "2308": Management, Monitoring, Policy and Law
+      "2309": Nature and Landscape Conservation
+      "2310": Pollution
+      "2311": Waste Management and Disposal
+      "2312": Water Science and Technology
+    rationale: >
+      Environmental and sustainability is an analytical aggregation, not an
+      official Scopus category label. It contains the complete Scopus
+      Environmental Science code family together with the explicit
+      sustainability-and-environment energy code.
+
+  tourism:
+    label: Tourism, Leisure and Hospitality Management
+    mapping_mode: official_asjc
+    asjc_codes:
+      "1409": Tourism, Leisure and Hospitality Management
+    rationale: Exact label and direct correspondence to Scopus ASJC 1409.
+
+excluded_broad_codes:
+  "1400": General Business, Management and Accounting
+  "1401": Business, Management and Accounting (miscellaneous)
+  "1403": Business and International Management
+  "2000": General Economics, Econometrics and Finance
+  "2001": Economics, Econometrics and Finance (miscellaneous)
+  "2002": Economics and Econometrics
+  reason: >
+    These broad categories do not identify one of the selected horizontal
+    domains without an additional arbitrary primary-domain decision. Papers
+    carrying only these codes remain in the disclosed residual and in the
+    full-corpus baseline.

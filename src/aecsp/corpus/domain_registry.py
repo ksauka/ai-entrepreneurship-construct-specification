@@ -102,3 +102,134 @@ def build_registry_domain_assignments(
         kind="stable",
     ) if source_rows else pd.DataFrame()
     return assignment_frame.reset_index(drop=True), source_frame.reset_index(drop=True)
+
+
+def build_asjc_domain_assignments(
+    corpus: pd.DataFrame,
+    paper_asjc: pd.DataFrame,
+    domains: dict[str, dict[str, object]],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Aggregate official source-level ASJC codes into analytical domains.
+
+    Only definitions with ``mapping_mode=official_asjc`` are processed here.
+    A paper can inherit multiple domains and a domain can match several codes;
+    output rows remain unique by paper and domain. The source-title summary
+    records the exact codes that generated each domain membership.
+    """
+
+    corpus_required = {"paper_id", "Source title"}
+    asjc_required = {
+        "paper_id",
+        "asjc_code",
+        "asjc_description",
+    }
+    if not corpus_required.issubset(corpus.columns):
+        raise ValueError(
+            f"Corpus is missing ASJC-domain fields: {sorted(corpus_required - set(corpus.columns))}"
+        )
+    if not asjc_required.issubset(paper_asjc.columns):
+        raise ValueError(
+            "Paper ASJC table is missing required fields: "
+            f"{sorted(asjc_required - set(paper_asjc.columns))}"
+        )
+    if corpus["paper_id"].astype(str).duplicated().any():
+        raise ValueError("paper_id must be unique before ASJC-domain assignment")
+
+    corpus_index = corpus[["paper_id", "Source title"]].copy()
+    corpus_index["paper_id"] = corpus_index["paper_id"].astype(str)
+    corpus_index = corpus_index.rename(columns={"Source title": "source_title"})
+    corpus_ids = set(corpus_index["paper_id"])
+    codes = paper_asjc.copy()
+    codes["paper_id"] = codes["paper_id"].astype(str)
+    codes["asjc_code"] = codes["asjc_code"].astype(str).str.strip()
+    codes = codes[codes["paper_id"].isin(corpus_ids)]
+
+    assignments: list[pd.DataFrame] = []
+    source_rows: list[dict[str, object]] = []
+    for domain_id, definition in domains.items():
+        if str(definition.get("mapping_mode", "")) != "official_asjc":
+            continue
+        domain_codes = {
+            str(code).strip(): str(description)
+            for code, description in dict(definition.get("asjc_codes", {})).items()
+        }
+        if not domain_codes:
+            raise ValueError(f"ASJC domain {domain_id} has no registered codes")
+        selected_codes = codes[codes["asjc_code"].isin(domain_codes)].copy()
+        if selected_codes.empty:
+            raise ValueError(
+                f"ASJC domain {domain_id} has no represented papers for codes "
+                f"{sorted(domain_codes)}"
+            )
+        grouped = (
+            selected_codes.groupby("paper_id", sort=False)["asjc_code"]
+            .agg(lambda values: ";".join(sorted(set(values))))
+            .rename("matched_asjc_codes")
+            .reset_index()
+        )
+        selected = corpus_index.merge(grouped, on="paper_id", how="inner")
+        selected["domain_id"] = str(domain_id)
+        selected["domain_label"] = str(definition["label"])
+        selected["assignment_basis"] = selected["matched_asjc_codes"].map(
+            lambda value: f"official_scopus_asjc:{value}"
+        )
+        assignments.append(
+            selected[
+                [
+                    "paper_id",
+                    "source_title",
+                    "domain_id",
+                    "domain_label",
+                    "assignment_basis",
+                ]
+            ]
+        )
+
+        source_codes = selected_codes[
+            ["paper_id", "asjc_code", "asjc_description"]
+        ].merge(
+            corpus_index, on="paper_id", how="inner", validate="many_to_one"
+        )
+        for source_title, source_group in source_codes.groupby(
+            "source_title", sort=True
+        ):
+            source_papers = source_group["paper_id"].nunique()
+            matched_codes = sorted(set(source_group["asjc_code"]))
+            descriptions = [domain_codes[code] for code in matched_codes]
+            source_rows.append(
+                {
+                    "domain_id": str(domain_id),
+                    "domain_label": str(definition["label"]),
+                    "mapping_mode": "official_asjc",
+                    "asjc_codes": ";".join(matched_codes),
+                    "asjc_descriptions": "; ".join(descriptions),
+                    "source_title": str(source_title),
+                    "papers": int(source_papers),
+                    "assignment_basis": (
+                        "official_scopus_asjc:" + ";".join(matched_codes)
+                    ),
+                }
+            )
+
+    columns = [
+        "paper_id",
+        "source_title",
+        "domain_id",
+        "domain_label",
+        "assignment_basis",
+    ]
+    if assignments:
+        assignment_frame = pd.concat(assignments, ignore_index=True)[columns]
+        assignment_frame = assignment_frame.drop_duplicates(
+            ["paper_id", "domain_id"]
+        ).sort_values(["domain_id", "source_title", "paper_id"], kind="stable")
+    else:
+        assignment_frame = pd.DataFrame(columns=columns)
+    source_frame = pd.DataFrame(source_rows)
+    if not source_frame.empty:
+        source_frame = source_frame.sort_values(
+            ["domain_id", "papers", "source_title"],
+            ascending=[True, False, True],
+            kind="stable",
+        )
+    return assignment_frame.reset_index(drop=True), source_frame.reset_index(drop=True)

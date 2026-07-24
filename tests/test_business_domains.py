@@ -37,6 +37,9 @@ def test_builds_two_disjoint_entrepreneurship_domains():
         {"paper_id": "p1", "domain_id": "core_entrepreneurship"},
         {"paper_id": "p2", "domain_id": "other_entrepreneurship"},
     ]
+    assert set(result.loc[result["domain_id"].eq("core_entrepreneurship"), "domain_label"]) == {
+        "Leading entrepreneurship journals"
+    }
     summary = summarize_entrepreneurship_domain_journals(result)
     assert summary["papers"].tolist() == [1, 1]
 

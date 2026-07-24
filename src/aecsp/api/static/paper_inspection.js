@@ -69,6 +69,57 @@ function profileTable(dimensions) {
   </table></div>`;
 }
 
+function modelAgreementMarkup(agreement) {
+  if (!agreement || !Array.isArray(agreement.pattern) || !agreement.pattern.length) return "";
+  const reference = agreement.reference_model || null;
+  const referenceLabel = reference?.label || "";
+  const agreeing = Array.isArray(agreement.agreement_models)
+    ? agreement.agreement_models.map(item => item.label).filter(Boolean)
+    : [];
+  const assignments = Array.isArray(agreement.assignments) ? agreement.assignments : [];
+  const pattern = agreement.pattern.map(item =>
+    `${item.label} = ${item.display_value}`
+  ).join("; ");
+  const agreementCount = Number(agreement.models_agreeing || 0);
+  const total = Number(agreement.models_total || 0);
+  const isCrossModel = agreementCount >= 2;
+  const isPreferredSweetSpot = Boolean(agreement.preferred_sweet_spot);
+  const agreementLabel = agreeing.length ? agreeing.join(", ") : "No models";
+  const rows = assignments.map(item => {
+    const status = !item.available
+      ? "Paper not coded"
+      : item.matches ? "Matches selected pattern" : "Different assignment";
+    const values = agreement.pattern.map(patternItem => {
+      const value = item.values?.[patternItem.column];
+      return `${patternItem.label}: ${inspectionText(value, "Missing value")}`;
+    }).join("; ");
+    const label = item.is_reference
+      ? `${item.label} (selected evidence model)`
+      : item.label;
+    return `<tr><th>${_escAttr(label)}</th><td>${_escAttr(status)}</td><td>${_escAttr(values)}</td></tr>`;
+  }).join("");
+  return `<section class="model-agreement ${isCrossModel ? "model-agreement-cross-model" : ""} ${isPreferredSweetSpot ? "model-agreement-sweet-spot" : ""}">
+    <h3>${isCrossModel ? "Cross-model agreement" : "Model comparison"}</h3>
+    ${referenceLabel ? `<p><strong>Evidence reference:</strong> ${_escAttr(referenceLabel)}. This model defines the supporting-paper set and selected code.</p>` : ""}
+    <p><strong>Selected pattern:</strong> ${_escAttr(pattern)}</p>
+    <p><strong>Agreement among:</strong> ${_escAttr(agreementLabel)}</p>
+    <div class="tag-row">
+      <span class="pill">${agreementCount.toLocaleString()} of ${total.toLocaleString()} models agree</span>
+      ${referenceLabel ? `<span class="pill">Reference: ${_escAttr(referenceLabel)}</span>` : ""}
+      ${isCrossModel ? `<span class="pill">Cross-model agreement</span>` : ""}
+      ${isPreferredSweetSpot ? `<span class="pill agreement-sweet-spot-pill">${_escAttr(agreement.preferred_agreement_label)}</span>` : ""}
+      ${agreement.all_models_agree ? `<span class="pill">All displayed models agree</span>` : ""}
+    </div>
+    <details class="inspection-details">
+      <summary>Compare model assignments</summary>
+      <div class="inspection-profile-wrap"><table class="inspection-profile">
+        <thead><tr><th>Model</th><th>Result</th><th>Assigned values</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </details>
+  </section>`;
+}
+
 function paperInspectionCard(paper, selectedColumns = [], selectionContext = "") {
   const inspection = paper._inspection || {};
   const dimensions = Array.isArray(inspection.dimensions)
@@ -111,6 +162,7 @@ function paperInspectionCard(paper, selectedColumns = [], selectionContext = "")
     : contextMarkup
       ? ""
       : `<p class="inspection-empty">This selection has no dimension-specific code filter.</p>`);
+  const agreementMarkup = modelAgreementMarkup(paper._model_agreement);
 
   return `<article class="paper-inspection-card">
     <header class="paper-inspection-header">
@@ -118,6 +170,7 @@ function paperInspectionCard(paper, selectedColumns = [], selectionContext = "")
       <p>${_escAttr(citation(paper))} | ${_escAttr(source)} | ${_escAttr(year)}</p>
       <p>${_escAttr(authors)}${citationDisplay}</p>
     </header>
+    ${agreementMarkup}
     <h3 class="inspection-section-title">Why this paper is included</h3>
     ${rationale}
     <details class="inspection-details" open>

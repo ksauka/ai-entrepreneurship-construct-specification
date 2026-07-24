@@ -1,4 +1,4 @@
-"""Build the FT50, core entrepreneurship, and other entrepreneurship domains."""
+"""Build the FT50, Leading, and Additional entrepreneurship domains."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ def main() -> None:
     print(
         "Built registered query domains: "
         f"FT50 {counts['ft50']:,}; "
-        f"Core entrepreneurship {counts['core_entrepreneurship']:,}; "
+        f"Leading entrepreneurship journals {counts['core_entrepreneurship']:,}; "
         f"Additional entrepreneurship {counts['other_entrepreneurship']:,}."
     )
     print(f"Pairwise overlaps: {overlaps}")

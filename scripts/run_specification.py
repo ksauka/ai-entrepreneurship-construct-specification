@@ -37,6 +37,7 @@ from aecsp.specification.llm_coder import (  # noqa: E402
     protocol_fingerprint,
     protocol_for_model,
     protocol_parameters,
+    sanitize_lone_surrogates,
 )
 from aecsp.specification.analysis_columns import enrich_for_analysis  # noqa: E402
 
@@ -111,6 +112,18 @@ def content_failure_counts(path: Path) -> dict[str, int]:
         if paper_id:
             counts[paper_id] = counts.get(paper_id, 0) + 1
     return counts
+
+
+def write_csv_atomically(frame: pd.DataFrame, path: Path) -> None:
+    """Write a CSV without ever exposing a truncated final artifact."""
+
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    try:
+        frame.to_csv(temporary, index=False, encoding="utf-8-sig")
+        os.replace(temporary, path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def main() -> None:
@@ -414,14 +427,18 @@ def main() -> None:
     for pid in scoped["paper_id"]:
         cache_path = cache_dir / cache_key(pid)
         if cache_path.exists():
-            records.append(json.loads(cache_path.read_text(encoding="utf-8")))
+            records.append(
+                sanitize_lone_surrogates(
+                    json.loads(cache_path.read_text(encoding="utf-8"))
+                )
+            )
     coded = enrich_for_analysis(pd.DataFrame(records))
 
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
     model_slug = cache_dir.name
     experiment_slug = f"{model_slug}_{protocol_id}"
     out_path = SPEC_DIR / f"paper_specifications_{experiment_slug}.csv"
-    coded.to_csv(out_path, index=False, encoding="utf-8-sig")
+    write_csv_atomically(coded, out_path)
 
     report = {
         "timestamp": datetime.now().isoformat(),
