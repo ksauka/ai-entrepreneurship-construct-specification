@@ -33,6 +33,7 @@ data/interim/spec_cache/
 # Keep research and agent documentation local. Only the root README is tracked.
 *.md
 !/README.md
+!docs/DESKTOP_FAILOVER_SETUP.md
 *.txt
 !deploy/review-host-requirements.txt
 *.doc
