@@ -36,6 +36,7 @@ def test_private_operations_are_ignored_from_public_repository():
     ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
 
     assert "/deploy/" in ignore
+    assert "/scripts/update_ks_*.py" in ignore
     assert "/scripts/*review_host*" in ignore
     assert "/scripts/auto_failover_check.sh" in ignore
     assert "!docs/DESKTOP_FAILOVER_SETUP.md" not in ignore

@@ -42,6 +42,9 @@ data/interim/spec_cache/
 .claude/
 reports/
 
+# Private, researcher-specific DOCX update utilities.
+/scripts/update_ks_*.py
+
 # Private hosting, authentication, backup, and failover operations.
 /deploy/
 /scripts/*review_host*
