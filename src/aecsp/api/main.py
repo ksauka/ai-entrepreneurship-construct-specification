@@ -308,6 +308,12 @@ def _login_page(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in · AI-Entrepreneurship Construct Clarification Platform</title>
+<meta name="description" content="A research platform diagnosing how artificial intelligence is specified as a construct in entrepreneurship research. Authenticated access for reviewers and collaborators.">
+<link rel="canonical" href="https://aitheoryelaboration.org/login">
+<meta property="og:type" content="website">
+<meta property="og:title" content="AI-Entrepreneurship Construct Clarification Platform">
+<meta property="og:description" content="A research platform diagnosing how artificial intelligence is specified as a construct in entrepreneurship research.">
+<meta property="og:url" content="https://aitheoryelaboration.org/login">
 <style>
 :root{{--ink:#203247;--muted:#4f5d69;--line:#cbc8bf;--paper:#fffefa;--ground:#f1efe9;--accent:#176f69}}
 *{{box-sizing:border-box}}
@@ -341,6 +347,7 @@ button{{width:100%;margin-top:22px;padding:11px 14px;border:1px solid var(--acce
 <button type="submit">Sign in</button>
 </form>
 <p class="security">Access is role-specific. Reviewer accounts are read-only; administrator accounts can use authorised research-record controls.</p>
+<p class="security">Interested in access? Contact <a href="mailto:k.sauka@uva.nl">k.sauka@uva.nl</a>.</p>
 </main>
 </body>
 </html>"""
@@ -459,7 +466,7 @@ async def require_dashboard_authentication(request: Request, call_next):
             headers=DASHBOARD_RESPONSE_HEADERS,
         )
 
-    if request.url.path in {"/login", "/logout"}:
+    if request.url.path in {"/login", "/logout", "/robots.txt", "/sitemap.xml"}:
         request.state.dashboard_access_role = "unauthenticated"
         response = await call_next(request)
         response.headers.update(DASHBOARD_RESPONSE_HEADERS)
@@ -1023,6 +1030,37 @@ def access_mode(request: Request) -> dict:
             and os.getenv("ETV_DASHBOARD_REVIEW_PASSWORD", "")
         ),
     }
+
+
+@app.get("/robots.txt")
+def robots_txt() -> PlainTextResponse:
+    """Only the public sign-in page is crawlable; everything else needs
+    credentials no crawler has, so there is nothing to gain from indexing it."""
+
+    return PlainTextResponse(
+        "User-agent: *\n"
+        "Allow: /login\n"
+        "Disallow: /\n"
+        "Sitemap: https://aitheoryelaboration.org/sitemap.xml\n",
+        headers=DASHBOARD_RESPONSE_HEADERS,
+    )
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml() -> Response:
+    """Advertise the sign-in page as the site's one public, indexable URL."""
+
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        "<url><loc>https://aitheoryelaboration.org/login</loc></url>\n"
+        "</urlset>\n"
+    )
+    return Response(
+        body,
+        media_type="application/xml",
+        headers=DASHBOARD_RESPONSE_HEADERS,
+    )
 
 
 @app.get("/login")
