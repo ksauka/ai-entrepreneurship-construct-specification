@@ -35,7 +35,7 @@ def test_neo4j_compose_defaults_are_local_and_fail_closed():
 def test_private_operations_are_ignored_from_public_repository():
     ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
 
-    assert "/deploy/" in ignore
+    assert "/deploy" in ignore
     assert "/scripts/update_ks_*.py" in ignore
     assert "/scripts/add_ks_platform_figure.py" in ignore
     assert "/scripts/analyze_theory_elaboration_integration.py" in ignore

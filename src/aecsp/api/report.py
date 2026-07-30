@@ -11,7 +11,7 @@ import re
 from datetime import date
 
 from aecsp.corpus.scopes import SCOPE_BY_ID
-PLATFORM_NAME = "AI-Entrepreneurship Construct Specification Platform"
+PLATFORM_NAME = "AI-Entrepreneurship Construct Clarification Platform"
 
 
 def _citation(row: dict) -> str:

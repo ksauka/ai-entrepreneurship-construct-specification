@@ -1,6 +1,6 @@
-# AI-Entrepreneurship Construct Specification Platform
+# AI-Entrepreneurship Construct Clarification Platform
 
-The AI-Entrepreneurship Construct Specification Platform supports a
+The AI-Entrepreneurship Construct Clarification Platform supports a
 theory-elaboration study of how artificial intelligence is specified in
 entrepreneurship and business research. It connects corpus-level patterns to
 the papers and abstract-level evidence supporting them.

@@ -1539,7 +1539,7 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'api("/api/scopes")' in index_html
     assert (
         '<div class="platform-name">'
-        "AI-Entrepreneurship Construct Specification Platform</div>"
+        "AI-Entrepreneurship Construct Clarification Platform</div>"
     ) in index_html
     assert "<h1>Analytics Dashboard</h1>" not in index_html
     assert 'id="scopeActionSummary" class="selection-context"' in index_html

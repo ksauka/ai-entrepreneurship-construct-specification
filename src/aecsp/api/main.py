@@ -307,7 +307,7 @@ def _login_page(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in · AI-Entrepreneurship Construct Specification Platform</title>
+<title>Sign in · AI-Entrepreneurship Construct Clarification Platform</title>
 <style>
 :root{{--ink:#203247;--muted:#4f5d69;--line:#cbc8bf;--paper:#fffefa;--ground:#f1efe9;--accent:#176f69}}
 *{{box-sizing:border-box}}
@@ -328,7 +328,7 @@ button{{width:100%;margin-top:22px;padding:11px 14px;border:1px solid var(--acce
 <body>
 <main>
 <p class="eyebrow">Secure research platform</p>
-<h1>AI-Entrepreneurship Construct Specification Platform</h1>
+<h1>AI-Entrepreneurship Construct Clarification Platform</h1>
 <p class="intro">Sign in with reviewer or administrator credentials.</p>
 {message}
 {error_html}
@@ -437,7 +437,7 @@ async def lifespan(app: FastAPI):
         driver.close()
 
 
-app = FastAPI(title="ETV_V2 Construct Specification Platform", lifespan=lifespan)
+app = FastAPI(title="ETV_V2 Construct Clarification Platform", lifespan=lifespan)
 
 
 @app.middleware("http")
