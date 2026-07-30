@@ -55,7 +55,7 @@ PLATFORM_PARAGRAPHS = [
     ),
     (
         "The same workspace makes model sensitivity and convergence inspectable. Users can compare aggregate "
-        "leaders, study-status-conditioned cells, Leading-Additional directions, role-level locations, and "
+        "leaders, cells conditioned on AI positioning, Leading-Additional directions, role-level locations, and "
         "recurring relations under alternative complete coding models. The inter-rater view reports exact "
         "agreement and nominal Krippendorff alpha on a balanced common-paper cohort and separates full-category, "
         "observability, and conditional-category agreement. Evidence lists can then be restricted to all "
@@ -70,7 +70,7 @@ PLATFORM_PARAGRAPHS = [
         "The Construct Contrasting workspace implements the remaining theory-elaboration tactics through three "
         "tabs. Horizontal contrasting applies the selected dimension to the registered business domains and "
         "entrepreneurship journal populations, with the full corpus or FT50 restriction providing the comparison "
-        "base. Vertical contrasting allows level of analysis to be crossed with study status, role, technical "
+        "base. Vertical contrasting allows level of analysis to be crossed with AI positioning, role, technical "
         "type, mechanism, process stage, or scope, with either matrix axis and cell metric controlled by the user. "
         "Structuring exposes recurring role-mechanism, role-level, mechanism-level, role-scope, and related "
         "configurations under a selectable minimum-support threshold. A selected cell opens an interpretation "

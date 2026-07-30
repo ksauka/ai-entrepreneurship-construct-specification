@@ -147,13 +147,17 @@ select:focus, input[type="number"]:focus { outline: none; border-color: var(--pr
 .publication-growth-heading p { margin: 0; }
 .publication-growth-heading p { margin-top: 5px; }
 .publication-growth-controls {
-  display: grid;
-  grid-template-columns: minmax(190px, 0.75fr) minmax(280px, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
   min-width: min(100%, 540px);
 }
-.publication-growth-controls label { margin: 0; }
+.publication-growth-controls label { margin: 0; min-width: 190px; }
+.publication-growth-controls label:last-child { min-width: 280px; }
 .publication-growth-controls select { width: 100%; }
+.publication-growth-controls .custom-growth-window { min-width: 112px; }
+.publication-growth-controls .custom-growth-window input { width: 112px; }
 .growth-calculation-details {
   margin: 10px 0 14px;
   border: 1px solid var(--line);
@@ -448,6 +452,58 @@ a { color: var(--primary); }
   border: 1px solid var(--line);
 }
 .scope-info-table-wrap table { margin: 0; min-width: 650px; }
+.scope-query-list {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: var(--page);
+  scrollbar-gutter: stable;
+}
+.scope-query-definition {
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.scope-query-definition:last-child { margin-bottom: 0; }
+.scope-query-definition summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.scope-query-definition summary span:last-child {
+  color: var(--muted);
+  font-size: 0.86em;
+  text-align: right;
+}
+.scope-query-definition > div { padding: 0 12px 12px; }
+.scope-query-method-note {
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--primary);
+  background: #f2f6f4;
+}
+.scope-query-method-note h4 { margin: 0 0 6px; }
+.scope-query-method-note p { margin: 0; }
+.scope-query-text {
+  max-height: 300px;
+  overflow: auto;
+  margin: 10px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #f7f6f2;
+  color: var(--ink);
+  font: 0.78rem/1.5 "IBM Plex Mono", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
 .scope-domain-definition {
   margin-top: 8px;
   border: 1px solid var(--line);

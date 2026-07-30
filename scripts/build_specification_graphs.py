@@ -1,7 +1,7 @@
 """Render the construct-specification graphs per entrepreneurship population.
 
 For each population (full corpus, Leading entrepreneurship journals, Additional
-entrepreneurship, combined) this renders the per-dimension observed-composition
+entrepreneurship journals, combined) this renders the per-dimension observed-composition
 panels that are the Stage 1 construct-specification portrait. It reuses the
 platform's analyze_observed_composition so the graphs match the interactive
 Observed Composition view exactly.
@@ -24,6 +24,9 @@ from aecsp.analytics.observed_composition import analyze_observed_composition
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIMARY = ROOT / "data/processed/analysis/primary_analysis_dataset.csv"
+CLOSE_READING = (
+    ROOT / "data/interim/theory_elaboration/theory_elaboration_matched_papers.csv"
+)
 FIGURES = ROOT / "reports/analysis/figures/specification"
 FIGURES.mkdir(parents=True, exist_ok=True)
 
@@ -38,11 +41,25 @@ def _truthy(series: pd.Series) -> pd.Series:
 def populations(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
     q3 = _truthy(frame["in_query_3"]) if "in_query_3" in frame.columns else pd.Series(False, index=frame.index)
     q4 = _truthy(frame["in_query_4"]) if "in_query_4" in frame.columns else pd.Series(False, index=frame.index)
+    close_reading_ids: set[str] = set()
+    if CLOSE_READING.exists():
+        close_reading_ids = set(
+            pd.read_csv(
+                CLOSE_READING,
+                usecols=["paper_id"],
+                dtype=str,
+                keep_default_na=False,
+            )["paper_id"].astype(str)
+        )
     return {
         "full_corpus": (frame, "Full corpus"),
         "core_entrepreneurship": (frame[q3], "Leading entrepreneurship journals"),
-        "other_entrepreneurship": (frame[q4], "Additional entrepreneurship"),
+        "other_entrepreneurship": (frame[q4], "Additional entrepreneurship journals"),
         "combined_entrepreneurship": (frame[q3 | q4], "Combined entrepreneurship"),
+        "close_reading": (
+            frame[frame["paper_id"].astype(str).isin(close_reading_ids)],
+            "Systematic close-reading set",
+        ),
     }
 
 

@@ -112,7 +112,7 @@ def build_composition_report(
         "<h2>Construct specification</h2>"
         f"<p><strong>Dataset:</strong> {html.escape(scope_label)}<br />"
         f"<strong>Coding model:</strong> {html.escape(composition['model_label'])}<br />"
-        f"<strong>Study-status filter:</strong> {html.escape(status_label)}<br />"
+        f"<strong>AI positioning filter:</strong> {html.escape(status_label)}<br />"
         f"<strong>Dimension filter:</strong> {html.escape(control_label)}<br />"
         f"<strong>Distribution:</strong> {html.escape(distribution_labels[distribution])}<br />"
         f"<strong>Model coverage:</strong> {composition['model_scope_papers']:,} of "
@@ -123,7 +123,7 @@ def build_composition_report(
         body += (
             "<p>Each dimension reports two distributions. Full shares use every "
             "successfully coded paper for the selected model after the dataset-scope "
-            "and study-status filters. Observed shares use the subset remaining after "
+            "and AI positioning filters. Observed shares use the subset remaining after "
             "that dimension's declared missing or unspecified categories are excluded.</p>"
         )
     for panel in composition["panels"]:
@@ -229,7 +229,7 @@ def build_composition_report(
         f"balanced intersection of {irr['balanced_common_papers']:,} papers shared by every "
         f"displayed model within the {html.escape(str(irr.get('reference_label') or 'reference-model'))} "
         f"successful-paper cohort (n = {irr['reference_cohort_papers']:,}). IRR uses the selected dataset scope but is not restricted "
-        "by the study-status filter because study status is itself a rated dimension.</p>"
+        "by the AI positioning filter because AI positioning is itself a rated dimension.</p>"
         "<h3>Mean exact agreement across six dimensions</h3>"
         f"<table><tr><th>Model</th>{matrix_head}</tr>"
         f"{matrix_rows('mean_percent_agreement', True)}</table>"
@@ -237,7 +237,7 @@ def build_composition_report(
         f"<table><tr><th>Model</th>{matrix_head}</tr>"
         f"{matrix_rows('mean_krippendorff_alpha', False)}</table>"
         "<p>The matrix means are orientation summaries across the six core dimensions: "
-        "study status, technical AI type, AI role, mechanism, level of analysis, and scope conditions. "
+        "AI positioning, technical AI type, AI role, mechanism, level of analysis, and scope conditions. "
         "The table reports all eight displayed dimensions. Process stage and definition clarity are "
         "marked exploratory for different empirical reasons. Process-stage models disagree primarily about "
         "whether a stage is observable; definition clarity remains weak both at detecting a definitional "

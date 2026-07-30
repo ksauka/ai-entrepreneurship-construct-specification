@@ -136,7 +136,7 @@ def test_evidence_mask_respects_status_and_category(papers):
 
 
 def test_invalid_filter_or_column_is_rejected(papers):
-    with pytest.raises(ValueError, match="Unknown study status"):
+    with pytest.raises(ValueError, match="Unknown AI positioning"):
         analyze_observed_composition(papers, study_status="invalid")
     with pytest.raises(ValueError, match="Unknown composition column"):
         observed_composition_evidence_mask(papers, "all", "Title", "Anything")

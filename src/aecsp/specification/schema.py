@@ -239,7 +239,7 @@ AI_STUDY_STATUS_VALUES: tuple[str, ...] = (
 
 AI_STUDY_STATUS_FIELD = SpecificationDimension(
     id="ai_study_status",
-    label="AI Study Status",
+    label="AI positioning",
     column=AI_STUDY_STATUS_COLUMN,
     graph_node_label="AIStudyStatus",
     relationship_type="CLASSIFIES_AI_AS",
@@ -251,7 +251,7 @@ AI_STUDY_STATUS_FIELD = SpecificationDimension(
 )
 
 # The model protocol remains the seven evidence-bearing dimensions above.
-# Curation additionally reviews AI study status, which is a required analytic
+# Curation additionally reviews AI positioning, which is a required analytic
 # classification but does not have its own model-generated evidence fields.
 CURATABLE_SPECIFICATION_FIELDS: tuple[SpecificationDimension, ...] = (
     *SPECIFICATION_DIMENSIONS,

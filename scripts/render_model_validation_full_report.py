@@ -215,7 +215,7 @@ Mini and Gemini cover the complete probability sample. Nano and Claude each have
 Exact agreement is the proportion of papers receiving identical codes. Krippendorff alpha adjusts for agreement expected from the category distribution. High agreement with low alpha usually indicates a prevalence problem: raters repeatedly select the same dominant category but do not reliably discriminate minority categories. Confidence intervals quantify paper-sampling uncertainty; they do not include uncertainty caused by prompt choice, model version or the abstract-only evidentiary boundary.
 
 The average values below are orientation summaries across the six core
-dimensions only: study status, technical type, AI role, mechanism, level and
+dimensions only: AI positioning, technical type, AI role, mechanism, level and
 scope. Process stage and definition form remain displayed exploratory
 dimensions. The three binary fields are supplementary diagnostics and are not
 included in the macro heatmaps. A mean alpha across heterogeneous dimensions
@@ -281,7 +281,7 @@ Together they answer whether AI is the object or method of study, what technolog
 
 ## Central substantive argument
 
-The evidence supports the argument that entrepreneurship research does not employ one consistently specified construct called AI. Papers vary in study status, technical identity, explanatory role, observable mechanism, analytical level and scope. Generic AI labels obscure theoretically different technologies and roles, while mechanism and scope are frequently not observable in abstracts. This heterogeneity matters because findings about machine learning as a research method are not theoretically equivalent to claims about generative AI as an entrepreneurial actor or firm capability.
+The evidence supports the argument that entrepreneurship research does not employ one consistently specified construct called AI. Papers vary in AI positioning, technical identity, explanatory role, observable mechanism, analytical level and scope. Generic AI labels obscure theoretically different technologies and roles, while mechanism and scope are frequently not observable in abstracts. This heterogeneity matters because findings about machine learning as a research method are not theoretically equivalent to claims about generative AI as an entrepreneurial actor or firm capability.
 
 ## Dimensions unsuitable for headline claims
 

@@ -120,8 +120,8 @@ def update_manuscript() -> None:
     upsert_paragraph_after(
         document,
         "For Claude-Gemini, conditional α",
-        "Study status requires particular caution",
-        "Study status requires particular caution because it conditions the nested analysis in Section 4.2.1. "
+        "AI positioning requires particular caution",
+        "AI positioning requires particular caution because it conditions the nested analysis in Section 4.2.1. "
         "Its full-category nominal α is .32 for Mini-Claude, .47 for Mini-Gemini, and .63 for Claude-Gemini. "
         "It is therefore the weakest core dimension in the Mini-Claude comparison and the second weakest in "
         "Mini-Gemini, where mechanism is marginally lower. The nested results are reported as primary-coder "
@@ -133,7 +133,7 @@ def update_manuscript() -> None:
         "Among the 1,497 entrepreneurship papers",
         "The Gemini re-estimation retains",
         "The Gemini re-estimation retains the same leading category in all seven aggregate dimensions, but the "
-        "study-status split is not stable in magnitude. Mini classifies the 1,497 clear-status papers as 55.04% "
+        "AI positioning split is not stable in magnitude. Mini classifies the 1,497 clear-status papers as 55.04% "
         "phenomenon, 25.72% method, and 19.24% both; Gemini classifies 1,455 clear-status papers as 62.34% "
         "phenomenon, 35.60% method, and 2.06% both. The aggregate identity of the leading role, technical type, "
         "mechanism, level, process stage, and scope is reproduced, while conclusions that depend on the size of "
@@ -350,7 +350,7 @@ def update_supplement() -> None:
     )
     _append_note(
         document,
-        "Note. All seven aggregate leading categories are reproduced, but study-status shares differ materially: "
+        "Note. All seven aggregate leading categories are reproduced, but AI positioning shares differ materially: "
         "Mini assigns 19.24% of clear-status papers to both, compared with 2.06% under Gemini.",
     )
 
@@ -366,8 +366,8 @@ def update_supplement() -> None:
     ]
     _append_table(
         document,
-        "Table A10.2. Nested leading-category robustness after conditioning on study status",
-        ["Study status", "Outcome", "GPT-5.4 Mini", "Gemini 3.1 Pro Preview", "Same leader"],
+        "Table A10.2. Nested leading-category robustness after conditioning on AI positioning",
+        ["AI positioning", "Outcome", "GPT-5.4 Mini", "Gemini 3.1 Pro Preview", "Same leader"],
         nested_rows,
         5.8,
         widths=[0.75, 1.25, 1.7, 1.7, 0.65],

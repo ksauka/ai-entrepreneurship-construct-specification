@@ -187,7 +187,7 @@ Open `http://127.0.0.1:8321`. The launcher binds to localhost by default and
 does not expose the application publicly. The Construct Specification
 view is available at `http://127.0.0.1:8321/composition`; it recalculates every
 panel from the active dataset after applying the selected dataset scope and
-study-status filter. Construct-specification charts retain each model's actual
+AI positioning filter. Construct-specification charts retain each model's actual
 successful-paper count. The model-IRR matrix instead uses one balanced paper-ID
 intersection shared by all displayed models inside the registered Claude
 reference cohort; the current four-model intersection is 21,930 papers.

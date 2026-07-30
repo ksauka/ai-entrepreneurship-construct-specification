@@ -77,10 +77,10 @@ def dimension_column(frame: pd.DataFrame, dimension_id: str) -> str:
 
 
 def filter_study_status(frame: pd.DataFrame, study_status: str) -> pd.DataFrame:
-    """Apply the shared study-status filter without changing the input frame."""
+    """Apply the shared AI positioning filter without changing the input frame."""
 
     if study_status not in STUDY_STATUS_FILTERS:
-        raise ValueError(f"Unknown study status: {study_status}")
+        raise ValueError(f"Unknown AI positioning: {study_status}")
     if study_status == "all":
         return frame.copy()
     if AI_STUDY_STATUS_COLUMN not in frame.columns:

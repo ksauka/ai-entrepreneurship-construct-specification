@@ -430,7 +430,7 @@ def build_coder_robustness(
         },
         "interpretation": (
             "Leading aggregate categories and journal-population contrast directions "
-            "are robust, but the nested study-status analysis and selected recurring "
+            "are robust, but the nested AI positioning analysis and selected recurring "
             "relations contain coder-dependent results. Agreement is not accuracy, and "
             "the alternative codes do not replace the registered primary record."
         ),

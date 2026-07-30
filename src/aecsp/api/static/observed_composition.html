@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
 <script src="/static/paper_inspection.js?v=reference-model-20260724"></script>
-<script src="/static/scope_context.js?v=domain-scope-info-20260724"></script>
+<script src="/static/scope_context.js?v=search-queries-20260730"></script>
 <script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
@@ -110,7 +110,7 @@
     </div>
     <details class="method-info coder-robustness-details">
       <summary>View the coder-dependent summary</summary>
-      <p>This check does not select a model by agreement and does not replace either model's codes. It holds the Combined entrepreneurship population, specified-category rules, selected contrasts, and support threshold constant while changing the source of the paper-level classifications. Combined entrepreneurship is the union of Leading and Additional entrepreneurship; “core dimensions” refers only to the six main coding dimensions, not to a journal population.</p>
+      <p>This check does not select a model by agreement and does not replace either model's codes. It holds the Combined entrepreneurship population, specified-category rules, selected contrasts, and support threshold constant while changing the source of the paper-level classifications. Combined entrepreneurship is the union of Leading and Additional entrepreneurship journals; “core dimensions” refers only to the six main coding dimensions, not to a journal population.</p>
       <div class="topic-review-table-wrap">
         <table class="composition-table">
           <thead><tr><th>Analysis</th><th>Coder-dependent result</th></tr></thead>
@@ -126,7 +126,7 @@
       <span id="irrStatus" class="status-pill warn">loading</span>
       <a class="btn btn-outline" href="/human-annotation">Open human annotation</a>
     </div>
-    <p class="chart-note" id="irrCohortNote">Every model pair uses one balanced common-paper cohort. The study-status filter is not applied because study status is itself one of the rated dimensions.</p>
+    <p class="chart-note" id="irrCohortNote">Every model pair uses one balanced common-paper cohort. The AI positioning filter is not applied because AI positioning is itself one of the rated dimensions.</p>
     <div class="grid-2 irr-matrix-grid">
       <div class="irr-matrix-card">
         <h3>Mean exact agreement</h3>
@@ -460,7 +460,7 @@ async function renderIrr() {
     `available to all ${data.models.length.toLocaleString()} models within the ` +
     `${data.reference_label || "reference-model"} successful-paper cohort ` +
     `(n = ${data.reference_cohort_papers.toLocaleString()}). ` +
-    `The study-status filter is not applied because study status is itself one of the rated dimensions.`;
+    `The AI positioning filter is not applied because AI positioning is itself one of the rated dimensions.`;
   el("irrAgreementMatrix").innerHTML = irrMatrixMarkup(data, "mean_percent_agreement", true);
   el("irrAlphaMatrix").innerHTML = irrMatrixMarkup(data, "mean_krippendorff_alpha", false);
   el("irrRows").innerHTML = data.pairs.flatMap(pair => pair.dimensions.map(item =>
@@ -528,7 +528,7 @@ async function renderCoderRobustness() {
       item.primary.evidence_paper_matches_relation && item.alternative.evidence_paper_matches_relation
     ).length;
     const rows = [
-      ["Study-status composition", `${reference}: ${statusText(statusReference)}. ${comparison}: ${statusText(statusComparison)}.`],
+      ["AI positioning composition", `${reference}: ${statusText(statusReference)}. ${comparison}: ${statusText(statusComparison)}.`],
       ["Changed Core nested leaders", nestedChanges.length ? nestedChanges.join("; ") : "No Core nested leader changes for this model pair."],
       ["Relations below the common threshold", relationChanges.length ? relationChanges.join("; ") : "All selected relations meet the common threshold under both models."],
       ["Selected evidence-paper check", `${evidenceMatches} of ${summary.selected_relations} selected evidence papers receive the same registered role-mechanism relation from both selected models.`],
@@ -583,9 +583,9 @@ function showRobustnessDetail(kind) {
       ];
     });
   } else if (kind === "nested") {
-    title = "Study-status-conditioned leading categories";
-    explanation = "Within phenomenon, method, and both, this check compares the leading observed category for each Core dimension. The study-status and outcome codes are both supplied by the selected model.";
-    headings = ["Study status", "Dimension", reference, comparison, "Result", "Evidence"];
+    title = "Leading categories conditioned on AI positioning";
+    explanation = "Within phenomenon, method, and both, this check compares the leading observed category for each Core dimension. The AI positioning and outcome codes are both supplied by the selected model.";
+    headings = ["AI positioning", "Dimension", reference, comparison, "Result", "Evidence"];
     rows = data.nested_comparison.filter(item => item.analytical_status === "Core").map(item => {
       const baseConfig = {
         population: "combined",
@@ -622,7 +622,7 @@ function showRobustnessDetail(kind) {
         title: `Leading entrepreneurship journals: ${item.dimension_label} = ${item.category}`,
         population: "core", column: ROBUSTNESS_COLUMNS[item.dimension_id], value: item.category, match_mode: "either",
       }) + robustnessEvidenceButton("Additional papers", {
-        title: `Additional entrepreneurship: ${item.dimension_label} = ${item.category}`,
+        title: `Additional entrepreneurship journals: ${item.dimension_label} = ${item.category}`,
         population: "additional", column: ROBUSTNESS_COLUMNS[item.dimension_id], value: item.category, match_mode: "either",
       }) + `</div>`,
     ]);
@@ -808,7 +808,7 @@ function showIrrDimensionInfo() {
     </section>
     <section class="contrast-interpretation">
       <h3>Six core dimensions</h3>
-      <p><strong>Study status, technical AI type, AI role, mechanism, level of analysis, and scope conditions</strong> form the main dimension-level construct-specification and model-reliability record.</p>
+      <p><strong>AI positioning, technical AI type, AI role, mechanism, level of analysis, and scope conditions</strong> form the main dimension-level construct-specification and model-reliability record.</p>
       <p>The two model-agreement heatmaps average these six dimensions only. Their averages provide orientation; the individual dimension results remain the primary evidence.</p>
       <p>Here, <strong>core</strong> is an analytical status: it identifies the six dimensions used in the summary heatmaps. It does not mean Leading entrepreneurship journals and it does not identify a dataset population. Mechanism has the smallest common-evidence base among these dimensions, so mechanism-dependent results must retain that denominator even when models agree more strongly on the category after both find evidence.</p>
     </section>

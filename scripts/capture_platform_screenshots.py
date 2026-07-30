@@ -131,8 +131,47 @@ def navigate(cdp: CDP, url: str, ready: str, settle: float = 2.0) -> None:
     time.sleep(settle)
 
 
-def capture(cdp: CDP, output_dir: Path, base_url: str) -> None:
+def sign_in(cdp: CDP, base_url: str, username: str, password: str) -> None:
+    """Create the same role-aware session used by an interactive browser."""
+
+    navigate(
+        cdp,
+        f"{base_url}/login",
+        "document.querySelector('form[action=\"/login\"]') !== null",
+        settle=0.2,
+    )
+    submitted = cdp.evaluate(
+        f"""
+        (() => {{
+          const username = document.querySelector('#username');
+          const password = document.querySelector('#password');
+          const form = document.querySelector('form[action="/login"]');
+          if (!username || !password || !form) return false;
+          username.value = {json.dumps(username)};
+          password.value = {json.dumps(password)};
+          form.requestSubmit();
+          return true;
+        }})()
+        """
+    )
+    if not submitted:
+        raise RuntimeError("Could not submit the dashboard login form")
+    cdp.wait_for(
+        "location.pathname !== '/login' && "
+        "document.querySelector('.app-header') !== null",
+        timeout=60,
+    )
+
+
+def capture(
+    cdp: CDP,
+    output_dir: Path,
+    base_url: str,
+    username: str,
+    password: str,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    sign_in(cdp, base_url, username, password)
 
     navigate(
         cdp,
@@ -224,16 +263,6 @@ def capture(cdp: CDP, output_dir: Path, base_url: str) -> None:
 
     navigate(
         cdp,
-        f"{base_url}/knowledge-graph",
-        "document.body.innerText.includes('Knowledge Graph') && "
-        "document.querySelectorAll('select').length > 1",
-        settle=4,
-    )
-    cdp.evaluate("window.scrollTo(0, 0)")
-    cdp.screenshot(output_dir / "knowledge_graph.png")
-
-    navigate(
-        cdp,
         f"{base_url}/assistant",
         "document.querySelector('#scope')?.options.length > 2 && "
         "document.querySelectorAll('.q-item').length >= 5",
@@ -300,7 +329,13 @@ def main() -> None:
                 "mobile": False,
             },
         )
-        capture(cdp, args.output_dir, args.base_url.rstrip("/"))
+        capture(
+            cdp,
+            args.output_dir,
+            args.base_url.rstrip("/"),
+            username,
+            password,
+        )
         print(f"Captured platform screenshots in {args.output_dir}")
     finally:
         if cdp is not None:

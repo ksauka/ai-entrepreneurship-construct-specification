@@ -189,8 +189,8 @@ def renumber_existing_results(document: Document) -> None:
         "4.2 Construct specification within entrepreneurship": (
             "4.1 Construct specification within entrepreneurship"
         ),
-        "4.2.1 Nested specification by study status": (
-            "4.1.1 Nested specification by study status"
+        "4.2.1 Nested specification by AI positioning": (
+            "4.1.1 Nested specification by AI positioning"
         ),
         "4.2.2 Core and Additional entrepreneurship boundaries": (
             "4.1.2 Leading and Additional entrepreneurship boundaries"
@@ -246,7 +246,7 @@ def expand_construct_specification(document: Document, frame: pd.DataFrame) -> N
     figure_caption = find_paragraph(document, "Figure 2.")
     detail_texts = [
         (
-            "Study status. Among the 1,497 papers with a clear study status, 55.0% examine AI "
+            "AI positioning. Among the 1,497 papers with clear AI positioning, 55.0% examine AI "
             "as a substantive phenomenon, 25.7% use it as a research method, and 19.2% combine "
             "both uses. Entrepreneurship scholarship therefore predominantly studies AI as part "
             "of the phenomenon being explained, but 44.9% of the clear-status literature uses AI "
@@ -311,7 +311,7 @@ def expand_construct_specification(document: Document, frame: pd.DataFrame) -> N
         (
             "Taken together, the observed construct is phenomenon-oriented but instrumentally framed, "
             "predominantly firm-level, technically centred on machine learning, and most often connected "
-            "to prediction and learning. Its specification is nevertheless uneven: study status, role, and "
+            "to prediction and learning. Its specification is nevertheless uneven: AI positioning, role, and "
             "level are usually observable, whereas technical form, mechanism, and especially definitional "
             "signals are considerably less visible. This marginal portrait establishes the baseline for "
             "the nested analysis that follows."
@@ -471,7 +471,7 @@ def normalize_revised_layout(document: Document) -> None:
     )
     revised_prefixes = (
         "The construct-specification results begin",
-        "Study status. Among the 1,497 papers",
+        "AI positioning. Among the 1,497 papers",
         "AI role. AI is most frequently assigned",
         "Technical type. Only 886 papers",
         "Mechanism. An observable mechanism",
@@ -513,7 +513,7 @@ def validate(document: Document) -> None:
     required = [
         "4.1 Construct specification within entrepreneurship",
         "Table 6. Observed construct specification in Combined entrepreneurship",
-        "Study status. Among the 1,497 papers",
+        "AI positioning. Among the 1,497 papers",
         "4.2 Horizontal contrasting across business domains",
         "AI role. Management Science and Operations Research",
         "Technical type. Finance remains strongly machine-learning oriented",

@@ -125,7 +125,7 @@ def observed_share(sub, col, exclude):
 def core_vs_other_table(d):
     q3, q4 = _truthy(d["in_query_3"]), _truthy(d["in_query_4"])
     pops = {"Core": d[q3], "Other": d[q4], "Combined": d[q3 | q4]}
-    dims = [("Study status", "ai_method_or_phenomenon", {"", "unclear"}),
+    dims = [("AI positioning", "ai_method_or_phenomenon", {"", "unclear"}),
             ("AI role", "ai_role_function", ROLE_EXCLUDE),
             ("Technical type", "ai_type_form", TYPE_EXCLUDE),
             ("Mechanism", "ai_mechanism_analysis", MECH_EXCLUDE),

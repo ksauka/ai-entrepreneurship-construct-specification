@@ -366,12 +366,12 @@ class HumanAnnotationStore:
                 "auxiliary outputs are not part of human IRR."
             ),
             "study_status_schema_note": (
-                "Study status is the required response field that asks whether "
+                "AI positioning is the required response field that asks whether "
                 "AI is the phenomenon being studied, a research method used by "
                 "the authors, both, or unclear. Unlike the seven "
                 "evidence-bearing dimensions, the model response does not attach "
                 "a separate quotation, evidence-type label, or confidence value "
-                "to Study status."
+                "to AI positioning."
             ),
         }
 

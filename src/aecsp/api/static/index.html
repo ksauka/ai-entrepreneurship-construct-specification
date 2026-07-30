@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
 <script src="/static/paper_inspection.js?v=reference-model-20260724"></script>
-<script src="/static/scope_context.js?v=domain-scope-info-20260724"></script>
+<script src="/static/scope_context.js?v=search-queries-20260730"></script>
 <script src="/static/reviewer_access.js?v=session-login-20260724"></script>
 </head>
 <body>
@@ -53,7 +53,14 @@
               <option value="2010__2020">2010 to 2020</option>
               <option value="2020__2023">2020 to 2023</option>
               <option value="2023__2026">2023 to 2026</option>
+              <option value="custom">Custom year window</option>
             </select>
+          </label>
+          <label id="growthStartLabel" class="custom-growth-window" hidden>Start year
+            <input id="growthStartYear" type="number" step="1" value="2000">
+          </label>
+          <label id="growthEndLabel" class="custom-growth-window" hidden>End year
+            <input id="growthEndYear" type="number" step="1" value="2026">
           </label>
           <label>Plot
             <select id="growthPlotMode">
@@ -178,7 +185,12 @@ async function init() {
     keywordPinned.clear();
     renderKeywordEvolution();
   };
-  el("growthPeriod").onchange = renderGrowthTraceSelection;
+  el("growthPeriod").onchange = () => {
+    showCustomGrowthControls();
+    renderGrowthTraceSelection();
+  };
+  el("growthStartYear").onchange = renderGrowthTraceSelection;
+  el("growthEndYear").onchange = renderGrowthTraceSelection;
   el("growthPlotMode").onchange = renderGrowthTraceSelection;
   el("keywordPeriod").onchange = renderKeywordPeriod;
   el("keywordMode").onchange = renderKeywordPeriod;
@@ -200,9 +212,19 @@ function renderGrowthTraceSelection() {
   const selectedWindow = el("growthPeriod").value;
   const allRows = p.annual_production;
   if (!allRows.length) return;
-  const [startYear, endYear] = selectedWindow === "all_recorded"
+  let [startYear, endYear] = selectedWindow === "all_recorded"
     ? [allRows[0].year, allRows[allRows.length - 1].year]
-    : selectedWindow.split("__").map(Number);
+    : selectedWindow === "custom"
+      ? [Number(el("growthStartYear").value), Number(el("growthEndYear").value)]
+      : selectedWindow.split("__").map(Number);
+  const firstYear = allRows[0].year;
+  const lastYear = allRows[allRows.length - 1].year;
+  startYear = Math.max(firstYear, Math.min(lastYear - 1, startYear || firstYear));
+  endYear = Math.max(startYear + 1, Math.min(lastYear, endYear || lastYear));
+  if (selectedWindow === "custom") {
+    el("growthStartYear").value = startYear;
+    el("growthEndYear").value = endYear;
+  }
   const trace = allRows.filter(item => item.year >= startYear && item.year <= endYear);
   if (!trace.length) return;
   const startRow = allRows.filter(item => item.year <= startYear).at(-1);
@@ -388,11 +410,40 @@ function renderGrowthTraceSelection() {
   });
 }
 
+function showCustomGrowthControls() {
+  const custom = el("growthPeriod").value === "custom";
+  el("growthStartLabel").hidden = !custom;
+  el("growthEndLabel").hidden = !custom;
+}
+
+function configureCustomGrowthWindow(data) {
+  const rows = data.annual_production || [];
+  if (!rows.length) return;
+  const firstYear = rows[0].year;
+  const lastYear = rows[rows.length - 1].year;
+  for (const id of ["growthStartYear", "growthEndYear"]) {
+    el(id).min = firstYear;
+    el(id).max = lastYear;
+  }
+  const currentStart = Number(el("growthStartYear").value);
+  const currentEnd = Number(el("growthEndYear").value);
+  el("growthStartYear").value = Math.max(
+    firstYear,
+    Math.min(lastYear - 1, currentStart || Math.max(firstYear, 2000)),
+  );
+  el("growthEndYear").value = Math.max(
+    Number(el("growthStartYear").value) + 1,
+    Math.min(lastYear, currentEnd || Math.min(lastYear, data.search_cutoff.year)),
+  );
+  showCustomGrowthControls();
+}
+
 async function renderPerformance() {
   const p = await api(`/api/scope/${scope}/performance`);
   performanceData = p;
   renderPlatformState();
   const s = p.summary;
+  configureCustomGrowthWindow(p);
   el("perfCards").innerHTML = `
     <div class="stat-tile"><div class="n">${s.papers.toLocaleString()}</div><div class="l">Papers</div></div>
     <div class="stat-tile"><div class="n">${s.total_citations.toLocaleString()}</div><div class="l">Total citations</div></div>

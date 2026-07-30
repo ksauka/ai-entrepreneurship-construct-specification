@@ -248,8 +248,8 @@ def audit() -> dict[str, object]:
         )
 
     require(
-        "The remaining 135 papers have an unclear study status" in manuscript_text,
-        "Results report the 135 Combined-entrepreneurship papers with unclear study status",
+        "The remaining 135 papers have an unclear AI positioning" in manuscript_text,
+        "Results report the 135 Combined-entrepreneurship papers with unclear AI positioning",
         checks,
     )
     require(

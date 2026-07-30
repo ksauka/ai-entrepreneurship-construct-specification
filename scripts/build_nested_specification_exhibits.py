@@ -2,7 +2,7 @@
 
 The Construct Specification platform can condition every distribution on an
 exact value of any of the eight coding dimensions.  This script renders the
-study-status slice requested for the manuscript and supplementary appendix
+AI positioning slice requested for the manuscript and supplementary appendix
 from the frozen tidy tables produced by ``freeze_contrasting_tables.py``.
 
 No paper-level data are changed.  Percentages are conditional on the observed
@@ -164,7 +164,7 @@ def build_central_profile(table: pd.DataFrame) -> None:
         if cursor < len(rows):
             ax.axhline(cursor - 0.5, color="white", linewidth=2.5)
     ax.set_title(
-        "Nested construct specification by study status\n"
+        "Nested construct specification by AI positioning\n"
         "Combined entrepreneurship, share within each observed dimension (%)",
         fontsize=11,
     )
@@ -202,7 +202,7 @@ def build_all_dimension_panels(table: pd.DataFrame) -> None:
     for ax in axes[len(DIMENSION_ORDER) :]:
         ax.axis("off")
     fig.suptitle(
-        "Complete study-status-conditioned construct composition\n"
+        "Complete construct composition conditioned on AI positioning\n"
         "Combined entrepreneurship, observed view; each panel has its own disclosed denominator",
         fontsize=13,
         y=0.995,
@@ -234,7 +234,7 @@ def build_observability_figure(table: pd.DataFrame) -> None:
     ax.set_yticklabels([DIMENSION_LABELS[item] for item in DIMENSION_ORDER])
     annotate_heatmap(ax, matrix, threshold=62)
     ax.set_title(
-        "Observability by study status\n"
+        "Observability by AI positioning\n"
         "Observed denominator as a share of each status subset (%)"
     )
     fig.colorbar(image, ax=ax, fraction=0.04, pad=0.03, label="Papers with an observed code (%)")

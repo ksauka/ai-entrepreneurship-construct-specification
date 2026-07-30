@@ -55,14 +55,14 @@ RESEARCH_DESIGN_PARAGRAPHS = [
     (
         "Each paper was coded from its title, abstract, and author keywords by large language models working from "
         "a fixed construct-specification instrument of eight dimensions, and the models used, the coding procedure, "
-        "and the cross-model agreement analysis are reported in Sections 3.4 and 3.5. Study status distinguishes AI "
+        "and the cross-model agreement analysis are reported in Sections 3.4 and 3.5. AI positioning distinguishes AI "
         "as the substantive phenomenon, a research method, both, or unclear, while the remaining seven dimensions "
         "record technical AI type, AI role, observable mechanism, level of analysis, entrepreneurial process stage, "
         "scope conditions, and definition clarity. Full text, index terms, citation data, and topic assignments were "
         "excluded from the coding evidence, hence a missing value denotes non-observability in the title, abstract, "
         "and author keywords rather than absence from the full paper. Every assigned value was linked to supporting "
         "text, an evidence status of stated, inferred, or absent, and a dimension-specific confidence value, and one "
-        "primary value was retained per dimension. Study status, technical AI type, AI role, mechanism, level of "
+        "primary value was retained per dimension. AI positioning, technical AI type, AI role, mechanism, level of "
         "analysis, and scope conditions form the six core dimensions used in the main construct-specification and "
         "cross-model agreement analyses. Process stage and definition clarity remain part of the instrument and are "
         "reported throughout the study, but their interpretation is exploratory because cross-model agreement is "
@@ -114,7 +114,7 @@ THEORY_ELABORATION_TABLE = [
         "Vertical contrasting",
         "Does AI's theoretical meaning change across levels?",
         "Combined entrepreneurship",
-        "Study status, role, type, mechanism, stage, and scope by level",
+        "AI positioning, role, type, mechanism, stage, and scope by level",
     ],
     [
         "Structuring",
@@ -367,11 +367,11 @@ def update_manuscript() -> None:
     instrument = find_paragraph(document, "The instrument contains eight coded fields")
     replace_paragraph(
         instrument,
-        "The instrument contains eight coded fields: the four-category study-status field, which records whether "
+        "The instrument contains eight coded fields: the four-category AI positioning field, which records whether "
         "AI is the substantive phenomenon, the research method, both, or unclear, and seven construct-"
         "specification dimensions covering technical AI type, AI role, observable mechanism, level of analysis, "
         "entrepreneurial process stage, scope conditions, and definition clarity. Six dimensions form the core "
-        "construct-specification and model-agreement record: study status, technical AI type, AI role, mechanism, "
+        "construct-specification and model-agreement record: AI positioning, technical AI type, AI role, mechanism, "
         "level, and scope. Process stage and definition clarity remain exploratory dimensions for the distinct "
         "reliability reasons reported in Section 3.5 and Appendix A6. Exploratory does not mean excluded, invalid, "
         "or unavailable; both dimensions retain paper counts, distributions, evidence papers, and complete "
@@ -475,7 +475,7 @@ def update_manuscript() -> None:
         contribution,
         "The construct contribution is not a new universal definition of AI. It is an eight-dimensional framework "
         "for establishing the theoretical identity of an AI-related claim. Six dimensions form the core record: "
-        "study status distinguishes AI as a phenomenon, method, or both; technical AI type states what system is "
+        "AI positioning distinguishes AI as a phenomenon, method, or both; technical AI type states what system is "
         "named; AI role states what theoretical work AI performs; mechanism states what it changes or enables; "
         "level states where the relation operates; and scope states the boundary or organisational condition. "
         "Entrepreneurial process stage and definition clarity remain part of the framework as exploratory "
@@ -491,7 +491,7 @@ def update_manuscript() -> None:
         replace_paragraph(
             status_result,
             status_result.text.rstrip()
-            + " The remaining 135 papers have an unclear study status; they remain in unconditioned full views "
+            + " The remaining 135 papers have an unclear AI positioning; they remain in unconditioned full views "
             "but are not assigned to the phenomenon, method, or both profiles.",
         )
 
@@ -645,7 +645,7 @@ def update_supplement() -> None:
     replace_paragraph(
         intro_note,
         "Note. All eight dimensions were coded for every successfully processed paper and remain available for "
-        "filtering, comparison, evidence inspection, and download. Study status, technical AI type, AI role, "
+        "filtering, comparison, evidence inspection, and download. AI positioning, technical AI type, AI role, "
         "mechanism, level of analysis, and scope conditions form the six core dimensions used in the main "
         "construct-specification and cross-model agreement analyses. Process stage and definition clarity remain "
         "part of the instrument but are interpreted as exploratory because cross-model agreement is substantially "
@@ -657,9 +657,9 @@ def update_supplement() -> None:
     conditioned = find_paragraph(document, "The Combined entrepreneurship population contains 1,497 papers")
     replace_paragraph(
         conditioned,
-        "The Combined entrepreneurship population contains 1,497 papers with a clear study status: 824 treat AI "
+        "The Combined entrepreneurship population contains 1,497 papers with clear AI positioning: 824 treat AI "
         "as the substantive phenomenon, 385 as a research method, and 288 as both. The remaining 135 papers have "
-        "an unclear study status. They remain in the unconditioned full view but are not assigned to these three "
+        "an unclear AI positioning. They remain in the unconditioned full view but are not assigned to these three "
         "profiles. The tables below report the observed denominator separately for every outcome dimension because "
         "observability differs across titles, abstracts, and author keywords.",
     )
@@ -680,7 +680,7 @@ def update_supplement() -> None:
     a6_status = find_paragraph(document, "All eight dimensions remain part of the analytical instrument")
     replace_paragraph(
         a6_status,
-        "All eight dimensions remain part of the analytical instrument. Study status, technical AI type, AI role, "
+        "All eight dimensions remain part of the analytical instrument. AI positioning, technical AI type, AI role, "
         "mechanism, level of analysis, and scope conditions form the six core dimensions used in the main analyses. "
         "Core does not mean that these dimensions behave uniformly or achieve perfect reliability. Process stage "
         "and definition clarity remain exploratory dimensions for different empirical reasons: process-stage "

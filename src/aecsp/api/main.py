@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, quote
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
+import yaml
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import (
     FileResponse,
@@ -74,6 +75,9 @@ TOPIC_ENRICHED_DATASET = (
     PROJECT_ROOT / "data/processed/analysis/primary_analysis_dataset_with_topics.csv"
 )
 GRAPH_EXPORT_DIR = PROJECT_ROOT / "data/processed/graph"
+SEARCH_QUERY_CONFIG = (
+    PROJECT_ROOT / "configs/search_queries_july2026_q1_q4.yaml"
+)
 TOPIC_TABLE_FILES = (
     "scope_topic_prevalence.csv",
     "scope_topic_by_era.csv",
@@ -1002,6 +1006,40 @@ def scopes() -> list[dict]:
     return service().scopes()
 
 
+@app.get("/api/retrieval-queries")
+def retrieval_queries() -> dict:
+    """Return the exact registered Scopus searches used to build the corpus."""
+
+    if not SEARCH_QUERY_CONFIG.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="The registered search-query record is unavailable.",
+        )
+    payload = yaml.safe_load(SEARCH_QUERY_CONFIG.read_text(encoding="utf-8")) or {}
+    configured = payload.get("queries") or {}
+    queries = []
+    for query_id, record in configured.items():
+        record = record or {}
+        queries.append(
+            {
+                "id": str(query_id),
+                "label": str(record.get("label") or query_id),
+                "date_submitted": str(record.get("date_submitted") or ""),
+                "records_retrieved": int(record.get("records_retrieved") or 0),
+                "source_title_count": int(record.get("source_title_count") or 0),
+                "construction_note": str(
+                    record.get("construction_note") or ""
+                ).strip(),
+                "scopus_query": str(record.get("scopus_query") or "").strip(),
+            }
+        )
+    return {
+        "title": str(payload.get("title") or ""),
+        "date_updated": str(payload.get("date_updated") or ""),
+        "queries": queries,
+    }
+
+
 @app.get("/api/analytics/scopes")
 def analytics_scopes() -> list[dict]:
     return service().analytics_scopes()
@@ -1899,7 +1937,9 @@ def theory_contrasting_metadata(model: str | None = Query(None)) -> dict:
 @app.get("/api/contrasting/construct")
 def theory_construct_specification(
     model: str = Query("gpt-5.4-mini-2026-03-17"),
-    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    population: str = Query(
+        "combined", pattern="^(core|other|combined|close_reading)$"
+    ),
     journal_scope: str = Query("all", pattern="^(all|ft50)$"),
     study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
 ) -> dict:
@@ -1938,7 +1978,9 @@ def theory_horizontal_contrast(
 @app.get("/api/contrasting/vertical")
 def theory_vertical_contrast(
     model: str = Query("gpt-5.4-mini-2026-03-17"),
-    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    population: str = Query(
+        "combined", pattern="^(core|other|combined|close_reading)$"
+    ),
     row_dimension: str = Query("ai_role"),
     column_dimension: str = Query("level"),
     distribution: str = Query("observed", pattern="^(full|observed)$"),
@@ -1990,7 +2032,9 @@ def theory_entrepreneurship_comparison(
 @app.get("/api/contrasting/structuring")
 def theory_structuring(
     model: str = Query("gpt-5.4-mini-2026-03-17"),
-    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    population: str = Query(
+        "combined", pattern="^(core|other|combined|close_reading)$"
+    ),
     pair: str = Query("ai_role__mechanism"),
     distribution: str = Query("observed", pattern="^(full|observed)$"),
     journal_scope: str = Query("all", pattern="^(all|ft50)$"),
@@ -2018,7 +2062,9 @@ def theory_structuring(
 @app.get("/api/contrasting/evidence")
 def theory_contrasting_evidence(
     model: str = Query("gpt-5.4-mini-2026-03-17"),
-    population: str | None = Query(None, pattern="^(core|other|combined)$"),
+    population: str | None = Query(
+        None, pattern="^(core|other|combined|close_reading)$"
+    ),
     journal_scope: str = Query("all", pattern="^(all|ft50)$"),
     study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
     domain: str | None = Query(None),
@@ -2052,7 +2098,9 @@ def theory_contrasting_report(
         "construct", pattern="^(construct|horizontal|vertical|structuring|entrepreneurship)$"
     ),
     model: str = Query("gpt-5.4-mini-2026-03-17"),
-    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    population: str = Query(
+        "combined", pattern="^(core|other|combined|close_reading)$"
+    ),
     journal_scope: str = Query("all", pattern="^(all|ft50)$"),
     study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
     distribution: str = Query("observed", pattern="^(full|observed)$"),
@@ -2123,7 +2171,9 @@ def theory_contrasting_download(
         "construct", pattern="^(construct|horizontal|vertical|structuring|entrepreneurship)$"
     ),
     model: str = Query("gpt-5.4-mini-2026-03-17"),
-    population: str = Query("combined", pattern="^(core|other|combined)$"),
+    population: str = Query(
+        "combined", pattern="^(core|other|combined|close_reading)$"
+    ),
     journal_scope: str = Query("all", pattern="^(all|ft50)$"),
     study_status: str = Query("all", pattern="^(all|phenomenon|method|both)$"),
     distribution: str = Query("observed", pattern="^(full|observed)$"),

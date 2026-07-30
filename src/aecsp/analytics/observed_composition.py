@@ -1,6 +1,6 @@
-"""Calculate observed construct composition under a study-status filter.
+"""Calculate observed construct composition under an AI positioning filter.
 
-Inputs: paper-level specification codes and an optional study-status value.
+Inputs: paper-level specification codes and an optional AI positioning value.
 Outputs: per-dimension observed denominators, category shares, and evidence masks.
 """
 
@@ -18,7 +18,7 @@ STUDY_STATUS_FILTERS: Final[tuple[str, ...]] = ("all", "phenomenon", "method", "
 OBSERVED_COMPOSITION_PANELS: Final[tuple[dict, ...]] = (
     {
         "id": "study_status",
-        "label": "Study status",
+        "label": "AI positioning",
         "column": AI_STUDY_STATUS_COLUMN,
         "denominator_label": "clear codes",
         "excluded": ("unclear",),
@@ -93,7 +93,7 @@ def _panel_column(frame: pd.DataFrame, panel: dict) -> str:
 
 def _status_frame(frame: pd.DataFrame, study_status: str) -> pd.DataFrame:
     if study_status not in STUDY_STATUS_FILTERS:
-        raise ValueError(f"Unknown study status: {study_status}")
+        raise ValueError(f"Unknown AI positioning: {study_status}")
     if study_status == "all":
         return frame
     if AI_STUDY_STATUS_COLUMN not in frame.columns:
@@ -107,7 +107,7 @@ def analyze_observed_composition(
 ) -> dict:
     """Return Figure-14-equivalent distributions from the current dataset.
 
-    The selected study status first filters the analytical population. Each
+    The selected AI positioning first filters the analytical population. Each
     panel then removes only that dimension's declared unobserved values and
     calculates shares using its own observed denominator.
     """
@@ -239,7 +239,7 @@ def observed_composition_evidence_mask(
         raise ValueError(f"Unknown composition column: {column}")
     status_mask = pd.Series(True, index=frame.index)
     if study_status not in STUDY_STATUS_FILTERS:
-        raise ValueError(f"Unknown study status: {study_status}")
+        raise ValueError(f"Unknown AI positioning: {study_status}")
     if study_status != "all":
         if AI_STUDY_STATUS_COLUMN not in frame.columns:
             return pd.Series(False, index=frame.index)

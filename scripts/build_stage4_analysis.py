@@ -796,7 +796,7 @@ def _build_scope_outputs(enriched: pd.DataFrame) -> tuple[dict[str, pd.DataFrame
             "ai_method_or_phenomenon",
             status_groups,
             scope_dir / "topic_by_study_status_heatmap.png",
-            f"Largest topics by AI study status: {title}",
+            f"Largest topics by AI positioning: {title}",
         )
         plot_topic_observability(
             scoped,

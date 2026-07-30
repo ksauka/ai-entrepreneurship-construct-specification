@@ -335,7 +335,7 @@ def test_observed_composition_is_filtered_and_inspectable(service):
         filter_value="phenomenon",
     )
     assert conditioned["filtered_papers"] == 1
-    assert conditioned["control"]["dimension_label"] == "Study status"
+    assert conditioned["control"]["dimension_label"] == "AI positioning"
     assert {item["id"] for item in conditioned["filter_options"]} == {
         "study_status", "ai_role", "technical_type", "mechanism", "level",
         "process_stage", "scope", "definition",
@@ -359,7 +359,12 @@ def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
 
     metadata = service.theory_contrasting_metadata(model)
     populations = {item["id"]: item["papers"] for item in metadata["populations"]}
-    assert populations == {"core": 1, "other": 1, "combined": 2}
+    assert populations == {
+        "core": 1,
+        "other": 1,
+        "combined": 2,
+        "close_reading": 0,
+    }
     controls = {item["id"]: item for item in metadata["horizontal_controls"]}
     assert set(controls) == {
         "study_status",
@@ -378,7 +383,8 @@ def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
     ]
     population_labels = {item["id"]: item["label"] for item in metadata["populations"]}
     assert population_labels["core"] == "Leading entrepreneurship journals"
-    assert population_labels["other"] == "Additional entrepreneurship"
+    assert population_labels["other"] == "Additional entrepreneurship journals"
+    assert population_labels["close_reading"] == "Systematic close-reading set"
     core_domain = next(
         item for item in metadata["domains"] if item["id"] == "core_entrepreneurship"
     )
@@ -429,7 +435,7 @@ def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
     )
     assert controlled_horizontal["control"] == {
         "dimension_id": "study_status",
-        "dimension_label": "Study status",
+        "dimension_label": "AI positioning",
         "column": "ai_method_or_phenomenon",
         "value": "phenomenon",
     }
@@ -513,6 +519,24 @@ def test_construct_contrasting_is_corpus_bounded_and_traceable(service):
     assert len(unfiltered_evidence["papers"]) == 2
 
 
+def test_close_reading_set_is_available_as_scope_and_theory_population(service):
+    service._close_reading_ids_cache = frozenset({"P1", "P3"})
+    scopes = {item["id"]: item for item in service.scopes()}
+    assert scopes["close_reading"]["papers"] == 2
+    assert scopes["close_reading"]["scope_type"] == "analytical_population"
+    assert "does not estimate corpus prevalence" in scopes["close_reading"]["definition"]
+
+    selected = service._theory_population_frame(service.papers, "close_reading")
+    assert set(selected["paper_id"]) == {"P1", "P3"}
+
+    model = service.composition_models()[0]["id"]
+    result = service.theory_construct_specification(
+        model, "close_reading", "all", "all"
+    )
+    assert result["population_label"] == "Systematic close-reading set"
+    assert result["filtered_papers"] == 2
+
+
 def test_ft50_horizontal_replication_uses_ft50_baseline_without_tautology(service):
     service.papers.loc[service.papers["paper_id"].eq("P1"), "in_query_2"] = "1"
     service._composition_frames.clear()
@@ -536,7 +560,7 @@ def test_ft50_horizontal_replication_uses_ft50_baseline_without_tautology(servic
         for group in result["groups"]
         if group["id"] == "other_entrepreneurship"
     )
-    assert other["label"] == "Additional entrepreneurship"
+    assert other["label"] == "Additional entrepreneurship journals"
     assert other["eligible"] is False
     assert other["full_n"] == 0
     assert other["denominator"] == 0
@@ -686,7 +710,7 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
     )
     assert "Construct specification" in report
     assert "GPT-4.1 Nano" in report
-    assert "Study-status filter:</strong> Method" in report
+    assert "AI positioning filter:</strong> Method" in report
     assert "Distribution:</strong> Compare full and observed" in report
     assert "Model inter-rater reliability" in report
     assert "Krippendorff α" in report
@@ -1121,10 +1145,11 @@ def test_construct_contrasting_endpoints_and_release_are_reproducible(service):
         "core",
         "other",
         "combined",
+        "close_reading",
     ]
     assert entrepreneurship["groups"][2]["comparison_role"] == "Union benchmark"
     assert entrepreneurship["configurations"]
-    assert len(entrepreneurship["configurations"][0]["population_values"]) == 3
+    assert len(entrepreneurship["configurations"][0]["population_values"]) == 4
 
     report = main.theory_contrasting_report(
         tactic="horizontal",
@@ -1310,7 +1335,7 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "ranked.map(topic => `T${topic.topic_id}: ${topic.display_label}`)" in topic_review_html
     assert "topic_prevalence.png" not in topic_review_html
     assert "Topics by publication era" not in topic_review_html
-    assert "Topics by AI study status" not in topic_review_html
+    assert "Topics by AI positioning" not in topic_review_html
     assert "Construct observability by topic" not in topic_review_html
     assert "Download topic prevalence" in topic_review_html
     assert "/api/topic-review/fitted-papers" in topic_review_html
@@ -1526,6 +1551,10 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'id="growthTraceChart"' in index_html
     assert 'value="1976__2026"' in index_html
     assert 'value="1976__2000"' in index_html
+    assert 'value="custom"' in index_html
+    assert 'id="growthStartYear"' in index_html
+    assert 'id="growthEndYear"' in index_html
+    assert "function configureCustomGrowthWindow(data)" in index_html
     assert "Percentage growth is therefore undefined" in index_html
     assert 'class="growth-calculation-details"' in index_html
     assert "`${scopeLabel}: ${startCumulative.toLocaleString()} to ${endCumulative.toLocaleString()} cumulative papers`;" in index_html
@@ -1725,7 +1754,7 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "downloadScopeData" in dashboard_html
     assert "renderPlatformState()" in dashboard_html
     assert 'id="cards"' not in dashboard_html
-    assert "Clear study status" not in dashboard_html
+    assert "Clear AI positioning" not in dashboard_html
     assert "Named technical type" not in dashboard_html
     assert "Observable mechanism" not in dashboard_html
     assert "${s.papers.toLocaleString()}" in dashboard_html
@@ -1757,6 +1786,33 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Current dataset" in scope_context_js
     assert "Business domain" in scope_context_js
     assert "Analytical residual" in scope_context_js
+    assert "/api/retrieval-queries" in scope_context_js
+    assert "Scopus search queries used" in scope_context_js
+    assert "scope-query-list" in scope_context_js
+
+
+def test_retrieval_queries_expose_all_registered_scopus_searches():
+    from aecsp.api import main
+
+    payload = main.retrieval_queries()
+
+    assert [query["id"] for query in payload["queries"]] == [
+        "Search Query 1",
+        "Search Query 2",
+        "Search Query 3",
+        "Search Query 4",
+    ]
+    assert [query["records_retrieved"] for query in payload["queries"]] == [
+        29_294,
+        818,
+        1_097,
+        1_509,
+    ]
+    assert all(query["date_submitted"] == "2026-07-08" for query in payload["queries"])
+    assert all(query["scopus_query"].startswith("TITLE-ABS-KEY") for query in payload["queries"])
+    query_one = payload["queries"][0]
+    assert "Financial Times Top 50 journals" in query_one["construction_note"]
+    assert "counts overlap and do not sum to 695" in query_one["construction_note"]
 
 
 def test_static_assets_are_never_cached(monkeypatch):

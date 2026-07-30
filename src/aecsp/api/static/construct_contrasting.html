@@ -87,14 +87,14 @@ const params = new URLSearchParams(window.location.search);
 const VALID_TACTICS = ["horizontal", "vertical", "structuring"];
 let tactic = VALID_TACTICS.includes(params.get("tactic")) ? params.get("tactic") : "horizontal";
 let codingModel = params.get("model") || "";
-let population = ["core", "other", "combined"].includes(params.get("population")) ? params.get("population") : "combined";
+let population = ["core", "other", "combined", "close_reading"].includes(params.get("population")) ? params.get("population") : "combined";
 let journalScope = ["all", "ft50"].includes(params.get("journal_scope")) ? params.get("journal_scope") : "all";
 let filterDimension = params.get("filter_dimension") || "study_status";
 let filterValue = params.get("filter_value") || (["phenomenon", "method", "both"].includes(params.get("study_status")) ? params.get("study_status") : "");
 let distributionView = ["full", "observed"].includes(params.get("distribution")) ? params.get("distribution") : "observed";
 let horizontalDimension = params.get("dimension") || "ai_role";
 let horizontalMetric = params.get("horizontal_metric") || "share";
-let entrepreneurshipPopulationView = ["all", "core", "other", "combined"].includes(params.get("entrepreneurship_population")) ? params.get("entrepreneurship_population") : "all";
+let entrepreneurshipPopulationView = ["all", "core", "other", "combined", "close_reading"].includes(params.get("entrepreneurship_population")) ? params.get("entrepreneurship_population") : "all";
 let verticalRow = params.get("vertical_row") || "ai_role";
 let verticalColumn = params.get("vertical_column") || "level";
 let verticalMetric = params.get("vertical_metric") || "share_within_column";
@@ -211,10 +211,11 @@ function renderAnalysisControls() {
         <option value="ft50">FT50 papers only (FT50 baseline)</option>
       </select></label>
       <label>Entrepreneurship rows <select id="entrepreneurshipPopulationView">
-        <option value="all">Leading, Additional, and Combined</option>
+        <option value="all">Leading, Additional, Combined, and close reading</option>
         <option value="core">Leading entrepreneurship journals only</option>
-        <option value="other">Additional entrepreneurship only</option>
+        <option value="other">Additional entrepreneurship journals only</option>
         <option value="combined">Combined entrepreneurship only</option>
+        <option value="close_reading">Systematic close-reading set only</option>
       </select></label>`;
     el("horizontalDimension").value = horizontalDimension;
     el("horizontalMetric").value = horizontalMetric;
@@ -305,8 +306,8 @@ function renderGlobalFilterControls() {
 }
 
 function effectiveStudyStatus() {
-  // Retained for the API's legacy study-status parameter. The dynamic filter
-  // below now handles Study status in exactly the same way as every other
+  // Retained for the API's legacy AI positioning parameter. The dynamic filter
+  // below now handles AI positioning in exactly the same way as every other
   // specification dimension, including its "unclear" category.
   return "all";
 }
@@ -439,7 +440,11 @@ function entrepreneurshipSections(data) {
       ? "percentage_point_difference_from_combined"
       : "share";
   const rows = displayedGroups.map(group => ({
-    label: group.id === "combined" ? `${group.label} (union benchmark)` : group.label,
+    label: group.id === "combined"
+      ? `${group.label} (union benchmark)`
+      : group.id === "close_reading"
+        ? `${group.label} (interpretive dataset)`
+        : group.label,
     id: group.id,
     denominator: group.denominator,
     values: Object.fromEntries(group.categories.map(item => [item.raw_value, item])),
@@ -493,7 +498,7 @@ function entrepreneurshipSections(data) {
     </section>
     <section class="card">
       <h2>Recurring configurations within entrepreneurship</h2>
-      <p class="chart-note">Configurations contain AI role, mechanism, level, scope, and process stage. Rows shown occur in at least ${Number(data.configuration_min_support).toLocaleString()} Combined entrepreneurship papers. Click any population cell to inspect its papers.</p>
+      <p class="chart-note">Configurations contain AI role, mechanism, level, scope, and process stage. Rows shown occur in at least ${Number(data.configuration_min_support).toLocaleString()} Combined entrepreneurship papers. The close-reading column reports the overlap with the fixed interpretive dataset; it is not a prevalence estimate. Click any population cell to inspect its papers.</p>
       <div class="contrast-table-scroll contrast-configurations"><table><thead><tr><th>Rank</th><th>AI role</th><th>Mechanism</th><th>Level</th><th>Scope</th><th>Process stage</th>${populationHeaders}</tr></thead><tbody>${configurationRows || `<tr><td colspan="${6 + displayedGroups.length}">No configuration reaches the selected minimum.</td></tr>`}</tbody></table></div>
     </section>`;
 }
@@ -522,12 +527,12 @@ function showAnalysisScopeInfo() {
       <h3>Horizontal contrasting</h3>
       <p><strong>Definition:</strong> comparison across contexts while the analytical basis remains broadly comparable. It tests which meanings generalize and which vary when a theoretical construct travels to another context (${fisherAguinisLink("Fisher and Aguinis, 2017, pp. 444-445")}).</p>
       <p><strong>Implementation here:</strong> the selected specification dimension is compared across registered business domains. The optional comparison-control dimension applies the same category restriction to the corpus baseline, every domain row, and the entrepreneurship boundary comparison. FT50 repeats the domain comparison within a selective-journal corpus.</p>
-      <p><strong>Within entrepreneurship:</strong> Leading and Additional entrepreneurship journals are the journal-set comparison. Combined is their union benchmark, not another independent domain. This comparison is nested under Horizontal contrasting because it tests whether patterns are concentrated in the leading journals or extend through the broader entrepreneurship literature.</p>
+      <p><strong>Within entrepreneurship:</strong> Leading and Additional entrepreneurship journals are the journal-set comparison. Combined is their union benchmark, not another independent domain. The 136-paper systematic close-reading set is an overlapping interpretive dataset, including 124 entrepreneurship papers and 12 cross-domain contrasts; it is shown for pattern inspection rather than prevalence estimation.</p>
     </section>
     <section class="contrast-interpretation">
       <h3>Vertical contrasting</h3>
       <p><strong>Definition:</strong> comparison across levels of analysis to determine which theoretical meanings remain similar and which change when a construct moves between levels (${fisherAguinisLink("Fisher and Aguinis, 2017, p. 445")}).</p>
-      <p><strong>Implementation here:</strong> one matrix axis must remain Level of analysis. The other axis can be any registered specification dimension. The purpose is not simply to count levels, but to inspect whether AI role, mechanism, technical form, scope, process stage, definition, or study status changes across levels.</p>
+      <p><strong>Implementation here:</strong> one matrix axis must remain Level of analysis. The other axis can be any registered specification dimension. The purpose is not simply to count levels, but to inspect whether AI role, mechanism, technical form, scope, process stage, definition, or AI positioning changes across levels.</p>
     </section>
     <section class="contrast-interpretation">
       <h3>Structuring</h3>
@@ -537,7 +542,7 @@ function showAnalysisScopeInfo() {
     <section class="contrast-interpretation">
       <h3>Boundary of the evidence</h3>
       <p>All analyses describe what is observable in titles, abstracts, and author keywords. They cannot establish passage-level multiplicity or claims that require full text.</p>
-      <p>FT50 is a Horizontal robustness replication. It is not an extra Vertical or Structuring filter because Additional entrepreneurship contains no FT50 papers.</p>
+      <p>FT50 is a Horizontal robustness replication. It is not an extra Vertical or Structuring filter because Additional entrepreneurship journals contain no FT50 papers.</p>
     </section>
     <section class="contrast-interpretation">
       <h3>Methodological reference</h3>

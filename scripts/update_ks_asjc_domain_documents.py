@@ -385,7 +385,7 @@ def update_supplement(
     )
     document.add_paragraph(
         "Note. The full-corpus horizontal baseline is the complete eligible denominator for the selected coding "
-        "model, study-status filter, and full or observed view. It is not restricted to papers assigned to one of "
+        "model, AI positioning filter, and full or observed view. It is not restricted to papers assigned to one of "
         "the displayed domain rows. In an observed view, the residual is recalculated within the substantive-code "
         "denominator for that dimension."
     )

@@ -22,15 +22,20 @@ AUDIT = ROOT / "reports/analysis/tables/contrasting/close_reading_current_popula
 OUTPUT_DIR = ROOT / "reports/analysis/tables/contrasting/close_reading_coverage"
 FIGURE_DIR = ROOT / "reports/analysis/figures/contrasting"
 REPORT = ROOT / "reports/analysis/CLOSE_READING_TOPIC_VOS_JUSTIFICATION.md"
+TOPIC_LABEL_REVIEW = (
+    ROOT / "data/processed/analysis/stage4/topic_label_review.csv"
+)
 
 
 POPULATIONS = {
     "Leading entrepreneurship journals": {
+        "scope": "query_3",
         "membership": "in_leading_entrepreneurship_journals",
         "topics": ROOT / "data/processed/topics/native/query_3/assignments.csv",
         "vos": ROOT / "data/vosdata/query 3.txt",
     },
     "Additional entrepreneurship journals": {
+        "scope": "query_4",
         "membership": "in_additional_entrepreneurship_journals",
         "topics": ROOT / "data/processed/topics/native/query_4/assignments.csv",
         "vos": ROOT / "data/vosdata/query 4.txt",
@@ -60,6 +65,24 @@ def topic_coverage(reading: pd.DataFrame, population: str, config: dict[str, Pat
     )
     selected["native_topic_label"] = selected["current_topic_label"].replace("", "Unassigned")
     topics["native_topic_label"] = topics["native_topic_label"].replace("", "Unassigned")
+
+    reviewed_labels = pd.read_csv(
+        TOPIC_LABEL_REVIEW,
+        dtype={"topic_id": str},
+        keep_default_na=False,
+    )
+    reviewed_labels = reviewed_labels[
+        (reviewed_labels["scope"] == str(config["scope"]))
+        & (reviewed_labels["review_status"].str.lower() == "approved")
+        & reviewed_labels["approved_label"].ne("")
+    ]
+    label_lookup = reviewed_labels.set_index("topic_id")["approved_label"].to_dict()
+    selected["native_topic_label"] = selected["native_topic_id"].map(label_lookup).fillna(
+        selected["native_topic_label"]
+    )
+    topics["native_topic_label"] = topics["native_topic_id"].astype(str).map(
+        label_lookup
+    ).fillna(topics["native_topic_label"])
 
     population_counts = topics.groupby(["native_topic_id", "native_topic_label"]).size().rename("population_papers")
     reading_counts = selected.groupby(["native_topic_id", "native_topic_label"]).size().rename("reading_papers")
@@ -167,7 +190,13 @@ def plot_results(topic_table: pd.DataFrame, quartiles: pd.DataFrame, output: Pat
         subset = subset.sort_values("population_share")
         y = np.arange(len(subset))
         axis.barh(y - 0.18, 100 * subset["population_share"], height=0.34, color=colors["population"], label="Population")
-        axis.barh(y + 0.18, 100 * subset["reading_share"], height=0.34, color=colors["reading"], label="136-paper ledger subset")
+        axis.barh(
+            y + 0.18,
+            100 * subset["reading_share"],
+            height=0.34,
+            color=colors["reading"],
+            label="Structured close-reading set",
+        )
         axis.set_yticks(y, subset["native_topic_label"].str.replace("_", " "))
         axis.set_xlabel("Papers (%)")
         axis.set_title(population)
@@ -177,7 +206,13 @@ def plot_results(topic_table: pd.DataFrame, quartiles: pd.DataFrame, output: Pat
     for axis, population in zip(axes[1], POPULATIONS):
         subset = quartiles[quartiles["population"] == population]
         x = np.arange(1, 5)
-        axis.bar(x, 100 * subset["reading_share"], color=colors["reading"], width=0.62, label="Reading ledger")
+        axis.bar(
+            x,
+            100 * subset["reading_share"],
+            color=colors["reading"],
+            width=0.62,
+            label="Structured close-reading set",
+        )
         axis.axhline(25, color=colors["population"], linestyle="--", linewidth=2, label="Population expectation")
         axis.set_xticks(x, ["Top 25%", "25-50%", "50-75%", "Bottom 25%"])
         axis.set_ylabel("Reading papers (%)")
@@ -186,7 +221,11 @@ def plot_results(topic_table: pd.DataFrame, quartiles: pd.DataFrame, output: Pat
         axis.grid(axis="y", alpha=0.25)
         axis.legend(loc="upper right")
 
-    fig.suptitle("Topic distribution and VOS network position of the existing close-reading ledger", fontsize=15, fontweight="bold")
+    fig.suptitle(
+        "Topic and VOS network coverage of the structured close-reading set",
+        fontsize=15,
+        fontweight="bold",
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=220, bbox_inches="tight")
     plt.close(fig)

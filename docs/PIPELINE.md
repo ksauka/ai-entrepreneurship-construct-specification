@@ -1,6 +1,6 @@
 # ETV_V2 project status and research pipeline
 
-Status checkpoint: 24 July 2026.
+Status checkpoint: 27 July 2026.
 
 This document records what has been completed, what is operational, what is
 intentionally hidden, and what remains before the manuscript and platform can
@@ -41,7 +41,7 @@ https://aitheoryelaboration.org
 | Topic-label review | 67 approved and 63 pending |
 | Entrepreneurship analysis | Leading 646; Additional 986; Combined 1,632 |
 | Business-domain analysis | Nine overlapping domains; 19,505 papers assigned |
-| Systematic close reading | 136-paper ledger; 124 entrepreneurship papers plus 12 cross-domain contrasts |
+| Systematic close reading | Fixed 136-paper interpretive dataset exposed across Analytics, Construct Specification, Construct Contrasting, Vertical contrasting, and Structuring |
 | Human insight allocation | 14/14 agreement; Cohen's kappa = 1.00 |
 | Blind eight-dimension human annotation | Platform ready; zero completed annotations |
 | Targeted interpretation review | Implementation retained but hidden pending supervisor agreement |
@@ -49,6 +49,7 @@ https://aitheoryelaboration.org
 | Public hosting | Permanent Cloudflare hostname and authenticated reviewer/admin access configured |
 | Desktop failover | Encrypted, checksum-verified recovery bundle created; desktop installation pending |
 | Manuscript | Current author-edited draft and supplement remain under section-by-section review |
+| Platform figure | Regenerated from the current IBM Plex interface; hidden Knowledge Graph panel removed |
 
 ## 3. Executed pipeline stages
 
@@ -115,7 +116,7 @@ The eight dimensions are:
 
 | Dimension | Status |
 |---|---|
-| Study status: method, phenomenon, both, or unclear | Core |
+| AI positioning: method, phenomenon, both, or unclear | Core |
 | AI role/function | Core |
 | Technical AI type/form | Core |
 | AI mechanism | Core |
@@ -195,6 +196,7 @@ Entrepreneurship populations:
 | Additional entrepreneurship journals | 986 | Query 4 retained view |
 | Combined entrepreneurship | 1,632 | Exact non-overlapping union |
 | FT50 restriction | 438 | Robustness and boundary view |
+| Systematic close-reading set | 136 | Interpretive dataset: 124 entrepreneurship papers plus 12 cross-domain contrasts; not a prevalence estimator |
 
 Some older internal files use `core_entrepreneurship` and
 `other_entrepreneurship`. The public and manuscript-facing terminology is
@@ -203,6 +205,14 @@ Some older internal files use `core_entrepreneurship` and
 Papers are analyzed at the intersection of the selected dataset scope and the
 selected coding model's successful records. A coding model does not artificially
 inherit another model's coverage.
+
+The close-reading set is joined to the analytical tables by stable `paper_id`.
+It is available in the shared Dataset scope selector and as an entrepreneurship
+analysis population for Construct Specification, Vertical contrasting, and
+Structuring. Horizontal contrasting also displays it as an overlapping
+interpretive row beside Leading, Additional, and Combined entrepreneurship.
+Its distributions and matrices describe only the 136 selected papers and must
+not be interpreted as population prevalence.
 
 ## 8. ASJC business-domain system
 
@@ -254,7 +264,7 @@ The platform operationalizes four Fisher-and-Aguinis theory-elaboration tactics:
 4. **Structuring:** role-mechanism, role-level, mechanism-level, role-scope, and
    other dynamically selected pairwise matrices.
 
-Conditioning is dynamic. For example, a user can fix study status to phenomenon,
+Conditioning is dynamic. For example, a user can fix AI positioning to phenomenon,
 method, or both and recalculate every other dimension or matrix within the
 selected population and model.
 
@@ -369,7 +379,7 @@ Implemented platform capabilities include:
 
 - consistent dataset-scope information across pages;
 - model-specific paper counts and distributions;
-- study-status and other dimension/value filters;
+- AI positioning and other dimension/value filters;
 - dynamic matrix axes and denominators;
 - paper-level evidence panels and Scopus/DOI links;
 - evidence-status and confidence display;
@@ -377,6 +387,7 @@ Implemented platform capabilities include:
 - pairwise nominal Krippendorff-alpha reliability tables;
 - trend charts with annual count, cumulative count, and click-level growth
   details;
+- registered time windows plus a custom start-year and end-year window;
 - year-level papers and keyword inspection;
 - topic-label humanization;
 - read-only reviewer sessions;
@@ -386,6 +397,30 @@ Implemented platform capabilities include:
 
 The platform uses one analytical service for browser panels, reports, and
 downloads so displayed states remain traceable to the same source tables.
+
+Public population terminology is standardized as **Leading entrepreneurship
+journals**, **Additional entrepreneurship journals**, **Combined
+entrepreneurship**, and **Systematic close-reading set**. Older internal IDs
+remain unchanged where changing them would break reproducibility.
+
+The public label **AI positioning** replaces **Study status** throughout the
+platform, generated reports, tables, figure titles, and manuscript build
+scripts. The underlying field `ai_method_or_phenomenon`, API parameter
+`study_status`, and legacy artifact filenames remain unchanged to preserve the
+frozen analytical contract. This is a terminology migration, not a recoding of
+the phenomenon, method, both, or unclear categories.
+
+The annotated platform figure at
+`reports/analysis/figures/platform/platform_implementation_annotated.png` was
+regenerated on 27 July 2026 from authenticated current-interface screenshots.
+Its six panels now show Analytics, Construct Specification, paper-level
+evidence and model convergence, Construct Contrasting, Topic Review, and Human
+Annotation. It no longer depicts the hidden Knowledge Graph workspace.
+The corresponding manuscript-ready AI-positioning figures are
+`reports/analysis/figures/contrasting/nested_status_central_dimensions.png`,
+`nested_status_all_dimensions.png`, `nested_status_observability.png`, and the
+five population figures under `reports/analysis/figures/specification/`,
+including `specification_close_reading.png`.
 
 ## 14. Intentionally hidden workspaces
 
@@ -603,21 +638,21 @@ active simultaneously.
 
 ## 18. Ordered remaining work
 
-1. Verify the Knowledge Graph is absent from every active navigation and direct
-   page route.
-2. Restart the authenticated dashboard and test administrator/reviewer access.
-3. Commit and push the Knowledge Graph hiding and this status document.
-4. Refresh the encrypted desktop bundle to the new code commit without
+1. Restart the authenticated review service and verify the 136-paper scope,
+   custom time window, and updated terminology under both administrator and
+   reviewer accounts.
+2. Commit and push the close-reading scope, custom time control, current
+   screenshots, revised annotated figure, and this status update.
+3. Refresh the encrypted desktop bundle to the new code commit without
    rebuilding `runtime.tar`.
-5. Install and test the Linux desktop in standby mode.
-6. Complete the section-by-section manuscript and supplement audit.
-7. Complete or explicitly bound the blind human-annotation stage.
-8. Decide whether to rerun the remaining Llama failures; keep Llama outside
+4. Install and test the Linux desktop in standby mode.
+5. Complete the section-by-section manuscript and supplement audit.
+6. Complete or explicitly bound the blind human-annotation stage.
+7. Decide whether to rerun the remaining Llama failures; keep Llama outside
    balanced IRR unless it reaches the 21,930 threshold.
-9. Resolve the 63 pending Query 1 and Query 2 topic labels or document their
+8. Resolve the 63 pending Query 1 and Query 2 topic labels or document their
    exclusion from the final release.
-10. Freeze the final analytical release, screenshots, manifests, and checksums.
-11. Tag the exact review release only after the manuscript, supplement, and
+9. Freeze the final analytical release, screenshots, manifests, and checksums.
+10. Tag the exact review release only after the manuscript, supplement, and
     hosted platform are synchronized.
-12. Resume the Knowledge Graph later through the gate in Section 14.2.
-
+11. Resume the Knowledge Graph later through the gate in Section 14.2.

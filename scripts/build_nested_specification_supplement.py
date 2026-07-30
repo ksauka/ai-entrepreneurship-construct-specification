@@ -2,7 +2,7 @@
 
 The July supplementary methods document is used only as a style reference. Its
 obsolete 367-paper content is removed. The rebuilt appendix reports the frozen
-22,345-paper analytical contract, detailed study-status-conditioned results,
+22,345-paper analytical contract, detailed results conditioned on AI positioning,
 population boundary checks, and the inventory of every pairwise dimension
 matrix exposed by the platform. It also reports the final four-model coverage,
 balanced reliability, exact consensus diagnostics, and the complete topic-model
@@ -547,7 +547,7 @@ def build() -> None:
         "Table A1.2. Registered dimensions available as controls and outcomes",
         ["Dimension", "Function in the analysis"],
         [
-            ["Study status", "Separates AI as phenomenon, research method, both, or unclear"],
+            ["AI positioning", "Separates AI as phenomenon, research method, both, or unclear"],
             ["AI role", "Identifies the theoretical work assigned to AI"],
             ["Technical type", "Identifies the named technical form"],
             ["Mechanism", "Identifies what AI observably changes or enables"],
@@ -560,7 +560,7 @@ def build() -> None:
 
     document.add_heading("A2. Platform-to-Appendix Reproduction Procedure", level=1)
     document.add_paragraph(
-        "The platform's Dataset scope, Coding model, Filter dimension, Filter value, Study status, and "
+        "The platform's Dataset scope, Coding model, Filter dimension, Filter value, AI positioning, and "
         "Distribution controls define the analytical state. Every visible bar or matrix cell is backed by the "
         "same paper-level frame used to generate this appendix. Selecting a cell opens its title, abstract, "
         "author keywords, coding evidence, metadata, and Scopus record. The evidence panel can retain all "
@@ -584,9 +584,9 @@ def build() -> None:
         ],
     )
 
-    document.add_heading("A3. Study-Status-Conditioned Construct Specification", level=1)
+    document.add_heading("A3. Construct Specification Conditioned on AI Positioning", level=1)
     document.add_paragraph(
-        "The Combined entrepreneurship population contains 1,497 papers with a clear study status: 824 treat AI "
+        "The Combined entrepreneurship population contains 1,497 papers with clear AI positioning: 824 treat AI "
         "as the substantive phenomenon, 385 as a research method, and 288 as both. The remaining papers have an "
         "unclear status and are retained in the unconditioned full view but not assigned to one of these three "
         "status profiles."
@@ -594,31 +594,31 @@ def build() -> None:
     add_picture(
         document,
         FIG_OBSERVABILITY,
-        "Figure A3.1. Observability of each outcome dimension within the three clear study-status subsets.",
+        "Figure A3.1. Observability of each outcome dimension within the three clear AI positioning subsets.",
         6.5,
     )
     add_table(
         document,
-        "Table A3.1. Observed denominator by outcome dimension and study status",
+        "Table A3.1. Observed denominator by outcome dimension and AI positioning",
         ["Outcome dimension", "Phenomenon", "Method", "Both"],
         observability_rows(table),
     )
     add_note(
         document,
-        "Each cell reports observed papers divided by all papers in that study-status subset. A lower value "
+        "Each cell reports observed papers divided by all papers in that AI positioning subset. A lower value "
         "means that the outcome dimension is less visible in titles, abstracts, and author keywords; it does "
         "not establish absence from the full paper.",
     )
     add_picture(
         document,
         FIG_ALL,
-        "Figure A3.2. Complete observed composition of all seven outcome dimensions after conditioning on study status.",
+        "Figure A3.2. Complete observed composition of all seven outcome dimensions after conditioning on AI positioning.",
         6.8,
     )
     add_table(
         document,
-        "Table A3.2. Leading categories within each observed dimension and study status",
-        ["Outcome dimension", "Study status", "Observed n", "Leading three categories"],
+        "Table A3.2. Leading categories within each observed dimension and AI positioning",
+        ["Outcome dimension", "AI positioning", "Observed n", "Leading three categories"],
         leading_rows(table),
         font_size=7.6,
     )
@@ -640,7 +640,7 @@ def build() -> None:
             denominators.append(int(frame["denominator"].iloc[0]) if len(frame) else 0)
         add_table(
             document,
-            f"Table A3.{index}. Complete {label.lower()} composition by study status",
+            f"Table A3.{index}. Complete {label.lower()} composition by AI positioning",
             ["Observed category", *[STATUS_LABELS[item] for item in STATUS_ORDER]],
             detailed_dimension_rows(table, dimension),
             font_size=7.5,
@@ -655,7 +655,7 @@ def build() -> None:
             + ". Cells report papers and the column percentage within that dimension-specific denominator.",
         )
 
-    document.add_heading("A4. Study Status by Entrepreneurship Population", level=1)
+    document.add_heading("A4. AI positioning by Entrepreneurship Population", level=1)
     document.add_paragraph(
         "Core and Additional entrepreneurship do not differ uniformly. The table selects, for each status and "
         "outcome dimension, the category with the largest absolute percentage-point difference. This is a "
@@ -666,11 +666,11 @@ def build() -> None:
         "greater weight on generative AI, learning, innovation, and country boundaries, whereas Core places "
         "greater weight on tools, prediction, and individual entrepreneurs. The role profile of method papers is "
         "much more similar across the two populations, indicating that the aggregate population contrast is "
-        "partly produced by different mixtures of study status."
+        "partly produced by different mixtures of AI-positioning categories."
     )
     add_table(
         document,
-        "Table A4.1. Strongest Core-Additional contrast within each study-status and outcome-dimension combination",
+        "Table A4.1. Strongest Core-Additional contrast within each AI positioning and outcome-dimension combination",
         ["Status", "Dimension", "Category", "Core", "Additional", "Core minus Additional"],
         strongest_population_contrasts(),
         font_size=7.2,
@@ -726,7 +726,7 @@ def build() -> None:
     )
     add_note(
         document,
-        "The means compare study status, technical type, AI role, mechanism, level, and scope. The complete "
+        "The means compare AI positioning, technical type, AI role, mechanism, level, and scope. The complete "
         "dimension-level results below are the analytical record. Agreement measures coding convergence, not "
         "accuracy or ground truth.",
     )
@@ -873,7 +873,7 @@ def build() -> None:
                 "- Full Corpus and broad-scope joint grid: `data/processed/topics/optimization/full_corpus_query_1_joint_grid.csv`",
                 "- Preferred-trio and four-model consensus: `reports/analysis/tables/model_validation/full_corpus_dimension_consensus.csv`",
                 "",
-                "The DOCX contains the full study-status tables, Core-Additional conditional contrasts, all-dimension figures, the 28-pair Combined entrepreneurship matrix inventory, and the final four-model coverage, reliability, and consensus tables.",
+                "The DOCX contains the full AI positioning tables, Core-Additional conditional contrasts, all-dimension figures, the 28-pair Combined entrepreneurship matrix inventory, and the final four-model coverage, reliability, and consensus tables.",
             ]
         ),
         encoding="utf-8",

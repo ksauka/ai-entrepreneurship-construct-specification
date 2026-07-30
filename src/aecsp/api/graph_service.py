@@ -85,6 +85,10 @@ from aecsp.specification.paths import (
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 MODEL_COMPARISON_CONFIG = PROJECT_ROOT / "configs" / "model_comparison.json"
+CLOSE_READING_LEDGER = (
+    PROJECT_ROOT
+    / "data/interim/theory_elaboration/theory_elaboration_matched_papers.csv"
+)
 
 MODEL_DISPLAY_NAMES = {
     "gpt-5.4-mini-2026-03-17": "GPT-5.4 Mini",
@@ -161,8 +165,9 @@ SCOPE_LABEL_BY_ID = {scope.id: scope.label for scope in DATASET_SCOPES}
 
 THEORY_POPULATIONS = (
     ("core", "Leading entrepreneurship journals"),
-    ("other", "Additional entrepreneurship"),
+    ("other", "Additional entrepreneurship journals"),
     ("combined", "Combined entrepreneurship"),
+    ("close_reading", "Systematic close-reading set"),
 )
 
 PENDING_ASJC_DOMAIN_LABELS = {
@@ -214,6 +219,7 @@ class GraphService:
         self._comparison_config = self._load_comparison_config()
         self._reference_ids: frozenset[str] | None = None
         self._reference_signature: tuple | None = None
+        self._close_reading_ids_cache: frozenset[str] | None = None
 
     # ---- loading --------------------------------------------------------
     def _load_papers(self) -> pd.DataFrame:
@@ -335,6 +341,7 @@ class GraphService:
         self._composition_frame_signatures.clear()
         self._reference_ids = None
         self._reference_signature = None
+        self._close_reading_ids_cache = None
         return len(self.papers)
 
     @property
@@ -353,6 +360,27 @@ class GraphService:
                 if population_id == scope_id:
                     return frame.reset_index(drop=True)
             raise error
+
+    def _close_reading_ids(self) -> frozenset[str]:
+        """Return the fixed, audited 136-paper systematic close-reading set."""
+
+        if self._close_reading_ids_cache is not None:
+            return self._close_reading_ids_cache
+        if not CLOSE_READING_LEDGER.exists():
+            self._close_reading_ids_cache = frozenset()
+            return self._close_reading_ids_cache
+        ledger = pd.read_csv(
+            CLOSE_READING_LEDGER,
+            usecols=["paper_id"],
+            dtype=str,
+            keep_default_na=False,
+        )
+        self._close_reading_ids_cache = frozenset(
+            paper_id
+            for paper_id in ledger["paper_id"].astype(str).str.strip()
+            if paper_id
+        )
+        return self._close_reading_ids_cache
 
     def _registered_composition_models(self) -> list[tuple[str, str]]:
         """Return every model eligible for an analytical model selector.
@@ -962,7 +990,7 @@ class GraphService:
         """Return the traceable paper table behind one composition view."""
 
         if study_status not in STUDY_STATUS_FILTERS:
-            raise ValueError(f"Unknown study status: {study_status}")
+            raise ValueError(f"Unknown AI positioning: {study_status}")
         frame, _ = self._composition_scope(scope_id, model)
         frame, _ = self._theory_controlled_frame(
             frame, filter_dimension, filter_value
@@ -1443,7 +1471,7 @@ class GraphService:
             )
         population_labels = {
             "core": "Leading entrepreneurship journals",
-            "additional": "Additional entrepreneurship",
+            "additional": "Additional entrepreneurship journals",
             "combined": "Combined entrepreneurship",
         }
         return {
@@ -1499,10 +1527,10 @@ class GraphService:
                 "Papers from source titles in the prespecified FT50 journal set."
             ),
             "query_3": (
-                "Papers from the 14 Leading entrepreneurship journals."
+                "Papers from the 15 represented Leading entrepreneurship source titles."
             ),
             "query_4": (
-                "Papers from the 13 Additional entrepreneurship journals."
+                "Papers from the 13 represented Additional entrepreneurship journal source titles."
             ),
         }
         rows = [
@@ -1892,14 +1920,14 @@ class GraphService:
             (
                 "core_entrepreneurship",
                 "Leading entrepreneurship journals",
-                "Papers from the registered leading entrepreneurship journal population.",
+                "Papers from the prespecified leading entrepreneurship journal population.",
                 frame.loc[query_3].copy(),
                 False,
             ),
             (
                 "additional_entrepreneurship",
-                "Additional entrepreneurship",
-                "Papers from the registered additional entrepreneurship journal population.",
+                "Additional entrepreneurship journals",
+                "Papers from the prespecified additional entrepreneurship journal population.",
                 frame.loc[query_4].copy(),
                 False,
             ),
@@ -1908,6 +1936,18 @@ class GraphService:
                 "Combined entrepreneurship",
                 "Union of the Leading and Additional entrepreneurship journal populations.",
                 frame.loc[combined_mask].copy(),
+                False,
+            ),
+            (
+                "close_reading",
+                "Systematic close-reading set",
+                "The fixed 136-paper interpretive dataset: 124 papers from "
+                "Leading and Additional entrepreneurship journals plus 12 "
+                "cross-domain contrasts. It supports close interpretation and "
+                "counterexample analysis; it does not estimate corpus prevalence.",
+                frame.loc[
+                    frame["paper_id"].astype(str).isin(self._close_reading_ids())
+                ].copy(),
                 False,
             ),
             (
@@ -2347,6 +2387,10 @@ class GraphService:
         for column in ("in_query_3", "in_query_4"):
             if column not in frame.columns:
                 return frame.iloc[0:0].copy()
+        if population == "close_reading":
+            return frame.loc[
+                frame["paper_id"].astype(str).isin(self._close_reading_ids())
+            ].copy()
         core = pd.to_numeric(frame["in_query_3"], errors="coerce").fillna(0).eq(1)
         other = pd.to_numeric(frame["in_query_4"], errors="coerce").fillna(0).eq(1)
         mask = core if population == "core" else other
@@ -2495,10 +2539,10 @@ class GraphService:
                 "Papers from source titles in the registered FT50 journal set."
             ),
             "core_entrepreneurship": (
-                "Papers from the registered leading entrepreneurship journal set."
+                "Papers from the prespecified leading entrepreneurship journal set."
             ),
             "other_entrepreneurship": (
-                "Papers from the registered additional entrepreneurship journal set."
+                "Papers from the prespecified additional entrepreneurship journal set."
             ),
         }
         for domain_id, group in assignments.groupby("domain_id", sort=False):
@@ -2640,8 +2684,8 @@ class GraphService:
                     "corpus. They do not retrieve or add papers."
                 ),
                 "classification": (
-                    "FT50, Leading entrepreneurship journals, and Additional entrepreneurship "
-                    "use registered journal populations. "
+                    "FT50, Leading entrepreneurship journals, and Additional "
+                    "entrepreneurship journals use prespecified journal populations. "
                     f"{domain_coverage['business_domain_count']} business domains are "
                     "aggregated from explicitly registered official Scopus ASJC "
                     "codes. No reviewed source-title overlay is included in the "
@@ -3014,7 +3058,11 @@ class GraphService:
                     "id": population_id,
                     "label": population_label,
                     "comparison_role": (
-                        "Union benchmark" if population_id == "combined" else "Journal set"
+                        "Union benchmark"
+                        if population_id == "combined"
+                        else "Interpretive set"
+                        if population_id == "close_reading"
+                        else "Journal set"
                     ),
                     **result,
                 }
@@ -3103,9 +3151,11 @@ class GraphService:
             ),
             "benchmark_label": "Combined entrepreneurship",
             "comparison_definition": (
-                "Leading and Additional entrepreneurship journals are disjoint registered "
-                "journal sets. Combined entrepreneurship is their union and is "
-                "reported as a benchmark, not as an independent third tier."
+                "Leading and Additional entrepreneurship journals are disjoint "
+                "prespecified journal sets. Combined entrepreneurship is their "
+                "union and is reported as a benchmark, not as an independent "
+                "third tier. The systematic close-reading set is an overlapping "
+                "interpretive dataset and its percentages describe only that set."
             ),
             "groups": groups,
             "configuration_dimensions": [

@@ -48,7 +48,7 @@ EXPLORATORY_DIMENSIONS = (
 DISPLAY_DIMENSIONS = (*CORE_DIMENSIONS, *EXPLORATORY_DIMENSIONS)
 
 DIMENSION_LABELS = {
-    "ai_method_or_phenomenon": "Study status",
+    "ai_method_or_phenomenon": "AI positioning",
     "ai_type_form": "Technical AI type/form",
     "ai_role_function": "AI role/function",
     "ai_mechanism_analysis": "Observable AI mechanism",
@@ -70,7 +70,7 @@ DIMENSION_DECISIONS = {
 }
 
 OBSERVED_LABELS = {
-    "ai_method_or_phenomenon": "Study status",
+    "ai_method_or_phenomenon": "AI positioning",
     "ai_type_form": "Technical type",
     "ai_role_function": "AI role",
     "ai_mechanism_analysis": "Mechanism",
@@ -236,7 +236,7 @@ def build_report() -> None:
         "The full-corpus observed portrait is a phenomenon-oriented, firm-level, sector-bounded "
         "literature in which machine learning is most often positioned as a tool and prediction is "
         "the leading observable mechanism. The probability-sample validation shows that technical "
-        "AI type is the most stable dimension. Study status, role, mechanism, level, and scope are "
+        "AI type is the most stable dimension. AI positioning, role, mechanism, level, and scope are "
         "usable with model-sensitivity reporting. Process stage and definition form remain "
         "exploratory because prevalence-adjusted reliability is weak."
     )
@@ -248,10 +248,10 @@ def build_report() -> None:
     document.add_heading("1. Construct-specification instrument", level=1)
     document.add_paragraph(
         "Each paper is coded from its title, abstract, and author keywords only. The instrument "
-        "contains eight displayed dimensions: study status, AI role, technical type, observable "
+        "contains eight displayed dimensions: AI positioning, AI role, technical type, observable "
         "mechanism, level of analysis, entrepreneurial process stage, scope conditions, and "
         "definition form. Seven dimensions are controlled fields in the specification schema; "
-        "study status is the additional four-category field distinguishing phenomenon, method, "
+        "AI positioning is the additional four-category field distinguishing phenomenon, method, "
         "both, and unclear. Three binary presence flags are supplementary diagnostics and are not "
         "included in the main reliability heatmaps."
     )
@@ -290,7 +290,7 @@ def build_report() -> None:
 
     document.add_heading("2.1 Reliability across the six core dimensions", level=2)
     document.add_paragraph(
-        "The macro heatmaps average study status, technical type, AI role, mechanism, level, and "
+        "The macro heatmaps average AI positioning, technical type, AI role, mechanism, level, and "
         "scope. Exact agreement is the share of identical codes. Nominal Krippendorff alpha "
         "discounts agreement expected from the category distributions. The heatmaps are orientation "
         "views; inferential decisions remain dimension-specific."
@@ -346,7 +346,7 @@ def build_report() -> None:
     )
     document.add_paragraph(
         "Technical type is the strongest displayed dimension: Claude-Gemini agreement is 0.83, "
-        "their alpha is 0.78, and four-model alpha is 0.50. Study status, role, level, mechanism, "
+        "their alpha is 0.78, and four-model alpha is 0.50. AI positioning, role, level, mechanism, "
         "and scope show useful convergence between the independent strong raters, although the "
         "four-model estimates fall when Nano is included. Process stage is not stable: "
         "Claude-Gemini alpha is 0.01 and four-model alpha is 0.11. Definition form has high raw "
@@ -405,7 +405,7 @@ def build_report() -> None:
         width=5.5,
     )
     document.add_paragraph(
-        "Where study status is clear, 63.2% of papers treat AI as the phenomenon, 21.3% as a method, "
+        "Where AI positioning is clear, 63.2% of papers treat AI as the phenomenon, 21.3% as a method, "
         "and 15.6% as both. Where role is substantive, 62.3% position AI as a tool and 17.3% as a "
         "research method. Among named technical forms, machine learning accounts for 48.4%. Among "
         "observable mechanisms, improved prediction accounts for 42.9%, followed by learning at "
@@ -462,7 +462,7 @@ four-model intersection is 2,233 papers.
 ## Main decisions
 
 - Technical type is the strongest dimension.
-- Study status, AI role, mechanism, level, and scope are core dimensions with
+- AI positioning, AI role, mechanism, level, and scope are core dimensions with
   model-sensitivity reporting.
 - Process stage and definition form remain exploratory.
 - No human annotation has been completed, so agreement is not accuracy.

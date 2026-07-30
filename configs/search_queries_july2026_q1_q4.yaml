@@ -6,6 +6,20 @@ queries:
     date_submitted: '2026-07-08'
     records_retrieved: 29294
     source_title_count: 695
+    construction_note: >-
+      Query 1 used the Financial Times Top 50 journals (FT50) as the starting
+      point for constructing a broader business-journal retrieval frame. Each
+      FT50 journal was located in SCImago Journal & Country Rank to identify
+      its subject categories. The corresponding Q1, Scopus-indexed journals
+      were then reviewed to produce the 695-journal source-title list used in
+      the search. The represented categories were Arts and Humanities (67
+      journals), Business, Management and Accounting (419), Decision Sciences
+      (127), Economics, Econometrics and Finance (317), Psychology (14), Social
+      Sciences (113), and Information Systems (18), a subcategory of Computer
+      Science. Journals can belong to more than one category, so these category
+      counts overlap and do not sum to 695. Extending the frame beyond the FT50
+      was intended to retain a Q1 quality boundary while representing relevant
+      interdisciplinary business research.
     scopus_query: "TITLE-ABS-KEY (( \"Artificial Intelligence\" OR \"Artificial-Intelligence\" OR AI OR \"Machine Learning\"\
       \ OR \"Deep learning\" OR \"cognitive computing\" OR \"Neuro-Symbolic AI\" OR \"Hybrid AI\" OR \"Symbolic AI\" OR \"\
       Natural Language Processing\" OR \"Conversational AI\" OR \"Virtual Assistant\" OR \"Chatbot\" OR \"chatbots\" OR \"\

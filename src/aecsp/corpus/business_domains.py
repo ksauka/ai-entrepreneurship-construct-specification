@@ -20,7 +20,7 @@ REGISTERED_QUERY_DOMAIN_RULES: tuple[dict[str, str], ...] = (
     },
     {
         "domain_id": "other_entrepreneurship",
-        "domain_label": "Additional entrepreneurship",
+        "domain_label": "Additional entrepreneurship journals",
         "query_id": "query_4",
         "flag_column": "in_query_4",
     },
@@ -65,7 +65,8 @@ def _build_assignments(
     overlap = masks["core_entrepreneurship"] & masks["other_entrepreneurship"]
     if overlap.any():
         raise ValueError(
-            f"Core and other entrepreneurship overlap for {int(overlap.sum())} papers"
+            "Leading and Additional entrepreneurship journal populations "
+            f"overlap for {int(overlap.sum())} papers"
         )
 
     assignments: list[pd.DataFrame] = []

@@ -854,7 +854,7 @@ def build() -> None:
                 "the analytical infrastructure for this study and a research resource. The platform contains "
                 "the broad 22,345-paper business and management corpus and distinguishes the FT50, Core "
                 "entrepreneurship, Additional entrepreneurship, and Combined entrepreneurship populations. For "
-                "each paper, the title, abstract, and author keywords are examined across study status, AI role, "
+                "each paper, the title, abstract, and author keywords are examined across AI positioning, AI role, "
                 "technical type, observable mechanism, level of analysis, process stage, scope, and definition "
                 "form. Users can reproduce filters, inspect matrices, and open the evidence papers behind each "
                 "aggregate."
@@ -862,7 +862,7 @@ def build() -> None:
         elif paragraph.text.startswith("Our paper contributes to the entrepreneurship literature in a few ways. First"):
             paragraph.text = (
                 "Our paper makes two contributions. First, it develops a construct-clarification framework that "
-                "establishes the theoretical identity of an AI claim from its study status and technical form, "
+                "establishes the theoretical identity of an AI claim from its AI positioning and technical form, "
                 "together with four theoretical dimensions: role, mechanism, level of analysis, and embedding or "
                 "scope condition. Process stage and definition form provide additional specification diagnostics. "
                 "The framework shows that studies sharing a technical label are theoretically comparable only "
@@ -1151,7 +1151,7 @@ def build() -> None:
         "Table 4. Construct-specification dimensions",
         ["Dimension", "Analytical question", "Examples"],
         [
-            ["Study status", "Is AI the phenomenon, a research method, both, or unclear?", "phenomenon; method; both"],
+            ["AI positioning", "Is AI the phenomenon, a research method, both, or unclear?", "phenomenon; method; both"],
             ["AI role", "What theoretical work is assigned to AI?", "tool; research method; context; capability; infrastructure; actor/agent"],
             ["Technical type", "Which technical form is named?", "machine learning; generative AI; LLM; NLP; automation"],
             ["Mechanism", "What does AI observably change or enable?", "prediction; learning; uncertainty; judgment; interaction"],
@@ -1171,13 +1171,13 @@ def build() -> None:
         "Specification was analysed at two levels. The marginal portrait describes each dimension across the "
         "selected population. The nested analysis then conditions the population on one exact value of any "
         "dimension and recalculates every remaining distribution and pairwise matrix. For example, selecting "
-        "study status as phenomenon, method, or both produces three separate portraits of role, technical type, "
+        "AI positioning as phenomenon, method, or both produces three separate portraits of role, technical type, "
         "mechanism, level, stage, scope, and definition form. Full views retain missing and unspecified values; "
         "observed views remove only the missing or unspecified values defined for the displayed outcome dimension. The "
         "same procedure covers all 28 unique pairs among the eight dimensions and the Full, Core, Additional, "
         "and Combined populations. The denominator definitions and coding dimensions are documented in "
         "Supplementary Tables A1.1 and A1.2. The main paper reports theoretically consequential contrasts; "
-        "Supplementary Tables A3.1-A3.9 report the complete study-status-conditioned distributions, "
+        "Supplementary Tables A3.1-A3.9 report the complete distributions conditioned on AI positioning, "
         "Supplementary Table A4.1 reports the conditioned Core-Additional boundary comparison, and "
         "Supplementary Table A5.1 inventories all 28 Combined entrepreneurship dimension pairs."
     )
@@ -1215,7 +1215,7 @@ def build() -> None:
         "21,940 corpus papers; ten of these were not classified by Nano. The intersection across Mini, Nano, "
         "Claude, and Gemini therefore contains 21,930 papers. Every one of the six model pairs and all eight "
         "dimension estimates use this same set. The arithmetic "
-        "means shown below summarize the six core dimensions for orientation only; study status, technical "
+        "means shown below summarize the six core dimensions for orientation only; AI positioning, technical "
         "type, role, mechanism, level, and scope remain the dimension-level inferential record. Process stage "
         "and definition clarity are reported as exploratory fields because their chance-corrected agreement is "
         "weak."
@@ -1399,7 +1399,7 @@ def build() -> None:
     )
     writer.paragraph(
         "The interactive platform is part of the methodology. Its Construct Specification page reproduces "
-        "model, dataset, study-status, full-versus-observed, and nested dimension filters. Its Construct "
+        "model, dataset, AI positioning, full-versus-observed, and nested dimension filters. Its Construct "
         "Contrasting page reproduces the horizontal, vertical, and structuring matrices. Aggregate cells open "
         "evidence panels containing the title, abstract, author keywords, coding evidence, metadata, and Scopus "
         "record. Each model-specific chart uses the number of papers successfully classified by that model; the "
@@ -1498,7 +1498,7 @@ def build() -> None:
         f"{int(consensus.loc['ai_type_form', 'preferred_trio_agreement_papers']):,} papers "
         f"({consensus.loc['ai_type_form', 'preferred_trio_agreement_share']:.2%}). Agreement among these three models "
         f"was {consensus.loc['ai_method_or_phenomenon', 'preferred_trio_agreement_share']:.2%} "
-        f"for study status, {consensus.loc['ai_role_function', 'preferred_trio_agreement_share']:.2%} for "
+        f"for AI positioning, {consensus.loc['ai_role_function', 'preferred_trio_agreement_share']:.2%} for "
         f"role, {consensus.loc['ai_mechanism_analysis', 'preferred_trio_agreement_share']:.2%} for mechanism, "
         f"{consensus.loc['level_of_analysis', 'preferred_trio_agreement_share']:.2%} for level, and "
         f"{consensus.loc['scope_conditions', 'preferred_trio_agreement_share']:.2%} for scope. These papers "
@@ -1516,7 +1516,7 @@ def build() -> None:
     stage_n, stage = distribution(combined, "entrepreneurial_process_stage", STAGE_MISSING)
     scope_n, scope = distribution(combined, "scope_conditions", SCOPE_MISSING)
     writer.paragraph(
-        f"Among the {status_n:,} entrepreneurship papers with a clear study status, {status['phenomenon']:.1f}% "
+        f"Among the {status_n:,} entrepreneurship papers with clear AI positioning, {status['phenomenon']:.1f}% "
         f"treat AI as a substantive phenomenon, {status['method']:.1f}% as a research method, and "
         f"{status['both']:.1f}% as both. Among {role_n:,} substantive role codes, AI is most often a tool "
         f"({role['AI as tool']:.1f}%), followed by a research method ({role['AI as research method']:.1f}%), "
@@ -1531,10 +1531,10 @@ def build() -> None:
     )
     writer.picture(FIG_SPEC, "Figure 2. Observed construct composition in Combined entrepreneurship.")
 
-    writer.heading("4.2.1 Nested specification by study status", 3)
+    writer.heading("4.2.1 Nested specification by AI positioning", 3)
     writer.paragraph(
         "The aggregate portrait conceals three different research objects. Conditioning all other dimensions on "
-        "study status shows that method papers use AI primarily as an analytical instrument, whereas phenomenon "
+        "Conditioning on AI positioning shows that method papers use AI primarily as an analytical instrument, whereas phenomenon "
         "papers distribute theoretical work across tools, context, capabilities, infrastructure, and actors. "
         "Papers coded as both form a hybrid rather than a simple midpoint. Table 9 reports the leading category "
         "within each observed outcome dimension and discloses both the observed denominator and the complete "
@@ -1544,10 +1544,10 @@ def build() -> None:
     )
     writer.picture(
         FIG_NESTED_STATUS,
-        "Figure 3. Nested construct specification by study status in Combined entrepreneurship. Values are shares within each observed outcome dimension; denominators are reported in Table 9.",
+        "Figure 3. Nested construct specification by AI positioning in Combined entrepreneurship. Values are shares within each observed outcome dimension; denominators are reported in Table 9.",
     )
     writer.table(
-        "Table 9. Leading nested specification result by study status in Combined entrepreneurship",
+        "Table 9. Leading nested specification result by AI positioning in Combined entrepreneurship",
         ["Outcome dimension", "Phenomenon", "Method", "Both"],
         status_conditioned_rows(),
     )
@@ -1567,7 +1567,7 @@ def build() -> None:
         "Machine learning accounts for 54.9% and generative AI for 21.4% of its named types; tool, context, "
         "research-method, and capability roles remain visible, while prediction, learning, judgment, interaction, "
         "and experimentation all contribute to its mechanism profile. Across all three statuses, the firm is the "
-        "leading level and innovation the leading specified stage. Study status consequently changes the meaning "
+        "leading level and innovation the leading specified stage. AI positioning consequently changes the meaning "
         "of the remaining dimensions but does not erase shared entrepreneurship-level emphases."
     )
 
@@ -1576,7 +1576,7 @@ def build() -> None:
     # Core versus Additional differences, observed denominators.
     contrast_rows = []
     contrast_specs = [
-        ("Study status", "ai_method_or_phenomenon", {"", "unclear"}, ["method", "both"]),
+        ("AI positioning", "ai_method_or_phenomenon", {"", "unclear"}, ["method", "both"]),
         ("AI role", "ai_role_function", ROLE_MISSING, ["AI as research method", "AI as firm capability"]),
         ("Technical type", "ai_type_form", TYPE_MISSING, ["machine learning", "generative AI"]),
         ("Mechanism", "ai_mechanism_analysis", MECH_MISSING, ["improves prediction", "supports learning"]),
@@ -1613,14 +1613,14 @@ def build() -> None:
     )
 
     writer.paragraph(
-        "The nested boundary check shows that these differences are concentrated in particular study statuses. "
+        "The nested boundary check shows that these differences are concentrated in particular AI positioning categories. "
         "Among phenomenon papers, generative AI represents 31.0% of named types in Additional entrepreneurship "
         "but 8.2% in Core, and learning represents 35.2% of mechanisms versus 15.2%; Core instead gives more "
         "weight to individual entrepreneurs (30.8% versus 19.2%) and tools (56.3% versus 47.5%). Among method "
         "papers, the research-method role is nearly identical (85.5% versus 83.7%), even though Core remains more "
         "individual-level and Additional more country-bounded. The journal-population contrast is therefore not "
         "one uniform tier effect; it interacts with what the paper is using AI to study or do. Supplementary "
-        "Table A4.1 reports the strongest Core-Additional contrast for every study-status and outcome-dimension "
+        "Table A4.1 reports the strongest Core-Additional contrast for every AI positioning and outcome-dimension "
         "combination."
     )
 
@@ -1825,7 +1825,7 @@ def build() -> None:
         "shows the multiplicity; horizontal contrasting shows that domains emphasize different meanings; "
         "vertical contrasting shows that roles and mechanisms move differently across levels; and structuring "
         "shows which relations recur. The empirical answer is configurational in principle: an AI finding is "
-        "theoretically interpretable only when the paper's study status, technical form, role, mechanism, level, "
+        "theoretically interpretable only when the paper's AI positioning, technical form, role, mechanism, level, "
         "and scope are sufficiently explicit."
     )
 
@@ -1845,15 +1845,15 @@ def build() -> None:
         "The construct contribution is not a new universal definition of AI. It is a framework for establishing "
         "the theoretical identity of an AI claim. Technical type says what system is named; role says what work it "
         "performs in the argument; mechanism says what it changes; level says where the relation operates; scope "
-        "states its boundary; and study status separates substantive AI theory from AI-enabled research methods. "
+        "states its boundary; and AI positioning separates substantive AI theory from AI-enabled research methods. "
         "None is sufficient alone. Together they specify the unit that can enter cumulative theory."
     )
     writer.paragraph(
-        "The nested study-status result demonstrates why the dimensions must be interpreted jointly. Method "
+        "The nested AI positioning result demonstrates why the dimensions must be interpreted jointly. Method "
         "papers frequently name a technical system but place it on the method side of the explanation and often "
         "leave the substantive mechanism unstated. Phenomenon papers are less technically specific but distribute "
         "explanatory work across learning, prediction, judgment, uncertainty, interaction, and access. A shared "
-        "machine-learning label therefore does not make those papers theoretically commensurable. Study status "
+        "machine-learning label therefore does not make those papers theoretically commensurable. AI positioning "
         "acts as an interpretive gate: it establishes whether the remaining dimensions describe the phenomenon "
         "being explained or the instrument used to observe another phenomenon."
     )
@@ -1893,7 +1893,7 @@ def build() -> None:
         "and both papers, where Additional journals foreground generative AI, learning, and innovation while Core "
         "journals foreground tools, prediction, and individual entrepreneurs. Their method papers, by contrast, "
         "assign almost the same research-method role to AI. What appears marginally as a journal-population "
-        "difference is therefore partly a difference in the mixture of study statuses and partly a conditional "
+        "difference is therefore partly a difference in the mixture of AI positioning categories and partly a conditional "
         "difference within those statuses (Supplementary Table A4.1)."
     )
 

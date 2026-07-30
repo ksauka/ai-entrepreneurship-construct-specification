@@ -56,6 +56,20 @@ LOCAL_CACHE_MODELS = {
     "Gemma": PROJECT_ROOT / "data/interim/spec_cache/spec-v3/gemma4_31b",
 }
 REPRESENTATIVE_MODELS = ("Mini", "Nano", "Claude", "Gemini")
+DIMENSION_LABELS = {
+    "ai_method_or_phenomenon": "AI positioning",
+    "ai_type_form": "Technical AI type/form",
+    "ai_role_function": "AI role/function",
+    "ai_mechanism": "AI mechanism",
+    "level_of_analysis": "Level of analysis",
+    "entrepreneurial_process_stage": "Entrepreneurial process stage",
+    "scope_conditions": "Scope conditions",
+    "definition_construct_clarity": "Definition clarity",
+    "ai_definition_present": "AI definition present",
+    "ai_distinction_present": "AI distinction present",
+    "ai_mechanism_analysis": "AI mechanism analysis",
+    "process_sequence_specified": "Process sequence specified",
+}
 
 
 def sha256(path: Path) -> str:
@@ -333,7 +347,14 @@ def main() -> None:
     grounding_macro = grounding.groupby("model", as_index=False).agg(exact_match_share=("exact_match_share", "mean"))
     bar_svg([(row.model, row.exact_match_share) for row in grounding_macro.itertuples()], "Exact stated-evidence grounding (diagnostic)", FIGURES / "evidence_grounding.svg")
     strong_pair = probability_agreement[(probability_agreement.left_model == "Claude") & (probability_agreement.right_model == "Gemini")]
-    bar_svg([(row.dimension, row.percent_agreement) for row in strong_pair.itertuples()], "Claude-Gemini agreement by dimension", FIGURES / "claude_gemini_dimension_agreement.svg")
+    bar_svg(
+        [
+            (DIMENSION_LABELS.get(row.dimension, row.dimension), row.percent_agreement)
+            for row in strong_pair.itertuples()
+        ],
+        "Claude-Gemini agreement by dimension",
+        FIGURES / "claude_gemini_dimension_agreement.svg",
+    )
     for dimension in DIMENSIONS:
         subset = prevalence[prevalence.dimension == dimension]
         categories = subset.groupby("category")["count"].sum().sort_values(ascending=False).head(12).index
@@ -342,7 +363,11 @@ def main() -> None:
             for model in frames:
                 match = subset[(subset.model == model) & (subset.category == category)]
                 rows.append((f"{category} · {model}", float(match.weighted_prevalence.iloc[0]) if len(match) else 0.0))
-        bar_svg(rows, f"Weighted distribution: {dimension}", FIGURES / f"distribution_{dimension}.svg")
+        bar_svg(
+            rows,
+            f"Weighted distribution: {DIMENSION_LABELS.get(dimension, dimension)}",
+            FIGURES / f"distribution_{dimension}.svg",
+        )
 
     generated_at = datetime.now().isoformat()
     local_snapshot = {
@@ -379,7 +404,7 @@ def main() -> None:
     (OUTPUT / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     best = pair_macro.sort_values("percent_agreement", ascending=False).iloc[0]
-    summary = f"""# Model-validation analysis\n\nGenerated {manifest['generated_at']}. All outputs are non-mutating and use the frozen 2,235-paper probability sample unless labelled full Mini-Nano.\n\n## Coverage\n\n{markdown_2dp(coverage)}\n\n## Pairwise macro agreement: six core dimensions\n\n{markdown_2dp(pair_macro.sort_values('percent_agreement', ascending=False))}\n\nThe macro heatmaps average only study status, technical type, AI role, mechanism, level, and scope. Process stage and definition form are displayed as exploratory dimensions; the three binary diagnostics are supplementary. The strongest representative pair is **{best.left_model}-{best.right_model}** with mean exact agreement **{best.percent_agreement:.2f}**. Agreement is not accuracy; blinded human coding remains the accuracy anchor.\n\n## Supplementary local-model intersections\n\n{markdown_2dp(local_macro.sort_values('percent_agreement', ascending=False))}\n\nLocal estimates are supplementary because successful local records cover only part of the probability sample and their non-response may be selective.\n\n## Four-model agreement\n\n{markdown_2dp(multirater)}\n\n## Interpretation controls\n\n- Mini remains the primary full-corpus rater; Nano is a full-corpus sensitivity baseline.\n- Claude and Gemini validate Mini on a model-independent probability sample.\n- Llama and Gemma comparisons are separately labelled supplementary intersections.\n- Macro heatmaps use the six core dimensions; process stage and definition form remain exploratory.\n- Binary fields with high raw agreement but low alpha are prevalence-sensitive and require both statistics.\n- Exact evidence grounding is a conservative lexical diagnostic, not a hallucination rate.\n- Human-model IRR will be added only after blinded human fields are completed.\n"""
+    summary = f"""# Model-validation analysis\n\nGenerated {manifest['generated_at']}. All outputs are non-mutating and use the frozen 2,235-paper probability sample unless labelled full Mini-Nano.\n\n## Coverage\n\n{markdown_2dp(coverage)}\n\n## Pairwise macro agreement: six core dimensions\n\n{markdown_2dp(pair_macro.sort_values('percent_agreement', ascending=False))}\n\nThe macro heatmaps average only AI positioning, technical type, AI role, mechanism, level, and scope. Process stage and definition form are displayed as exploratory dimensions; the three binary diagnostics are supplementary. The strongest representative pair is **{best.left_model}-{best.right_model}** with mean exact agreement **{best.percent_agreement:.2f}**. Agreement is not accuracy; blinded human coding remains the accuracy anchor.\n\n## Supplementary local-model intersections\n\n{markdown_2dp(local_macro.sort_values('percent_agreement', ascending=False))}\n\nLocal estimates are supplementary because successful local records cover only part of the probability sample and their non-response may be selective.\n\n## Four-model agreement\n\n{markdown_2dp(multirater)}\n\n## Interpretation controls\n\n- Mini remains the primary full-corpus rater; Nano is a full-corpus sensitivity baseline.\n- Claude and Gemini validate Mini on a model-independent probability sample.\n- Llama and Gemma comparisons are separately labelled supplementary intersections.\n- Macro heatmaps use the six core dimensions; process stage and definition form remain exploratory.\n- Binary fields with high raw agreement but low alpha are prevalence-sensitive and require both statistics.\n- Exact evidence grounding is a conservative lexical diagnostic, not a hallucination rate.\n- Human-model IRR will be added only after blinded human fields are completed.\n"""
     summary = summary.replace(
         "\n\n## Coverage",
         (
