@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+*.egg-info/
 
 data/raw/*
 data/interim/*
@@ -56,7 +57,11 @@ reports/
 /scripts/workbench.sh
 
 # Private hosting, authentication, backup, and failover operations.
-/deploy/
+# These now live in the separate ~/projects/etv-ops repo and are symlinked
+# back in, so these patterns intentionally have no trailing slash: a
+# trailing "/" only matches a real directory, not a symlink to one, and
+# `deploy` and `scripts/lib` are both symlinks now.
+/deploy
 /scripts/*review_host*
 /scripts/configure_reviewer_credentials.sh
 /scripts/dashboard_url.sh
@@ -64,7 +69,7 @@ reports/
 /scripts/auto_failover_check.sh
 /scripts/export_runtime_snapshot.sh
 /scripts/sync_review_host_*.sh
-/scripts/lib/
+/scripts/lib
 
 # Accidental root-level command-output capture (for example, `sh \`).
 /sh ?
