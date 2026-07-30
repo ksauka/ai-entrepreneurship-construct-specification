@@ -347,7 +347,6 @@ button{{width:100%;margin-top:22px;padding:11px 14px;border:1px solid var(--acce
 <button type="submit">Sign in</button>
 </form>
 <p class="security">Access is role-specific. Reviewer accounts are read-only; administrator accounts can use authorised research-record controls.</p>
-<p class="security">Interested in access? Contact <a href="mailto:k.sauka@uva.nl">k.sauka@uva.nl</a>.</p>
 </main>
 </body>
 </html>"""
