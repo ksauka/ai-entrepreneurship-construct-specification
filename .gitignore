@@ -42,8 +42,18 @@ data/interim/spec_cache/
 .claude/
 reports/
 
-# Private, researcher-specific DOCX update utilities.
+# Private, researcher-specific authoring and retired experiment utilities.
 /scripts/update_ks_*.py
+/scripts/add_ks_platform_figure.py
+/scripts/analyze_theory_elaboration_integration.py
+/scripts/audit_manuscript_exhibits.py
+/scripts/build_full_theory_elaboration_manuscript.py
+/scripts/build_nested_specification_supplement.py
+/scripts/build_probability_sample_results_report.py
+/scripts/recalculate_human_insight_irr.py
+/scripts/prepare_gpt54mini_challenge.py
+/scripts/prepare_human_validation.py
+/scripts/workbench.sh
 
 # Private hosting, authentication, backup, and failover operations.
 /deploy/

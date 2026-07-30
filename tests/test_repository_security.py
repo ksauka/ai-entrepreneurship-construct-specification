@@ -37,6 +37,16 @@ def test_private_operations_are_ignored_from_public_repository():
 
     assert "/deploy/" in ignore
     assert "/scripts/update_ks_*.py" in ignore
+    assert "/scripts/add_ks_platform_figure.py" in ignore
+    assert "/scripts/analyze_theory_elaboration_integration.py" in ignore
+    assert "/scripts/audit_manuscript_exhibits.py" in ignore
+    assert "/scripts/build_full_theory_elaboration_manuscript.py" in ignore
+    assert "/scripts/build_nested_specification_supplement.py" in ignore
+    assert "/scripts/build_probability_sample_results_report.py" in ignore
+    assert "/scripts/recalculate_human_insight_irr.py" in ignore
+    assert "/scripts/prepare_gpt54mini_challenge.py" in ignore
+    assert "/scripts/prepare_human_validation.py" in ignore
+    assert "/scripts/workbench.sh" in ignore
     assert "/scripts/*review_host*" in ignore
     assert "/scripts/auto_failover_check.sh" in ignore
     assert "!docs/DESKTOP_FAILOVER_SETUP.md" not in ignore
