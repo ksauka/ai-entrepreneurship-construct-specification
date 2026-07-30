@@ -55,7 +55,7 @@
     <div class="contrasting-analysis-controls" id="analysisControls"></div>
     <div class="contrasting-context-strip" aria-label="Current analysis context">
       <span><strong id="analysisN">0</strong> <span id="analysisNLabel">Baseline papers</span></span>
-      <span><strong id="availableGroups">0</strong> groups available</span>
+      <span><strong id="availableGroups">0</strong> <span id="availableGroupsLabel">groups available</span></span>
       <span>Current analysis dataset: <strong id="selectedAnalysisScope">Full corpus</strong></span>
       <span><strong id="selectedView">Observed</strong> evidence view</span>
       <span><strong id="selectedModel">-</strong> coding model</span>
@@ -99,7 +99,7 @@ let verticalRow = params.get("vertical_row") || "ai_role";
 let verticalColumn = params.get("vertical_column") || "level";
 let verticalMetric = params.get("vertical_metric") || "share_within_column";
 let structuringPair = params.get("pair") || "ai_role__mechanism";
-let structuringMetric = params.get("structuring_metric") || "share_within_column";
+let structuringMetric = params.get("structuring_metric") || "share_within_row";
 let minSupport = Math.max(1, Number.parseInt(params.get("min_support"), 10) || 10);
 let evidenceLimit = Number.parseInt(params.get("evidence_limit"), 10) || 100;
 let evidenceMinimumAgreement = 1;
@@ -266,6 +266,7 @@ function renderAnalysisControls() {
     <label>Relationship matrix <select id="structuringPair">${metadata.structuring_pairs.map(item =>
       `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("")}</select></label>
     <label>Cell value <select id="structuringMetric">
+      <option value="share_within_row">Percentage within row</option>
       <option value="share_within_column">Percentage within column</option>
       <option value="share_of_analyzed">Percentage of analyzed papers</option>
       <option value="papers">Paper count</option>
@@ -400,6 +401,7 @@ function renderHorizontal(data) {
   el("analysisN").textContent = data.baseline.denominator.toLocaleString();
   el("analysisNLabel").textContent = `${data.baseline_label} baseline papers`;
   el("availableGroups").textContent = String(rows.length);
+  el("availableGroupsLabel").textContent = "groups available";
   el("analysisBody").innerHTML = `<section class="card contrasting-matrix-card">
     <h2>${esc(data.dimension_label)} across domains${data.journal_scope === "ft50" ? " (FT50-only replication)" : ""}<button class="info-button" id="domainInfoButton" type="button" aria-label="Explain domain definitions" title="Explain domain definitions">i</button></h2>
     <p class="chart-note"><strong>Comparison baseline:</strong> ${esc(data.baseline_label)}. ${esc(data.comparison_definition)}${esc(residualNote)} ${esc(metricLabel)}. Groups with no eligible papers remain visible as not available. Domain memberships can overlap, so rows must not be summed.</p>
@@ -606,6 +608,8 @@ function renderVertical(data) {
   el("analysisN").textContent = data.analyzed_n.toLocaleString();
   el("analysisNLabel").textContent = "Matrix-comparable papers";
   const rows = matrixRows(data);
+  el("availableGroups").textContent = String(rows.length);
+  el("availableGroupsLabel").textContent = "matrix rows";
   const categories = data.columns.map(value => ({value, raw_value: value === "Missing value" ? "" : value}));
   el("analysisBody").innerHTML = `<section class="card contrasting-matrix-card">
     <h2>${esc(data.row_label)} by ${esc(data.column_label)}</h2>
@@ -635,9 +639,11 @@ function renderVertical(data) {
 
 function renderStructuring(data) {
   const matrix = data.matrix;
-  el("analysisN").textContent = data.configurations.analyzed_n.toLocaleString();
-  el("analysisNLabel").textContent = "Five-field-complete papers";
+  el("analysisN").textContent = matrix.analyzed_n.toLocaleString();
+  el("analysisNLabel").textContent = "Pairwise-complete papers";
   const rows = matrixRows(matrix);
+  el("availableGroups").textContent = String(rows.length);
+  el("availableGroupsLabel").textContent = "matrix rows";
   const categories = matrix.columns.map(value => ({value, raw_value: value === "Missing value" ? "" : value}));
   const configurationRows = data.configurations.configurations.map((record, index) => {
     const context = {
@@ -662,6 +668,7 @@ function renderStructuring(data) {
   }).join("");
   el("analysisBody").innerHTML = `<section class="card contrasting-matrix-card">
       <h2>${esc(data.pair_label)}</h2>
+      <p class="chart-note"><strong>Pairwise base:</strong> ${matrix.analyzed_n.toLocaleString()} papers have observed values for both ${esc(matrix.row_label.toLowerCase())} and ${esc(matrix.column_label.toLowerCase())}. Row percentages reproduce the manuscript heatmap. The minimum configuration threshold below does not filter this matrix.</p>
       ${heatmapTable(rows, categories, structuringMetric, context => ({
         title: `${context.row.label} × ${context.category.value}`,
         population,
@@ -684,6 +691,7 @@ function renderStructuring(data) {
     </section>
     <section class="card">
       <h2>Recurring configurations <span class="sub">minimum ${data.configurations.min_support.toLocaleString()} papers</span></h2>
+      <p class="chart-note"><strong>${data.configurations.analyzed_n.toLocaleString()} five-field-complete papers:</strong> ${data.configurations.configurations.length.toLocaleString()} configurations meet the selected minimum. The threshold applies only to this five-field table.</p>
       <div class="contrast-table-scroll contrast-configurations"><table><thead><tr><th>Rank</th><th>AI role</th><th>Mechanism</th><th>Level</th><th>Scope</th><th>Process stage</th><th>Papers</th><th>Share</th></tr></thead><tbody>${configurationRows || `<tr><td colspan="8">No configuration reaches the selected minimum.</td></tr>`}</tbody></table></div>
     </section>`;
   wireCells();

@@ -1484,7 +1484,12 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert 'tactic === "horizontal" ? journalScope : "all"' in contrasting_html
     assert 'id="analysisNLabel"' in contrasting_html
     assert "Matrix-comparable papers" in contrasting_html
-    assert "Five-field-complete papers" in contrasting_html
+    assert 'let structuringMetric = params.get("structuring_metric") || "share_within_row";' in contrasting_html
+    assert '<option value="share_within_row">Percentage within row</option>' in contrasting_html
+    assert "Pairwise-complete papers" in contrasting_html
+    assert "five-field-complete papers" in contrasting_html
+    assert "The threshold applies only to this five-field table." in contrasting_html
+    assert 'id="availableGroupsLabel"' in contrasting_html
     assert contrasting_html.rstrip().endswith("</html>")
     assert contrasting_html.count(
         'el("tacticPopulation").onchange = event => {'

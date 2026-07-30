@@ -12,6 +12,7 @@ from io import BytesIO
 import html
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -61,14 +62,29 @@ HTML_NO_CACHE_HEADERS = {
     "Cache-Control": "no-store, max-age=0",
     "Pragma": "no-cache",
 }
+HTTP_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+DASHBOARD_RESPONSE_HEADERS = {
+    **HTML_NO_CACHE_HEADERS,
+    **HTTP_SECURITY_HEADERS,
+}
 
 state: dict = {}
 topic_finalize_lock = Lock()
 dashboard_session_lock = Lock()
+dashboard_login_lock = Lock()
 
 DASHBOARD_SESSION_COOKIE = "etv_dashboard_session"
 DASHBOARD_SESSION_SECONDS = 12 * 60 * 60
 dashboard_sessions: dict[str, tuple[str, float]] = {}
+LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
+LOGIN_PAIR_FAILURE_LIMIT = 8
+LOGIN_CLIENT_FAILURE_LIMIT = 30
+dashboard_login_failures: dict[str, list[float]] = {}
 
 TOPIC_TABLE_DIR = PROJECT_ROOT / "reports/analysis/tables/stage4"
 TOPIC_ENRICHED_DATASET = (
@@ -154,6 +170,97 @@ def _delete_dashboard_session(token: str | None) -> None:
         return
     with dashboard_session_lock:
         dashboard_sessions.pop(token, None)
+
+
+def _request_client_identifier(request: Request) -> str:
+    """Return the tunnel-provided client address or the direct peer address."""
+
+    identifier = request.headers.get("CF-Connecting-IP", "").strip()
+    if not identifier:
+        identifier = request.headers.get("X-Forwarded-For", "").split(",", 1)[
+            0
+        ].strip()
+    if not identifier and request.client is not None:
+        identifier = request.client.host
+    return identifier or "unknown"
+
+
+def _login_rate_limit_keys(request: Request, username: str = "") -> tuple[str, ...]:
+    """Create non-reversible rate-limit keys without retaining user identifiers."""
+
+    client = _request_client_identifier(request)
+    client_key = hashlib.sha256(client.encode("utf-8")).hexdigest()
+    keys = [f"client:{client_key}"]
+    normalized_username = username.strip().casefold()
+    if normalized_username:
+        pair_key = hashlib.sha256(
+            f"{client}\0{normalized_username}".encode("utf-8")
+        ).hexdigest()
+        keys.append(f"pair:{pair_key}")
+    return tuple(keys)
+
+
+def _login_failure_limit(key: str) -> int:
+    return (
+        LOGIN_PAIR_FAILURE_LIMIT
+        if key.startswith("pair:")
+        else LOGIN_CLIENT_FAILURE_LIMIT
+    )
+
+
+def _prune_login_failures(now: float) -> None:
+    cutoff = now - LOGIN_FAILURE_WINDOW_SECONDS
+    expired: list[str] = []
+    for key, attempts in dashboard_login_failures.items():
+        recent = [attempt for attempt in attempts if attempt > cutoff]
+        if recent:
+            dashboard_login_failures[key] = recent
+        else:
+            expired.append(key)
+    for key in expired:
+        dashboard_login_failures.pop(key, None)
+
+
+def _login_retry_after(
+    keys: tuple[str, ...],
+    *,
+    now: float | None = None,
+) -> int:
+    """Return seconds until another login attempt is allowed."""
+
+    current = time.time() if now is None else now
+    with dashboard_login_lock:
+        _prune_login_failures(current)
+        retry_after = 0
+        for key in keys:
+            attempts = dashboard_login_failures.get(key, [])
+            limit = _login_failure_limit(key)
+            if len(attempts) < limit:
+                continue
+            deadline = attempts[-limit] + LOGIN_FAILURE_WINDOW_SECONDS
+            retry_after = max(
+                retry_after,
+                max(1, math.ceil(deadline - current)),
+            )
+    return retry_after
+
+
+def _record_login_failure(
+    keys: tuple[str, ...],
+    *,
+    now: float | None = None,
+) -> None:
+    current = time.time() if now is None else now
+    with dashboard_login_lock:
+        _prune_login_failures(current)
+        for key in keys:
+            dashboard_login_failures.setdefault(key, []).append(current)
+
+
+def _clear_login_failures(keys: tuple[str, ...]) -> None:
+    with dashboard_login_lock:
+        for key in keys:
+            dashboard_login_failures.pop(key, None)
 
 
 def _safe_login_destination(value: str | None) -> str:
@@ -341,7 +448,7 @@ async def require_dashboard_authentication(request: Request, call_next):
     if not required:
         request.state.dashboard_access_role = "unauthenticated"
         response = await call_next(request)
-        response.headers.update(HTML_NO_CACHE_HEADERS)
+        response.headers.update(DASHBOARD_RESPONSE_HEADERS)
         return response
 
     configuration_error = _dashboard_configuration_error()
@@ -349,23 +456,40 @@ async def require_dashboard_authentication(request: Request, call_next):
         return PlainTextResponse(
             configuration_error,
             status_code=503,
-            headers={"Cache-Control": "no-store"},
+            headers=DASHBOARD_RESPONSE_HEADERS,
         )
 
     if request.url.path in {"/login", "/logout"}:
         request.state.dashboard_access_role = "unauthenticated"
         response = await call_next(request)
-        response.headers.update(HTML_NO_CACHE_HEADERS)
+        response.headers.update(DASHBOARD_RESPONSE_HEADERS)
         return response
 
     role = _dashboard_session_role(
         request.cookies.get(DASHBOARD_SESSION_COOKIE)
     )
     if role is None and not _is_browser_navigation(request):
+        basic_keys = _login_rate_limit_keys(request)
+        retry_after = _login_retry_after(basic_keys)
+        if retry_after:
+            return PlainTextResponse(
+                "Too many failed authentication attempts. Try again later.",
+                status_code=429,
+                headers={
+                    **DASHBOARD_RESPONSE_HEADERS,
+                    "Retry-After": str(retry_after),
+                },
+            )
+        authorization = request.headers.get("Authorization")
         role = resolve_basic_access_role(
-            request.headers.get("Authorization"),
+            authorization,
             *_dashboard_credentials(),
         )
+        if authorization:
+            if role is None:
+                _record_login_failure(basic_keys)
+            else:
+                _clear_login_failures(basic_keys)
     if role is None:
         if _is_browser_navigation(request):
             destination = request.url.path
@@ -374,21 +498,21 @@ async def require_dashboard_authentication(request: Request, call_next):
             return RedirectResponse(
                 f"/login?next={quote(_safe_login_destination(destination), safe='')}",
                 status_code=303,
-                headers=HTML_NO_CACHE_HEADERS,
+                headers=DASHBOARD_RESPONSE_HEADERS,
             )
         return PlainTextResponse(
             "Authentication required.",
             status_code=401,
             headers={
+                **DASHBOARD_RESPONSE_HEADERS,
                 "WWW-Authenticate": 'Basic realm="ETV Dashboard", charset="UTF-8"',
-                "Cache-Control": "no-store",
             },
         )
     request.state.dashboard_access_role = (
         REVIEWER_ROLE if _dashboard_global_read_only_enabled() else role
     )
     response = await call_next(request)
-    response.headers.update(HTML_NO_CACHE_HEADERS)
+    response.headers.update(DASHBOARD_RESPONSE_HEADERS)
     return response
 
 
@@ -941,19 +1065,40 @@ async def dashboard_login(request: Request) -> Response:
     username = values.get("username", [""])[0].strip()
     password = values.get("password", [""])[0]
     destination = _safe_login_destination(values.get("next", ["/"])[0])
+    rate_keys = _login_rate_limit_keys(request, username)
+    retry_after = _login_retry_after(rate_keys)
+    if retry_after:
+        response = _login_page(
+            next_path=destination,
+            error="Too many failed sign-in attempts. Try again later.",
+            username=username,
+            status_code=429,
+        )
+        response.headers["Retry-After"] = str(retry_after)
+        return response
     role = resolve_access_role(
         username,
         password,
         *_dashboard_credentials(),
     )
     if role is None:
-        return _login_page(
+        _record_login_failure(rate_keys)
+        retry_after = _login_retry_after(rate_keys)
+        response = _login_page(
             next_path=destination,
-            error="The username or password was not recognised.",
+            error=(
+                "Too many failed sign-in attempts. Try again later."
+                if retry_after
+                else "The username or password was not recognised."
+            ),
             username=username,
-            status_code=401,
+            status_code=429 if retry_after else 401,
         )
+        if retry_after:
+            response.headers["Retry-After"] = str(retry_after)
+        return response
 
+    _clear_login_failures(rate_keys)
     session_token = _create_dashboard_session(role)
     response = RedirectResponse(
         destination,

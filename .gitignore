@@ -30,19 +30,28 @@ data/queries/*.csv
 data/neo4j/
 data/interim/spec_cache/
 
-# Keep research and agent documentation local. Only the root README is tracked.
+# Keep research, operations, and agent documentation local. Only the public
+# root README is tracked.
 *.md
 !/README.md
-!docs/DESKTOP_FAILOVER_SETUP.md
-!docs/PIPELINE.md
 *.txt
-!deploy/review-host-requirements.txt
 *.doc
 *.docx
 *.xlsx
 *.pptx
 .claude/
 reports/
+
+# Private hosting, authentication, backup, and failover operations.
+/deploy/
+/scripts/*review_host*
+/scripts/configure_reviewer_credentials.sh
+/scripts/dashboard_url.sh
+/scripts/smoke_review_site.sh
+/scripts/auto_failover_check.sh
+/scripts/export_runtime_snapshot.sh
+/scripts/sync_review_host_*.sh
+/scripts/lib/
 
 # Accidental root-level command-output capture (for example, `sh \`).
 /sh ?

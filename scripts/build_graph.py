@@ -172,8 +172,13 @@ def main() -> None:
     env = load_env(PROJECT_ROOT / ".env")
     uri = env.get("NEO4J_URI", "bolt://localhost:7687")
     user = env.get("NEO4J_USER", "neo4j")
-    password = env.get("NEO4J_PASSWORD", "aecsp_password")
+    password = env.get("NEO4J_PASSWORD", "")
     database = env.get("NEO4J_DATABASE", "neo4j")
+    if (args.load or args.verify) and not password:
+        parser.error(
+            "NEO4J_PASSWORD must be set in the ignored .env file "
+            "before loading or verifying Neo4j"
+        )
 
     if args.verify and not (args.export_csv or args.load):
         from aecsp.knowledge_graph.neo4j_loader import connect, database_counts

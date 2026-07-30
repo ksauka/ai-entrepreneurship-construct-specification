@@ -7,17 +7,17 @@ services:
     image: neo4j:5.24-community
     container_name: etv_v2_neo4j
     ports:
-      - "7474:7474"   # HTTP browser
-      - "7687:7687"   # Bolt driver
+      - "127.0.0.1:7474:7474"   # HTTP browser, local host only
+      - "127.0.0.1:7687:7687"   # Bolt driver, local host only
     environment:
-      NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-etv_v2_password}"
+      NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in the ignored .env file}"
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
     volumes:
       - ./data/neo4j/data:/data
       - ./data/neo4j/logs:/logs
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "${NEO4J_USER:-neo4j}", "-p", "${NEO4J_PASSWORD:-etv_v2_password}", "RETURN 1"]
+      test: ["CMD", "cypher-shell", "-u", "${NEO4J_USER:-neo4j}", "-p", "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in the ignored .env file}", "RETURN 1"]
       interval: 15s
       timeout: 10s
       retries: 10

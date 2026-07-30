@@ -14,11 +14,20 @@ from aecsp.api.auth import (
 )
 from aecsp.api.main import (
     DASHBOARD_SESSION_COOKIE,
+    HTTP_SECURITY_HEADERS,
+    LOGIN_CLIENT_FAILURE_LIMIT,
+    LOGIN_FAILURE_WINDOW_SECONDS,
+    LOGIN_PAIR_FAILURE_LIMIT,
+    _clear_login_failures,
     _create_dashboard_session,
     _dashboard_session_role,
     _is_browser_navigation,
+    _login_rate_limit_keys,
+    _login_retry_after,
+    _record_login_failure,
     _require_dashboard_write,
     _safe_login_destination,
+    dashboard_login_failures,
     dashboard_sessions,
     logout_dashboard,
 )
@@ -212,3 +221,62 @@ def test_browser_navigation_and_login_destination_are_bounded():
     assert _safe_login_destination("https://example.com") == "/"
     assert _safe_login_destination("//example.com") == "/"
     assert _safe_login_destination("/login?next=/") == "/"
+
+
+def _login_request(address: str = "203.0.113.7") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/login",
+            "headers": [(b"cf-connecting-ip", address.encode("ascii"))],
+            "client": ("127.0.0.1", 12345),
+        }
+    )
+
+
+def test_repeated_login_failures_are_rate_limited_without_storing_identity():
+    dashboard_login_failures.clear()
+    request = _login_request()
+    keys = _login_rate_limit_keys(request, "reviewer")
+
+    assert len(keys) == 2
+    assert all("reviewer" not in key for key in keys)
+    assert _login_retry_after(keys, now=100.0) == 0
+
+    for _ in range(LOGIN_PAIR_FAILURE_LIMIT):
+        _record_login_failure(keys, now=100.0)
+
+    assert _login_retry_after(keys, now=100.0) == LOGIN_FAILURE_WINDOW_SECONDS
+    assert _login_retry_after(
+        _login_rate_limit_keys(request, "different-user"),
+        now=100.0,
+    ) == 0
+
+    _clear_login_failures(keys)
+    assert _login_retry_after(keys, now=100.0) == 0
+
+
+def test_client_limit_and_window_expiry_are_enforced():
+    dashboard_login_failures.clear()
+    keys = _login_rate_limit_keys(_login_request())
+    assert len(keys) == 1
+
+    for _ in range(LOGIN_CLIENT_FAILURE_LIMIT):
+        _record_login_failure(keys, now=200.0)
+
+    assert _login_retry_after(keys, now=200.0) == LOGIN_FAILURE_WINDOW_SECONDS
+    assert (
+        _login_retry_after(
+            keys,
+            now=200.0 + LOGIN_FAILURE_WINDOW_SECONDS + 1,
+        )
+        == 0
+    )
+
+
+def test_security_headers_prevent_sniffing_framing_and_referrer_leakage():
+    assert HTTP_SECURITY_HEADERS["X-Content-Type-Options"] == "nosniff"
+    assert HTTP_SECURITY_HEADERS["X-Frame-Options"] == "DENY"
+    assert HTTP_SECURITY_HEADERS["Referrer-Policy"] == "no-referrer"
+    assert "geolocation=()" in HTTP_SECURITY_HEADERS["Permissions-Policy"]
