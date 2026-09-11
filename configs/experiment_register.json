@@ -18,7 +18,8 @@
     "entropy_interpretation": "category_concentration_only"
   },
   "fulltext_arm": {
-    "amendment_status": "registered_not_executed_2026-09-10",
+    "amendment_status": "spec-ft-v1_completed_2026-09-11",
+    "successor_protocol_id": "spec-ft-v2",
     "human_approved": "2026-09-10",
     "protocol_id": "spec-ft-v1",
     "protocol_fingerprint": "7e44b19a7d031b2058868e67f92bb81fbb44e273397830bf9b1f9f22c17b0acb",
@@ -46,6 +47,32 @@
     "population_scope_note": "outside-corpus workbook papers deferred; they carry no spec-v3 abstract codes to pair against",
     "paired_abstract_comparison_available": true,
     "paired_comparison_label": "exploratory",
+    "execution": {
+      "protocol_id": "spec-ft-v1",
+      "status": "complete",
+      "completed_at": "2026-09-11",
+      "fulltext_rows_by_rater": {
+        "gpt-5.4-mini-2026-03-17": 131,
+        "gemini-3.1-pro-preview": 131
+      },
+      "paired_papers": 131,
+      "analysis_script": "scripts/analyze_fulltext_paired.py",
+      "paired_summary_outputs": [
+        "data/processed/analysis/fulltext_paired/paired_gpt-5.4-mini-2026-03-17_summary.json",
+        "data/processed/analysis/fulltext_paired/paired_gemini-3.1-pro-preview_summary.json"
+      ],
+      "raw_result_outputs": [
+        "data/processed/specification/paper_specifications_gpt-5.4-mini-2026-03-17_spec-ft-v1.csv",
+        "data/processed/specification/paper_specifications_gemini-3.1-pro-preview_spec-ft-v1.csv"
+      ],
+      "sha256": {
+        "paper_specifications_gpt-5.4-mini-2026-03-17_spec-ft-v1.csv": "d6f82a577a31e1256429f3b019f834da922be7f9bea23c4ad4fd3246e260ec95",
+        "paper_specifications_gemini-3.1-pro-preview_spec-ft-v1.csv": "2858cfa6a3070192669757eb98b7a1b7d0da3663162b18df33022fcbe9423acd",
+        "paired_gpt-5.4-mini-2026-03-17_summary.json": "5ae24b69365764bfae25a4939b7e496dd9c785aaf13673a7607b67c7a77df367",
+        "paired_gemini-3.1-pro-preview_summary.json": "89ea453aa4dde89fcdc0eed55ae65eb4e9d0d4f9f9597467398d32b48a5df65d"
+      },
+      "repository_storage": "outputs are local and gitignored; this register records their verified scope and paths"
+    },
     "preprocessing": {
       "scripts": ["prepare_fulltext_corpus.py", "survey_pdf_headings.py", "extract_fulltext.py", "clean_fulltext.py"],
       "validator": "validate_cleaning.py",

@@ -109,11 +109,63 @@ def test_fulltext_ceiling_is_its_own_and_spec_v3_is_not_raised():
     assert FULLTEXT_MAX_OUTPUT_TOKENS == 8192
 
 
+def test_spec_ft_v2_differs_from_spec_v3_by_exactly_two_lines():
+    """The clean paired protocol: only the boundary and the evidence source.
+
+    This is the method claim made testable. If anyone later edits the full-text
+    prompt to add guidance, this fails, and the paired comparison stops being
+    attributable to the evidentiary boundary alone.
+    """
+    import difflib
+
+    from aecsp.specification.llm_coder import SYSTEM_PROMPT_FULLTEXT_V2
+
+    a = SYSTEM_PROMPT.splitlines()
+    b = SYSTEM_PROMPT_FULLTEXT_V2.splitlines()
+    assert len(a) == len(b), "spec-ft-v2 must not add or remove lines"
+    changed = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+    assert len(changed) == 2, f"expected exactly 2 changed lines, got {len(changed)}"
+
+    diff = "\n".join(difflib.unified_diff(a, b, lineterm=""))
+    assert "full text of the paper as supplied" in diff
+    assert "close paraphrase from the supplied document" in diff
+
+    # Every coding rule is verbatim, including the ones that read oddly under a
+    # full-text boundary. An odd sentence identical in BOTH arms cannot confound
+    # a comparison between them; a rewritten one can.
+    for rule in ("2. Separate what the text states", "4. Unverifiable is not droppable",
+                 "7. Mechanism requires causal logic", "8. needs_full_text is a signal"):
+        assert rule in SYSTEM_PROMPT and rule in SYSTEM_PROMPT_FULLTEXT_V2
+
+
+def test_spec_ft_v2_is_derived_not_transcribed():
+    """Deriving it from spec-v3 is what guarantees the diff cannot drift."""
+    from aecsp.specification.llm_coder import (
+        SYSTEM_PROMPT_FULLTEXT_V2,
+        _build_fulltext_v2_prompt,
+    )
+
+    assert _build_fulltext_v2_prompt() == SYSTEM_PROMPT_FULLTEXT_V2
+
+
+def test_all_fulltext_protocols_are_separately_cached(tmp_path: Path):
+    """v1 and v2 must never share a cache; v1 stays as audit state."""
+    from aecsp.specification.llm_coder import FULLTEXT_V2_PROTOCOL_ID
+
+    dirs = {
+        model_cache_dir(tmp_path, "m", p)
+        for p in (PROTOCOL_ID, FULLTEXT_PROTOCOL_ID, FULLTEXT_V2_PROTOCOL_ID)
+    }
+    assert len(dirs) == 3
+
+
 def test_protocol_registry_is_data_not_branching():
     """A new protocol should be a registry entry, not another `if`."""
     from aecsp.specification.llm_coder import PROTOCOLS, get_protocol
 
-    assert set(PROTOCOLS) == {PROTOCOL_ID, FULLTEXT_PROTOCOL_ID}
+    from aecsp.specification.llm_coder import FULLTEXT_V2_PROTOCOL_ID
+
+    assert set(PROTOCOLS) == {PROTOCOL_ID, FULLTEXT_PROTOCOL_ID, FULLTEXT_V2_PROTOCOL_ID}
     assert get_protocol(PROTOCOL_ID).text_field == "abstract"
     assert get_protocol(FULLTEXT_PROTOCOL_ID).text_field == "full_text"
     assert get_protocol(None).protocol_id == PROTOCOL_ID  # defaults to frozen spec-v3

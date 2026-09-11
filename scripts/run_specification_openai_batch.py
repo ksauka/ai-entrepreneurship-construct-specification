@@ -40,7 +40,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 import pandas as pd  # noqa: E402
 
 from aecsp.specification.llm_coder import (  # noqa: E402
-    FULLTEXT_PROTOCOL_ID,
+    FULLTEXT_V2_PROTOCOL_ID,
     build_paper_record,
     cache_key,
     load_env,
@@ -183,7 +183,7 @@ def main() -> None:
         type=Path,
         default=None,
         help=(
-            "Run the FULL-TEXT protocol (spec-ft-v1) reading cleaned documents "
+            "Run the FULL-TEXT protocol (spec-ft-v2) reading cleaned documents "
             "from this directory (<paper_id>.md) instead of abstracts from the "
             "corpus. Writes to its own cache root; spec-v3 caches are untouched. "
             "Typical: data/interim/fulltext_clean/md"
@@ -197,7 +197,7 @@ def main() -> None:
     if args.text_dir is not None:
         if not args.text_dir.is_dir():
             sys.exit(f"--text-dir not found: {args.text_dir}")
-        protocol_id = FULLTEXT_PROTOCOL_ID
+        protocol_id = FULLTEXT_V2_PROTOCOL_ID
         max_output_tokens = max_output_tokens_for(protocol_id)
     cache_dir = model_cache_dir(CACHE_ROOT, args.model, protocol_id)
     cache_dir.mkdir(parents=True, exist_ok=True)

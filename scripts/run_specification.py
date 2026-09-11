@@ -36,7 +36,7 @@ from aecsp.specification.llm_coder import (  # noqa: E402
     model_cache_dir,
     protocol_fingerprint,
     protocol_for_model,
-    FULLTEXT_PROTOCOL_ID,
+    FULLTEXT_V2_PROTOCOL_ID,
     max_output_tokens_for,
     build_paper_record,
     protocol_parameters,
@@ -226,7 +226,7 @@ def main() -> None:
     if text_dir is not None:
         if not text_dir.is_dir():
             sys.exit(f"--text-dir not found: {text_dir}")
-        protocol_id = FULLTEXT_PROTOCOL_ID
+        protocol_id = FULLTEXT_V2_PROTOCOL_ID
         max_output_tokens = max_output_tokens_for(protocol_id)
     cache_dir = model_cache_dir(CACHE_ROOT, model, protocol_id)
 

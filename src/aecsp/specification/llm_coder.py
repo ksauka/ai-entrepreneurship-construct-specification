@@ -326,6 +326,55 @@ CODING DISCIPLINE:
    speculate about content you cannot see."""
 
 
+# --------------------------------------------------------------------------
+# spec-ft-v2: the clean paired protocol.
+#
+# spec-ft-v1 rewrote four things (boundary, rule 1, rule 4, rule 8). Rules 4
+# and 8 concerned metadata insufficiency, so rewriting them was defensible, but
+# it meant the arms differed in FOUR ways and the causal claim "the full text
+# changed the code" needed a post-hoc diagnostic to defend. spec-ft-v2 changes
+# exactly TWO phrases, both forced by the evidentiary boundary, and leaves every
+# coding rule verbatim. The method claim then reads: the prompts are identical
+# except that the evidence field carries the document instead of the abstract.
+#
+# Rules 4 and 8 still mention needs_full_text, which reads oddly when the full
+# text is supplied. That is deliberate: the flag simply goes unused, and an odd
+# sentence identical in BOTH arms cannot confound a comparison between them.
+#
+# The prompt is DERIVED from SYSTEM_PROMPT rather than transcribed, so the
+# minimal diff is enforced by construction. If spec-v3's wording ever moves,
+# this raises instead of silently diverging.
+# --------------------------------------------------------------------------
+
+FULLTEXT_V2_PROTOCOL_ID = "spec-ft-v2"
+
+_FT2_SUBSTITUTIONS = (
+    (
+        "time from its title, abstract, and author keywords only.",
+        "time from the full text of the paper as supplied to you.",
+    ),
+    (
+        "short quote or close paraphrase from the title/abstract/keywords), then",
+        "short quote or close paraphrase from the supplied document), then",
+    ),
+)
+
+
+def _build_fulltext_v2_prompt() -> str:
+    prompt = SYSTEM_PROMPT
+    for old, new in _FT2_SUBSTITUTIONS:
+        if old not in prompt:
+            raise RuntimeError(
+                f"spec-ft-v2 cannot be derived: anchor missing from the spec-v3 "
+                f"prompt: {old!r}"
+            )
+        prompt = prompt.replace(old, new, 1)
+    return prompt
+
+
+SYSTEM_PROMPT_FULLTEXT_V2 = _build_fulltext_v2_prompt()
+
+
 def build_user_prompt_fulltext(
     title: str, full_text: str, keywords: str, journal: str, year: str
 ) -> str:
@@ -372,6 +421,16 @@ PROTOCOLS: dict[str, Protocol] = {
     FULLTEXT_PROTOCOL_ID: Protocol(
         protocol_id=FULLTEXT_PROTOCOL_ID,
         system_prompt=SYSTEM_PROMPT_FULLTEXT,
+        max_output_tokens=FULLTEXT_MAX_OUTPUT_TOKENS,
+        text_field="full_text",
+        text_prefix="FULL TEXT:\n",
+    ),
+    # The clean paired protocol. Retained alongside spec-ft-v1 rather than
+    # replacing it: caches are permanent audit state, and the v1 run is the
+    # evidence that the four-way diff did not change the conclusion.
+    FULLTEXT_V2_PROTOCOL_ID: Protocol(
+        protocol_id=FULLTEXT_V2_PROTOCOL_ID,
+        system_prompt=SYSTEM_PROMPT_FULLTEXT_V2,
         max_output_tokens=FULLTEXT_MAX_OUTPUT_TOKENS,
         text_field="full_text",
         text_prefix="FULL TEXT:\n",

@@ -29,9 +29,10 @@ from aecsp.specification.gemini_batch import (  # noqa: E402
     request_line,
 )
 from aecsp.specification.llm_coder import (  # noqa: E402
-    FULLTEXT_PROTOCOL_ID,
+    FULLTEXT_V2_PROTOCOL_ID,
     PROTOCOL_ID,
     build_paper_record,
+    get_protocol,
     max_output_tokens_for,
     system_prompt_for,
     SYSTEM_PROMPT,
@@ -272,7 +273,8 @@ def append_failure(cache_dir: Path, paper_id: str, error: str) -> None:
         handle.write(json.dumps({"timestamp": datetime.now().isoformat(), "paper_id": paper_id, "error": error, "transport": "gemini_batch"}) + "\n")
 
 
-def export(model: str, papers: list[dict[str, str]], cache_dir: Path) -> None:
+def export(model: str, papers: list[dict[str, str]], cache_dir: Path,
+           protocol_id: str = PROTOCOL_ID) -> None:
     records = []
     for paper in papers:
         path = cache_dir / cache_key(paper["paper_id"])
@@ -306,7 +308,10 @@ def main() -> None:
     )
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--text-dir", type=Path, default=None,
-                        help="Run the FULL-TEXT protocol (spec-ft-v1) from cleaned documents in this directory.")
+                        help="Run the full-text protocol from cleaned documents in this directory.")
+    parser.add_argument("--protocol", default=None,
+                        help="Address a specific protocol id explicitly, e.g. spec-ft-v1 to "
+                             "fetch or export an earlier run's cache after the default moved on.")
     args = parser.parse_args()
     if args.poll_seconds < 5:
         parser.error("--poll-seconds must be at least 5")
@@ -317,7 +322,12 @@ def main() -> None:
     if args.text_dir is not None:
         if not args.text_dir.is_dir():
             raise SystemExit(f"--text-dir not found: {args.text_dir}")
-        protocol_id = FULLTEXT_PROTOCOL_ID
+        protocol_id = FULLTEXT_V2_PROTOCOL_ID
+    if args.protocol:
+        # Explicit wins. Needed whenever the default protocol has advanced but
+        # an earlier run's cache still has to be fetched or exported.
+        get_protocol(args.protocol)  # raises on an unknown id
+        protocol_id = args.protocol
     papers = load_papers(target, args.text_dir, protocol_id)
     cache_dir = model_cache_dir(CACHE_ROOT, args.model, protocol_id)
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -327,7 +337,7 @@ def main() -> None:
         prepare(args.model, papers, cache_dir, target, protocol_id)
         return
     if args.command == "export":
-        export(args.model, papers, cache_dir)
+        export(args.model, papers, cache_dir, protocol_id)
         return
     env = load_env(PROJECT_ROOT / ".env")
     api_key = os.environ.get("GEMINI_API_KEY") or env.get("GEMINI_API_KEY")
@@ -455,7 +465,7 @@ def main() -> None:
     save_state(state_path, state)
     print(f"Fetched {ok:,} successful records; {failed:,} failures")
     if args.command in {"watch", "run"} and not args.skip_export:
-        export(args.model, papers, cache_dir)
+        export(args.model, papers, cache_dir, protocol_id)
 
 
 if __name__ == "__main__":
