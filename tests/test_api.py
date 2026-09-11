@@ -1858,6 +1858,9 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Generate scope report" in dashboard_html
     assert "Download scope data" in dashboard_html
     assert "downloadScopeData" in dashboard_html
+    assert 'data-as-of-label>the recorded retrieval cutoff</span>' in dashboard_html
+    assert "keywordData?.search_cutoff?.year || 2026" not in dashboard_html
+    assert 'cutoff?.label || "8 July 2026"' not in dashboard_html
     # Both paper-level downloads are admin-gated in the markup itself.
     assert 'id="downloadButton" data-admin-only hidden' in dashboard_html
     assert 'id="downloadFullButton" data-admin-only hidden' in dashboard_html

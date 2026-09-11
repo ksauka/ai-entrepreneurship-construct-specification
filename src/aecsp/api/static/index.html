@@ -102,7 +102,7 @@
 
   <div class="card" id="keywordEvolutionCard">
     <h2>Keyword evolution <span class="sub">how the language of the retrieved literature changes</span></h2>
-    <p class="sub">Corpus frozen at the Scopus capture; trends describe the literature as of <span data-as-of-label>8 July 2026</span>.</p>
+    <p class="sub">Corpus frozen at the Scopus capture; trends describe the literature as of <span data-as-of-label>the recorded retrieval cutoff</span>.</p>
     <div class="keyword-controls">
       <label>Keyword source
         <select id="keywordSource">
@@ -856,12 +856,11 @@ async function showKeywordEvidence(
 }
 
 function keywordPeriodForYear(year) {
-  if (year < 2000) return "pre_2000";
-  if (year <= 2015) return "2000_2015";
-  if (year <= 2020) return "2016_2020";
-  if (year <= 2023) return "2021_2023";
-  if (year <= (keywordData?.search_cutoff?.year || 2026)) return "2024_2026";
-  return null;
+  const period = (keywordData?.periods || []).find(item =>
+    (item.start == null || year >= item.start) &&
+    (item.end == null || year <= item.end)
+  );
+  return period?.id || null;
 }
 
 function selectKeywordPeriod(periodId) {
@@ -873,7 +872,9 @@ function selectKeywordPeriod(periodId) {
 
 function showUnclassifiedYear(year) {
   const cutoff = keywordData?.search_cutoff;
-  el("panelBody").innerHTML = `<h2>${year}</h2><p>This Scopus publication year is outside the historical keyword periods, which end in ${cutoff?.year || 2026}. These records were nevertheless present in the Scopus export downloaded on ${esc(cutoff?.label || "8 July 2026")}.</p>`;
+  const cutoffYear = cutoff?.year ?? "the recorded cutoff year";
+  const cutoffLabel = cutoff?.label || "the recorded Scopus retrieval cutoff";
+  el("panelBody").innerHTML = `<h2>${year}</h2><p>This Scopus publication year is outside the historical keyword periods, which end in ${esc(cutoffYear)}. These records were nevertheless present in the Scopus export downloaded on ${esc(cutoffLabel)}.</p>`;
   el("panel").classList.add("open");
 }
 
