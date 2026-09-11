@@ -36,6 +36,9 @@ from aecsp.specification.llm_coder import (  # noqa: E402
     model_cache_dir,
     protocol_fingerprint,
     protocol_for_model,
+    FULLTEXT_PROTOCOL_ID,
+    max_output_tokens_for,
+    build_paper_record,
     protocol_parameters,
     sanitize_lone_surrogates,
 )
@@ -169,6 +172,17 @@ def main() -> None:
         f"defaults to {DEFAULT_LOCAL_MODEL}, check 'ollama list').",
     )
     parser.add_argument("--dry-run", action="store_true", help="Estimate only; no API calls.")
+    parser.add_argument(
+        "--text-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Run the FULL-TEXT protocol (spec-ft-v1) reading cleaned documents from "
+            "this directory (<paper_id>.md), instead of abstracts from the corpus. "
+            "Writes to its own cache root; spec-v3 caches are untouched. "
+            "Typical: data/interim/fulltext_clean/md"
+        ),
+    )
     args = parser.parse_args()
     workers = args.workers if args.workers is not None else (1 if args.local else 10)
     if workers < 1:
@@ -205,6 +219,15 @@ def main() -> None:
             or DEFAULT_MODEL
         )
     protocol_id, max_output_tokens = protocol_for_model(model)
+    # --text-dir switches protocol. spec-ft-v1 has its own prompt, its own output
+    # ceiling and its own cache root, so a full-text run can never write into a
+    # spec-v3 cache or alter a spec-v3 fingerprint.
+    text_dir = args.text_dir
+    if text_dir is not None:
+        if not text_dir.is_dir():
+            sys.exit(f"--text-dir not found: {text_dir}")
+        protocol_id = FULLTEXT_PROTOCOL_ID
+        max_output_tokens = max_output_tokens_for(protocol_id)
     cache_dir = model_cache_dir(CACHE_ROOT, model, protocol_id)
 
     master = load_corpus()
@@ -322,14 +345,7 @@ def main() -> None:
             force=True,
         )
     def code_row(row) -> tuple[str, float, str | None]:
-        paper = {
-            "paper_id": row["paper_id"],
-            "title": row.get("Title", ""),
-            "abstract": row.get("Abstract", ""),
-            "keywords": row.get("Author Keywords", ""),
-            "journal": row.get("Source title", ""),
-            "year": row.get("Year", ""),
-        }
+        paper = build_paper_record(row, text_dir, protocol_id)
         paper_started = time.time()
         attempts = 0
         while True:

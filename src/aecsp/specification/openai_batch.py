@@ -29,8 +29,10 @@ from aecsp.specification.llm_coder import (
     TEMPERATURE,
     TOP_P,
     build_user_prompt,
+    build_user_prompt_for,
     flatten_profile,
     response_json_schema,
+    system_prompt_for,
 )
 
 # Observed on completed spec-v3 records (nano and the 50-paper gpt-5.4-mini
@@ -53,23 +55,25 @@ def custom_id_for(paper_id: str) -> str:
     return f"{safe}_{digest}"
 
 
-def build_body(model: str, paper: dict[str, str], max_output_tokens: int) -> dict[str, Any]:
-    """Chat Completions body identical to the live code_paper request."""
+def build_body(
+    model: str,
+    paper: dict[str, str],
+    max_output_tokens: int,
+    protocol_id: str | None = None,
+) -> dict[str, Any]:
+    """Chat Completions body identical to the live code_paper request.
+
+    Protocol-selected, defaulting to the frozen spec-v3 so every existing call
+    site produces a byte-identical body and the completed caches stay valid.
+    The live path (code_paper) resolves its prompts the same way, which is what
+    keeps live and Batch interchangeable and mutually resumable.
+    """
 
     return {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": build_user_prompt(
-                    paper.get("title", ""),
-                    paper.get("abstract", ""),
-                    paper.get("keywords", ""),
-                    paper.get("journal", ""),
-                    paper.get("year", ""),
-                ),
-            },
+            {"role": "system", "content": system_prompt_for(protocol_id)},
+            {"role": "user", "content": build_user_prompt_for(protocol_id, paper)},
         ],
         "response_format": {
             "type": "json_schema",
@@ -86,14 +90,19 @@ def build_body(model: str, paper: dict[str, str], max_output_tokens: int) -> dic
     }
 
 
-def request_line(model: str, paper: dict[str, str], max_output_tokens: int) -> dict[str, Any]:
+def request_line(
+    model: str,
+    paper: dict[str, str],
+    max_output_tokens: int,
+    protocol_id: str | None = None,
+) -> dict[str, Any]:
     """One JSONL line for the batch input file."""
 
     return {
         "custom_id": custom_id_for(paper["paper_id"]),
         "method": "POST",
         "url": "/v1/chat/completions",
-        "body": build_body(model, paper, max_output_tokens),
+        "body": build_body(model, paper, max_output_tokens, protocol_id),
     }
 
 

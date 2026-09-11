@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -252,6 +253,215 @@ def build_user_prompt(title: str, abstract: str, keywords: str, journal: str, ye
     )
 
 
+# --------------------------------------------------------------------------
+# spec-ft-v1: the full-text arm.
+#
+# A SEPARATE protocol, not a revision of spec-v3. Everything above stays
+# byte-identical so the spec-v3 fingerprint cannot move and its existing caches
+# remain valid.
+#
+# Only what the evidentiary boundary requires is changed. No new guidance is
+# added (no "mechanisms are usually in the discussion" hints), because the
+# paired abstract-versus-full-text comparison is interpretable only if the text
+# supplied is the single thing that differs between the two arms.
+#
+# Rule 7 (mechanism requires causal logic) is preserved word for word: the
+# pre-registered empty-logic correction depends on it.
+#
+# Rules 4 and 8 necessarily change. Both concerned metadata insufficiency and
+# are incoherent once the full document is supplied. needs_full_text is retired
+# for this protocol; document quality is recorded by the extraction pipeline.
+# --------------------------------------------------------------------------
+
+FULLTEXT_PROTOCOL_ID = "spec-ft-v1"
+FULLTEXT_MAX_OUTPUT_TOKENS = 8192
+
+SYSTEM_PROMPT_FULLTEXT = f"""You are an expert construct-specification coder for a \
+theory-elaboration study of how Artificial Intelligence is specified as a \
+construct in entrepreneurship and business research. You code one paper at a \
+time from the full text of the paper as supplied to you. The supplied document \
+contains the title, abstract, author keywords and the body of the paper. Its \
+reference list and publisher apparatus have been removed and are not available \
+to you.
+
+WHAT EACH DIMENSION DIAGNOSES (code with the diagnosis in mind):
+{_dimension_briefing()}
+
+CODING DISCIPLINE:
+1. Evidence before code. For every dimension, first extract the evidence (a
+   short quote or close paraphrase from the supplied document), then choose
+   the code. No evidence means an empty evidence field and the
+   unspecified/missing code.
+2. Separate what the text states from what you infer, and label it in
+   evidence_type: 'stated' means the text explicitly supports the code
+   (quote it); 'inferred' means the code is your reasonable inference from
+   context (the evidence field says what you inferred from); 'absent' means
+   the text does not address the dimension. Never present an inference as
+   stated.
+3. Score confidence per dimension, 0.0-1.0: 0.9+ explicit statement; 0.6-0.8
+   strong inference; below 0.6 weak inference that a human must review. Do
+   not inflate: an honest 0.4 is worth more than a false 0.8.
+4. Code what the supplied document supports. You have the full body, so a
+   dimension the abstract alone could not settle should be coded from the
+   text wherever the text addresses it. Where the document is genuinely
+   silent on a dimension, the unspecified/missing code with 'absent'
+   evidence_type is correct.
+5. Adversarial pass before answering: identify your three most load-bearing
+   codes for this paper, attack each as a skeptic paid to find the flaw
+   (does the text actually say this, or am I pattern-matching on keywords?),
+   revise any code that does not survive, and summarise the outcome in
+   adversarial_review.
+6. Conservative is not lazy: unspecified/missing is correct when the text is
+   silent, and wrong when the text supports an inference you failed to make.
+7. Mechanism requires causal logic. Code a substantive ai_mechanism ONLY if
+   you can also state the paper's causal logic in ai_mechanism_logic, in the
+   paper's own terms. If ai_mechanism_logic would be empty, generic, or a
+   restatement of the code, the correct code is 'mechanism missing'. Never
+   code a substantive mechanism while also flagging 'mechanism missing' in
+   specification_problem: those two must agree.
+8. Judge the paper, not the extraction. The document was produced by automated
+   PDF extraction and may carry artefacts: broken words, lost table structure,
+   or a missing section. Code what is present. Do not treat an extraction
+   artefact as evidence that the paper failed to specify something, and do not
+   speculate about content you cannot see."""
+
+
+def build_user_prompt_fulltext(
+    title: str, full_text: str, keywords: str, journal: str, year: str
+) -> str:
+    return (
+        "Code this paper across the seven AI construct-specification dimensions.\n\n"
+        f"TITLE: {title}\n"
+        f"JOURNAL: {journal} ({year})\n"
+        f"KEYWORDS: {keywords}\n"
+        f"FULL TEXT:\n{full_text}"
+    )
+
+
+@dataclass(frozen=True)
+class Protocol:
+    """One coding protocol, declared as data rather than as control flow.
+
+    Everything that distinguishes one protocol from another lives here, so a new
+    protocol is a new entry in PROTOCOLS and nothing else. Branching on the
+    protocol id inside prompt builders meant every future protocol would need
+    another `if` in every builder, which is how instruments drift apart.
+
+    text_field  the key in the paper record carrying the evidence text
+    text_prefix the label placed before it, INCLUDING its separator, so that
+                spec-v3 keeps "ABSTRACT: <text>" on one line and spec-ft-v1
+                puts the document on its own line. Byte-identical output for
+                spec-v3 is a contract test, not an aspiration.
+    """
+
+    protocol_id: str
+    system_prompt: str
+    max_output_tokens: int
+    text_field: str
+    text_prefix: str
+
+
+PROTOCOLS: dict[str, Protocol] = {
+    PROTOCOL_ID: Protocol(
+        protocol_id=PROTOCOL_ID,
+        system_prompt=SYSTEM_PROMPT,
+        max_output_tokens=MAX_OUTPUT_TOKENS,
+        text_field="abstract",
+        text_prefix="ABSTRACT: ",
+    ),
+    FULLTEXT_PROTOCOL_ID: Protocol(
+        protocol_id=FULLTEXT_PROTOCOL_ID,
+        system_prompt=SYSTEM_PROMPT_FULLTEXT,
+        max_output_tokens=FULLTEXT_MAX_OUTPUT_TOKENS,
+        text_field="full_text",
+        text_prefix="FULL TEXT:\n",
+    ),
+}
+
+
+def get_protocol(protocol_id: str | None = None) -> Protocol:
+    """Look up a protocol, defaulting to the frozen spec-v3."""
+    resolved = protocol_id or PROTOCOL_ID
+    try:
+        return PROTOCOLS[resolved]
+    except KeyError:
+        known = ", ".join(sorted(PROTOCOLS))
+        raise ValueError(f"Unknown protocol '{resolved}'. Known protocols: {known}") from None
+
+
+def build_paper_record(
+    row: Any,
+    text_dir: Path | None = None,
+    protocol_id: str | None = None,
+) -> dict[str, str]:
+    """Assemble the record handed to a coder, for any protocol or transport.
+
+    Shared by the live runner and both Batch runners so the three transports
+    cannot drift in how they assemble a paper.
+
+    Identifying metadata always comes from the corpus row. For a full-text
+    protocol the evidence text is additionally read from
+    <text_dir>/<paper_id>.md. That document already carries the corpus title,
+    abstract and keywords at its head, written there by extract_fulltext.py, so
+    switching protocols does not lose the abstract: it arrives inside the
+    document rather than as a separate field.
+    """
+    protocol = get_protocol(protocol_id)
+    paper = {
+        "paper_id": row["paper_id"],
+        "title": row.get("Title", ""),
+        "abstract": row.get("Abstract", ""),
+        "keywords": row.get("Author Keywords", ""),
+        "journal": row.get("Source title", ""),
+        "year": row.get("Year", ""),
+    }
+    if protocol.text_field == "abstract":
+        if text_dir is not None:
+            # Silently ignoring text_dir would let a full-text run code
+            # abstracts with nobody noticing, so this is an error.
+            raise ValueError(
+                f"text_dir was supplied but protocol '{protocol.protocol_id}' reads the "
+                f"abstract. Pass protocol_id='{FULLTEXT_PROTOCOL_ID}' for full-text runs."
+            )
+        return paper
+    if text_dir is None:
+        raise ValueError(
+            f"Protocol '{protocol.protocol_id}' needs document text; pass --text-dir."
+        )
+    stem = str(row["paper_id"]).replace("eid:", "")
+    md_path = Path(text_dir) / f"{stem}.md"
+    if not md_path.is_file():
+        raise FileNotFoundError(f"No cleaned full text for {row['paper_id']}: {md_path}")
+    paper[protocol.text_field] = md_path.read_text(encoding="utf-8")
+    return paper
+
+
+def system_prompt_for(protocol_id: str | None = None) -> str:
+    """The system prompt for a protocol."""
+    return get_protocol(protocol_id).system_prompt
+
+
+def max_output_tokens_for(protocol_id: str | None = None) -> int:
+    """The output ceiling for a protocol. Ceilings are per protocol, never per model."""
+    return get_protocol(protocol_id).max_output_tokens
+
+
+def build_user_prompt_for(protocol_id: str | None, paper: dict[str, str]) -> str:
+    """Build the user prompt for a protocol from a paper record.
+
+    The record is assembled by the caller, so the arms differ only in which text
+    it carries: spec-v3 reads 'abstract', spec-ft-v1 reads 'full_text'.
+    """
+    protocol = get_protocol(protocol_id)
+    return (
+        "Code this paper across the seven AI construct-specification dimensions.\n\n"
+        f"TITLE: {paper.get('title', '')}\n"
+        f"JOURNAL: {paper.get('journal', '')} ({paper.get('year', '')})\n"
+        f"KEYWORDS: {paper.get('keywords', '')}\n"
+        f"{protocol.text_prefix}{paper.get(protocol.text_field, '')}"
+    )
+
+
 def _clamp(value: Any, low: float, high: float) -> float | None:
     try:
         number = float(value)
@@ -418,17 +628,11 @@ def code_paper(
     request = {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": build_user_prompt(
-                    paper.get("title", ""),
-                    paper.get("abstract", ""),
-                    paper.get("keywords", ""),
-                    paper.get("journal", ""),
-                    paper.get("year", ""),
-                ),
-            },
+            # Protocol-selected. For spec-v3 these resolve to exactly the same
+            # strings as before, so the request body stays byte-identical and
+            # existing caches remain valid.
+            {"role": "system", "content": system_prompt_for(protocol_id)},
+            {"role": "user", "content": build_user_prompt_for(protocol_id, paper)},
         ],
         "response_format": {
             "type": "json_schema",

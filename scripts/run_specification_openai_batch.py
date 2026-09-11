@@ -40,8 +40,11 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 import pandas as pd  # noqa: E402
 
 from aecsp.specification.llm_coder import (  # noqa: E402
+    FULLTEXT_PROTOCOL_ID,
+    build_paper_record,
     cache_key,
     load_env,
+    max_output_tokens_for,
     model_cache_dir,
     protocol_fingerprint,
     protocol_for_model,
@@ -68,7 +71,11 @@ LIVE_PRICES = {  # USD per 1M input/output tokens at LIVE rates
 TERMINAL = {"completed", "failed", "expired", "cancelled"}
 
 
-def load_papers(paper_ids_file: Path | None) -> list[dict[str, str]]:
+def load_papers(
+    paper_ids_file: Path | None,
+    text_dir: Path | None = None,
+    protocol_id: str | None = None,
+) -> list[dict[str, str]]:
     master = pd.read_csv(PROCESSED_DIR / "master_corpus.csv", dtype=str, keep_default_na=False)
     if paper_ids_file is not None:
         selection = pd.read_csv(paper_ids_file, dtype=str, keep_default_na=False)
@@ -79,15 +86,10 @@ def load_papers(paper_ids_file: Path | None) -> list[dict[str, str]]:
         master = master[master["paper_id"].isin(wanted)].copy()
         master["_o"] = master["paper_id"].map(order)
         master = master.sort_values("_o")
+    # Shared with the live runner and the Gemini runner, so the three
+    # transports cannot drift in how a paper record is assembled.
     return [
-        {
-            "paper_id": row["paper_id"],
-            "title": row.get("Title", ""),
-            "abstract": row.get("Abstract", ""),
-            "keywords": row.get("Author Keywords", ""),
-            "journal": row.get("Source title", ""),
-            "year": row.get("Year", ""),
-        }
+        build_paper_record(row, text_dir, protocol_id)
         for _, row in master.iterrows()
     ]
 
@@ -176,15 +178,33 @@ def main() -> None:
     parser.add_argument("--paper-ids-file", type=Path, default=None)
     parser.add_argument("--yes", action="store_true",
                         help="Required for `run`: confirms paid batch submission.")
+    parser.add_argument(
+        "--text-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Run the FULL-TEXT protocol (spec-ft-v1) reading cleaned documents "
+            "from this directory (<paper_id>.md) instead of abstracts from the "
+            "corpus. Writes to its own cache root; spec-v3 caches are untouched. "
+            "Typical: data/interim/fulltext_clean/md"
+        ),
+    )
     args = parser.parse_args()
 
     protocol_id, max_output_tokens = protocol_for_model(args.model)
+    # --text-dir switches protocol, which also switches the cache root, so a
+    # full-text batch can never be written into a spec-v3 cache.
+    if args.text_dir is not None:
+        if not args.text_dir.is_dir():
+            sys.exit(f"--text-dir not found: {args.text_dir}")
+        protocol_id = FULLTEXT_PROTOCOL_ID
+        max_output_tokens = max_output_tokens_for(protocol_id)
     cache_dir = model_cache_dir(CACHE_ROOT, args.model, protocol_id)
     cache_dir.mkdir(parents=True, exist_ok=True)
     state_path = cache_dir / "openai_batch_state.json"
     state = load_state(state_path)
 
-    papers = load_papers(args.paper_ids_file)
+    papers = load_papers(args.paper_ids_file, args.text_dir, protocol_id)
     uncached = [p for p in papers if not (cache_dir / cache_key(p["paper_id"])).exists()]
     in_flight = pending_paper_ids(state)
     todo = [p for p in uncached if p["paper_id"] not in in_flight]
@@ -294,7 +314,12 @@ def main() -> None:
         jsonl_path = inputs_dir / f"chunk_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{index}.jsonl"
         with jsonl_path.open("w", encoding="utf-8") as handle:
             for paper in chunk:
-                handle.write(json.dumps(request_line(args.model, paper, max_output_tokens)) + "\n")
+                handle.write(
+                    json.dumps(
+                        request_line(args.model, paper, max_output_tokens, protocol_id)
+                    )
+                    + "\n"
+                )
         uploaded = client.files.create(file=jsonl_path.open("rb"), purpose="batch")
         batch = client.batches.create(
             input_file_id=uploaded.id,

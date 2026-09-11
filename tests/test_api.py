@@ -244,6 +244,72 @@ def test_scope_export_is_scope_and_filter_aware(service):
         service.export_scope("full_corpus", {"not_a_column": "value"})
 
 
+def test_reviewer_scope_export_drops_specification_metadata(service):
+    reviewer = service.export_scope("full_corpus", include_specification=False)
+    assert reviewer["paper_id"].tolist() == ["P1", "P2", "P3"]
+    # Scopus detail, provenance, and topic label stay; model codes do not.
+    assert {"Title", "Abstract", "Author Keywords", "in_query_1"}.issubset(
+        reviewer.columns
+    )
+    for hidden in (
+        "ai_type_form",
+        "ai_role_function",
+        "ai_type_form_evidence",
+        "ai_type_form_confidence",
+        "ai_method_or_phenomenon",
+        "definition_construct_clarity",
+        "specification_problem",
+    ):
+        assert hidden not in reviewer.columns
+
+    # A reviewer cannot slice the corpus on a specification column either.
+    with pytest.raises(ValueError, match="not available for the reviewer download"):
+        service.export_scope(
+            "full_corpus",
+            {"ai_type_form": "machine learning"},
+            include_specification=False,
+        )
+
+
+def test_scope_downloads_require_administrator(service, monkeypatch):
+    from aecsp.api import main
+    from starlette.requests import Request
+
+    main.state["service"] = service
+
+    def _request(role: str) -> Request:
+        http = Request(
+            {"type": "http", "method": "GET", "path": "/", "headers": []}
+        )
+        http.state.dashboard_access_role = role
+        return http
+
+    monkeypatch.setenv("ETV_DASHBOARD_REQUIRE_AUTH", "true")
+
+    # The ordinary paper-detail product is also an administrator operation.
+    paper_download = main.scope_download(
+        "full_corpus", _request(main.ADMIN_ROLE), filters=""
+    )
+    with ZipFile(BytesIO(paper_download.body)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert "ai_type_form" not in manifest["columns"]
+
+    # Authenticated administrator gets the construct-specification columns back.
+    admin_download = main.scope_full_download(
+        "full_corpus", _request(main.ADMIN_ROLE), filters=""
+    )
+    with ZipFile(BytesIO(admin_download.body)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert "ai_type_form" in manifest["columns"]
+        assert "content_profile" not in manifest
+
+    # Both paper-level download paths are absent from reviewer access.
+    for endpoint in (main.scope_download, main.scope_full_download):
+        with pytest.raises(main.HTTPException) as blocked:
+            endpoint("full_corpus", _request(main.REVIEWER_ROLE), filters="")
+        assert blocked.value.status_code == 404
+
+
 def test_keyword_evolution_and_evidence_are_scope_aware(service):
     result = service.keyword_evolution("full_corpus", source="author")
     assert result["source_label"] == "Author keywords"
@@ -607,6 +673,7 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
                 "ai_type_form": "analytics",
                 "ai_mechanism": "supports learning",
                 "ai_mechanism_logic": "",
+                "adversarial_review": "The method classification is explicit, but the mechanism is not stated.",
             },
             {
                 "paper_id": "P2",
@@ -615,6 +682,7 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
                 "ai_type_form": "analytics",
                 "ai_mechanism": "improves prediction",
                 "ai_mechanism_logic": "AI predicts the outcome.",
+                "adversarial_review": "The prediction mechanism is supported by the abstract.",
             },
         ]
     ).to_csv(
@@ -701,6 +769,10 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
     )
     assert exported["paper_id"].tolist() == ["P1", "P2"]
     assert exported["ai_type_form"].tolist() == ["analytics", "analytics"]
+    assert exported["adversarial_review"].tolist() == [
+        "The method classification is explicit, but the mechanism is not stated.",
+        "The prediction mechanism is supported by the abstract.",
+    ]
 
     report = build_composition_report(
         model_service,
@@ -759,6 +831,13 @@ def test_observed_composition_uses_selected_model_and_its_coverage(tmp_path):
         composition_summary = pd.read_csv(
             archive.open("composition/observed_composition_summary.csv")
         )
+        composition_papers = pd.read_csv(
+            archive.open("composition/observed_composition_papers.csv")
+        )
+        assert composition_papers["adversarial_review"].tolist() == [
+            "The method classification is explicit, but the mechanism is not stated.",
+            "The prediction mechanism is supported by the abstract.",
+        ]
         assert {"distribution", "denominator", "papers", "share"}.issubset(
             composition_summary.columns
         )
@@ -1042,9 +1121,10 @@ def test_report_includes_performance_with_citation_and_link(service):
     assert "Journal-level specification-code diversity" not in report
 
 
-def test_endpoint_handlers_serve_performance_and_report(service):
+def test_endpoint_handlers_serve_performance_and_report(service, monkeypatch):
     from aecsp.api import main
 
+    monkeypatch.setenv("ETV_DASHBOARD_REQUIRE_AUTH", "true")
     main.state["service"] = service
     health = main.health()
     assert health["papers_loaded"] == 3
@@ -1104,7 +1184,14 @@ def test_endpoint_handlers_serve_performance_and_report(service):
     report = main.scope_report("full_corpus")
     assert "Performance analysis" in report
 
-    download = main.scope_download("query_4", filters="")
+    from starlette.requests import Request
+
+    admin_request = Request(
+        {"type": "http", "method": "GET", "path": "/", "headers": []}
+    )
+    admin_request.state.dashboard_access_role = main.ADMIN_ROLE
+
+    download = main.scope_download("query_4", admin_request, filters="")
     assert download.media_type == "application/zip"
     assert download.headers["x-etv-scope"] == "query_4"
     assert download.headers["x-etv-paper-count"] == "1"
@@ -1113,9 +1200,23 @@ def test_endpoint_handlers_serve_performance_and_report(service):
         assert manifest["scope_id"] == "query_4"
         assert manifest["scope_label"] == "Additional entrepreneurship journals"
         assert manifest["paper_count"] == 1
+        assert "content_profile" not in manifest
+        assert "includes_specification_metadata" not in manifest
+        assert "ai_type_form" not in manifest["columns"]
         csv_name = manifest["data_file"]
         exported = pd.read_csv(archive.open(csv_name), dtype=str)
         assert exported["paper_id"].tolist() == ["P3"]
+        assert "ai_type_form" not in exported.columns
+
+    reviewer_request = Request(
+        {"type": "http", "method": "GET", "path": "/", "headers": []}
+    )
+    reviewer_request.state.dashboard_access_role = main.REVIEWER_ROLE
+    # Reviewer access does not expose either paper-level download route.
+    for endpoint in (main.scope_download, main.scope_full_download):
+        with pytest.raises(main.HTTPException) as blocked:
+            endpoint("query_4", reviewer_request, filters="")
+        assert blocked.value.status_code == 404
 
 
 def test_construct_contrasting_endpoints_and_release_are_reproducible(service):
@@ -1757,6 +1858,11 @@ def test_dashboard_entry_pages_are_current_and_not_cached():
     assert "Generate scope report" in dashboard_html
     assert "Download scope data" in dashboard_html
     assert "downloadScopeData" in dashboard_html
+    # Both paper-level downloads are admin-gated in the markup itself.
+    assert 'id="downloadButton" data-admin-only hidden' in dashboard_html
+    assert 'id="downloadFullButton" data-admin-only hidden' in dashboard_html
+    assert "downloadFullScopeData()" in dashboard_html
+    assert "/download/full" in dashboard_html
     assert "renderPlatformState()" in dashboard_html
     assert 'id="cards"' not in dashboard_html
     assert "Clear AI positioning" not in dashboard_html

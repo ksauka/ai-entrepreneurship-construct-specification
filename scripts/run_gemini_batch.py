@@ -29,7 +29,11 @@ from aecsp.specification.gemini_batch import (  # noqa: E402
     request_line,
 )
 from aecsp.specification.llm_coder import (  # noqa: E402
+    FULLTEXT_PROTOCOL_ID,
     PROTOCOL_ID,
+    build_paper_record,
+    max_output_tokens_for,
+    system_prompt_for,
     SYSTEM_PROMPT,
     cache_key,
     load_env,
@@ -56,14 +60,20 @@ def target_batch_dir(cache_dir: Path, target: Path) -> Path:
     return cache_dir / "gemini_batches" / target.stem
 
 
-def provider_fingerprint(model: str) -> str:
+def provider_fingerprint(model: str, protocol_id: str | None = None) -> str:
+    """Fingerprint the exact request apparatus, including the protocol.
+
+    Protocol-aware so a full-text run cannot inherit the spec-v3 fingerprint
+    and appear, in a manifest, to have been produced by the frozen instrument.
+    """
+    resolved = protocol_id or PROTOCOL_ID
     payload = {
         "provider": "gemini_batch",
         "model": model,
-        "protocol": PROTOCOL_ID,
-        "system_prompt": SYSTEM_PROMPT,
+        "protocol": resolved,
+        "system_prompt": system_prompt_for(resolved),
         "schema": response_json_schema()["schema"],
-        "generation_config": generation_config(),
+        "generation_config": generation_config(max_output_tokens_for(resolved)),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
@@ -77,7 +87,11 @@ def ensure_direct_batch_size(papers: int) -> None:
         )
 
 
-def load_papers(target: Path) -> list[dict[str, str]]:
+def load_papers(
+    target: Path,
+    text_dir: Path | None = None,
+    protocol_id: str | None = None,
+) -> list[dict[str, str]]:
     selection = pd.read_csv(target, dtype=str, keep_default_na=False)
     if "paper_id" not in selection:
         raise SystemExit("--paper-ids-file must contain a paper_id column")
@@ -90,17 +104,21 @@ def load_papers(target: Path) -> list[dict[str, str]]:
     master = master[master["paper_id"].isin(wanted)].copy()
     master["_order"] = master["paper_id"].map(order)
     master = master.sort_values("_order")
+    # Shared with the live and OpenAI Batch runners so the transports cannot
+    # drift in how a paper record is assembled.
     return [
-        {
-            "paper_id": row["paper_id"], "title": row["Title"],
-            "abstract": row["Abstract"], "keywords": row["Author Keywords"],
-            "journal": row["Source title"], "year": row["Year"],
-        }
+        build_paper_record(row, text_dir, protocol_id)
         for _, row in master.iterrows()
     ]
 
 
-def prepare(model: str, papers: list[dict[str, str]], cache_dir: Path, target: Path) -> Path:
+def prepare(
+    model: str,
+    papers: list[dict[str, str]],
+    cache_dir: Path,
+    target: Path,
+    protocol_id: str | None = None,
+) -> Path:
     batch_dir = target_batch_dir(cache_dir, target)
     batch_dir.mkdir(parents=True, exist_ok=True)
     todo = [paper for paper in papers if not (cache_dir / cache_key(paper["paper_id"])).exists()]
@@ -108,13 +126,13 @@ def prepare(model: str, papers: list[dict[str, str]], cache_dir: Path, target: P
     input_path = batch_dir / "requests.jsonl"
     with input_path.open("w", encoding="utf-8") as handle:
         for paper in todo:
-            handle.write(json.dumps(request_line(model, paper)) + "\n")
+            handle.write(json.dumps(request_line(model, paper, protocol_id)) + "\n")
     mapping = {custom_id_for(paper["paper_id"]): paper["paper_id"] for paper in todo}
     (batch_dir / "custom_id_map.json").write_text(json.dumps(mapping, indent=2), encoding="utf-8")
     manifest = {
         "created_at": datetime.now().isoformat(), "provider": "gemini_batch",
-        "model": model, "protocol": PROTOCOL_ID,
-        "provider_fingerprint": provider_fingerprint(model),
+        "model": model, "protocol": protocol_id or PROTOCOL_ID,
+        "provider_fingerprint": provider_fingerprint(model, protocol_id),
         "target": str(target.relative_to(PROJECT_ROOT)), "target_sha256": sha256(target),
         "papers_in_target": len(papers), "papers_prepared": len(todo),
         "input_file": input_path.name, "input_sha256": sha256(input_path),
@@ -266,7 +284,7 @@ def export(model: str, papers: list[dict[str, str]], cache_dir: Path) -> None:
             "JOB_STATE_SUCCEEDED, then run fetch before export."
         )
     frame = enrich_for_analysis(pd.DataFrame(records))
-    output = PROCESSED / "specification" / f"paper_specifications_{cache_dir.name}_{PROTOCOL_ID}.csv"
+    output = PROCESSED / "specification" / f"paper_specifications_{cache_dir.name}_{protocol_id}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(output, index=False, encoding="utf-8-sig")
     print(f"Exported {len(frame):,}/{len(papers):,} records to {output}")
@@ -287,17 +305,26 @@ def main() -> None:
         ),
     )
     parser.add_argument("--poll-seconds", type=int, default=15)
+    parser.add_argument("--text-dir", type=Path, default=None,
+                        help="Run the FULL-TEXT protocol (spec-ft-v1) from cleaned documents in this directory.")
     args = parser.parse_args()
     if args.poll_seconds < 5:
         parser.error("--poll-seconds must be at least 5")
     target = args.paper_ids_file.resolve()
-    papers = load_papers(target)
-    cache_dir = model_cache_dir(CACHE_ROOT, args.model, PROTOCOL_ID)
+    # --text-dir switches protocol, which switches the cache root, so a
+    # full-text batch can never land in a spec-v3 cache.
+    protocol_id = PROTOCOL_ID
+    if args.text_dir is not None:
+        if not args.text_dir.is_dir():
+            raise SystemExit(f"--text-dir not found: {args.text_dir}")
+        protocol_id = FULLTEXT_PROTOCOL_ID
+    papers = load_papers(target, args.text_dir, protocol_id)
+    cache_dir = model_cache_dir(CACHE_ROOT, args.model, protocol_id)
     cache_dir.mkdir(parents=True, exist_ok=True)
     batch_dir = target_batch_dir(cache_dir, target)
     state_path = batch_dir / "batch_state.json"
     if args.command in {"preview", "prepare"}:
-        prepare(args.model, papers, cache_dir, target)
+        prepare(args.model, papers, cache_dir, target, protocol_id)
         return
     if args.command == "export":
         export(args.model, papers, cache_dir)
@@ -317,7 +344,7 @@ def main() -> None:
         if not args.yes:
             raise SystemExit("`run` may submit PAID work. Re-run with --yes.")
         if not state.get("job_name"):
-            prepare(args.model, papers, cache_dir, target)
+            prepare(args.model, papers, cache_dir, target, protocol_id)
             if not ensure_validation_gate(cache_dir, batch_dir, args.model):
                 validate_one(client, types, args.model, papers[0], batch_dir)
             uploaded = client.files.upload(
@@ -349,7 +376,7 @@ def main() -> None:
         if state.get("job_name"):
             raise SystemExit(f"A job is already recorded: {state['job_name']}")
         if not (batch_dir / "requests.jsonl").exists():
-            prepare(args.model, papers, cache_dir, target)
+            prepare(args.model, papers, cache_dir, target, protocol_id)
         uploaded = client.files.upload(file=str(batch_dir / "requests.jsonl"), config=types.UploadFileConfig(display_name="etv-spec-v3-gemini", mime_type="jsonl"))
         job = create_batch_job(
             client,
@@ -420,7 +447,7 @@ def main() -> None:
             append_failure(cache_dir, paper_id, error); failed += 1
             print(progress_line("Gemini Fetch", index, len(lines), failed))
             continue
-        coded.update({"paper_id": paper_id, "coding_model": args.model, "coding_protocol": PROTOCOL_ID, "coding_protocol_fingerprint": provider_fingerprint(args.model), "coding_parameters_json": json.dumps(generation_config(), sort_keys=True)})
+        coded.update({"paper_id": paper_id, "coding_model": args.model, "coding_protocol": protocol_id, "coding_protocol_fingerprint": provider_fingerprint(args.model, protocol_id), "coding_parameters_json": json.dumps(generation_config(max_output_tokens_for(protocol_id)), sort_keys=True)})
         (cache_dir / cache_key(paper_id)).write_text(json.dumps(coded, indent=2), encoding="utf-8")
         ok += 1
         print(progress_line("Gemini Fetch", index, len(lines), failed))

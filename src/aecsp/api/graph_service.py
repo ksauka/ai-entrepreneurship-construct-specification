@@ -126,6 +126,73 @@ IRR_UNOBSERVED_VALUES = {
     for panel in OBSERVED_COMPOSITION_PANELS
 }
 
+# Columns a read-only reviewer may download at the paper level: Scopus
+# bibliographic detail, corpus/query provenance, journal-validity flags, the
+# publication era, and the human-approved BERTopic label. This deliberately
+# excludes every construct-specification model output (the seven dimension
+# codes and their per-dimension evidence/evidence_type/confidence,
+# ai_mechanism_logic, specification_problem, ai_method_or_phenomenon, the
+# coding_*/qc_*/mechanism_* families). Reviewers who do not work with the
+# specification instrument can misread those codes and judge the model or the
+# paper wrongly, so the full frame stays administrator-only.
+REVIEWER_SCOPE_EXPORT_COLUMNS: tuple[str, ...] = (
+    # Scopus bibliographic record
+    "paper_id",
+    "Authors",
+    "Author full names",
+    "Author(s) ID",
+    "Title",
+    "Year",
+    "Source title",
+    "Volume",
+    "Issue",
+    "Art. No.",
+    "Page start",
+    "Page end",
+    "Cited by",
+    "DOI",
+    "Link",
+    "Affiliations",
+    "Authors with affiliations",
+    "Abstract",
+    "Author Keywords",
+    "Index Keywords",
+    "Funding Details",
+    "Funding Texts",
+    "References",
+    "Correspondence Address",
+    "Editors",
+    "Publisher",
+    "ISSN",
+    "ISBN",
+    "CODEN",
+    "PubMed ID",
+    "Language of Original Document",
+    "Abbreviated Source Title",
+    "Document Type",
+    "Publication Stage",
+    "Open Access",
+    "Source",
+    "EID",
+    # corpus / query provenance
+    "dedup_key",
+    "in_query_1",
+    "in_query_2",
+    "in_query_3",
+    "in_query_4",
+    "query_sources",
+    "query_count",
+    # journal classification and relevance flags
+    "source_title_valid",
+    "source_title_matched",
+    "in_entrepreneurship_journal",
+    "corpus_relevant",
+    "ai_ent_relevant",
+    "publication_era",
+    # human-approved topic label (not the automatic label or topic internals)
+    "bertopic_topic_label",
+)
+
 # Evidence columns surfaced whenever we return a paper list. DOI and Link let
 # the UI build an in-text citation that links out to the article.
 EVIDENCE_COLUMNS = [
@@ -1014,6 +1081,7 @@ class GraphService:
                 "entrepreneurial_process_stage",
                 "definition_construct_clarity",
                 "specification_problem",
+                "adversarial_review",
                 "coding_model",
                 "coding_protocol",
                 "coding_protocol_fingerprint",
@@ -1498,16 +1566,45 @@ class GraphService:
         }
 
     def export_scope(
-        self, scope_id: str, filters: dict[str, str] | None = None
+        self,
+        scope_id: str,
+        filters: dict[str, str] | None = None,
+        *,
+        include_specification: bool = True,
     ) -> pd.DataFrame:
-        """Return a copy of one scope, optionally restricted by exact filters."""
+        """Return a copy of one scope, optionally restricted by exact filters.
+
+        With ``include_specification=False`` the frame is trimmed to
+        ``REVIEWER_SCOPE_EXPORT_COLUMNS`` (Scopus detail, provenance, journal
+        flags) and filters may only reference those columns, so a reviewer
+        download never exposes or lets a reviewer slice on the model's
+        construct-specification codes.
+        """
 
         frame = self._scope(scope_id)
+        allowed = (
+            None
+            if include_specification
+            else set(REVIEWER_SCOPE_EXPORT_COLUMNS)
+        )
         for column, value in (filters or {}).items():
             if column not in frame.columns:
                 raise ValueError(f"Unknown export filter column: {column}")
+            if allowed is not None and column not in allowed:
+                raise ValueError(
+                    "Filter column is not available for the reviewer download: "
+                    f"{column}"
+                )
             frame = frame[frame[column].astype(str) == str(value)]
-        return frame.reset_index(drop=True).copy()
+        frame = frame.reset_index(drop=True).copy()
+        if allowed is None:
+            return frame
+        keep = [
+            column
+            for column in REVIEWER_SCOPE_EXPORT_COLUMNS
+            if column in frame.columns
+        ]
+        return frame[keep]
 
     # ---- overview -------------------------------------------------------
     def scopes(self) -> list[dict]:

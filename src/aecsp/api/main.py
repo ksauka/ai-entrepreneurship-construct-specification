@@ -49,6 +49,7 @@ from aecsp.api.report import (
     build_scope_report,
     build_theory_contrasting_report,
 )
+from aecsp.analytics.keyword_trends import SEARCH_CUTOFF_DATE, SEARCH_CUTOFF_LABEL
 from aecsp.corpus.scopes import SCOPE_BY_ID
 from aecsp.human_annotation import HumanAnnotationStore
 from aecsp.targeted_reading import TargetedReadingStore
@@ -91,9 +92,56 @@ TOPIC_ENRICHED_DATASET = (
     PROJECT_ROOT / "data/processed/analysis/primary_analysis_dataset_with_topics.csv"
 )
 GRAPH_EXPORT_DIR = PROJECT_ROOT / "data/processed/graph"
+
+# Copyright boundary. data/interim/fulltext_clean/ holds the body text of 131
+# copyrighted journal articles, extracted for analysis. Reading that text for
+# coding, embedding and analysis is research use; serving it, in whole or in
+# bulk, is redistribution. Nothing here may serve it, at ANY role, including
+# administrator, because the constraint is the publishers' rather than ours to
+# waive. This is enforced rather than documented because the RAG work will
+# legitimately point services at that directory and the guard must not depend
+# on remembering.
+NEVER_SERVE_ROOTS = (
+    (PROJECT_ROOT / "data" / "interim").resolve(),
+)
+
+
+def assert_servable(path: Path) -> Path:
+    """Refuse to serve any file under a copyright-restricted root."""
+
+    resolved = Path(path).resolve()
+    for root in NEVER_SERVE_ROOTS:
+        if resolved == root or root in resolved.parents:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Refusing to serve a file under a copyright-restricted "
+                    "directory. Extracted article text may be read for analysis "
+                    "but never redistributed."
+                ),
+            )
+    return resolved
 SEARCH_QUERY_CONFIG = (
     PROJECT_ROOT / "configs/search_queries_july2026_q1_q4.yaml"
 )
+
+# The corpus is frozen at the Scopus capture date, so every analytic describes
+# the literature AS OF that date regardless of when a chart is rendered.
+# Labelling a figure with today's date implies a currency the data does not
+# have. `generated_at` remains the actual export time, because overwriting it
+# would falsify provenance; this is a separate field alongside it.
+#
+# Delegated to keyword_trends rather than re-parsing the config here: two
+# independent readers of one date drift, and this one is already used to label
+# the keyword chart's cut-off year.
+def corpus_as_of() -> str:
+    """The Scopus search cut-off as an ISO date, for example 2026-07-08."""
+    return SEARCH_CUTOFF_DATE.isoformat()
+
+
+def corpus_as_of_label() -> str:
+    """The same date written for readers, for example '8 July 2026'."""
+    return SEARCH_CUTOFF_LABEL
 TOPIC_TABLE_FILES = (
     "scope_topic_prevalence.csv",
     "scope_topic_by_era.csv",
@@ -573,9 +621,17 @@ def _dashboard_access_role(request: Request) -> str:
     )
 
 
+def _dashboard_admin_access(request: Request) -> bool:
+    """Return whether this request is an authenticated administrator."""
+
+    return (
+        _dashboard_authentication_enabled()
+        and _dashboard_access_role(request) == ADMIN_ROLE
+    )
+
+
 def _require_dashboard_write(request: Request, operation: str) -> None:
-    role = _dashboard_access_role(request)
-    if not _dashboard_authentication_enabled() or role != ADMIN_ROLE:
+    if not _dashboard_admin_access(request):
         raise HTTPException(
             status_code=403,
             detail=(
@@ -732,7 +788,7 @@ def _topic_release_response(scope: str, bundle: str) -> Response:
             for filename in ("nodes.csv", "relationships.csv"):
                 path = GRAPH_EXPORT_DIR / filename
                 if path.exists():
-                    add_bytes(f"graph/published/{filename}", path.read_bytes())
+                    add_bytes(f"graph/published/{filename}", assert_servable(path).read_bytes())
 
     if store.manifest_path.exists():
         add_bytes("provenance/stage4_manifest.json", store.manifest_path.read_bytes())
@@ -742,6 +798,7 @@ def _topic_release_response(scope: str, bundle: str) -> Response:
         "bundle": bundle,
         "scope": scope,
         "generated_at": generated_at,
+        "data_as_of": corpus_as_of(),
         "review_sha256": summary["review_sha256"],
         "applied_review_sha256": summary["applied_review_sha256"],
         "approved_topics": summary["approved"],
@@ -971,6 +1028,7 @@ def _composition_release_response(
         ],
         "irr_study_status_filter_applied": False,
         "generated_at": generated_at,
+        "data_as_of": corpus_as_of(),
         "raw_model_records_changed": False,
         "files": [
             {
@@ -1028,6 +1086,11 @@ def access_mode(request: Request) -> dict:
             os.getenv("ETV_DASHBOARD_REVIEW_USERNAME", "")
             and os.getenv("ETV_DASHBOARD_REVIEW_PASSWORD", "")
         ),
+        # Every page already fetches this, so it is the single place the UI can
+        # learn the date its figures describe. Both forms: ISO for machines and
+        # attributes, the written form for captions.
+        "data_as_of": corpus_as_of(),
+        "data_as_of_label": corpus_as_of_label(),
     }
 
 
@@ -2066,6 +2129,7 @@ def _theory_release_response(
     manifest = {
         **context,
         "generated_at": generated_at,
+        "data_as_of": corpus_as_of(),
         "model_label": metadata["model_label"],
         "model_coded_papers": metadata["model_coded_papers"],
         "corpus_papers": metadata["corpus_papers"],
@@ -2608,15 +2672,50 @@ def scope_report(scope_id: str) -> str:
 @app.get("/api/scope/{scope_id}/download")
 def scope_download(
     scope_id: str,
+    request: Request,
     filters: str = Query("", description="Optional exact filters: col:val,col:val"),
 ) -> Response:
-    """Download one analytical scope with a machine-readable provenance manifest."""
+    """Download the paper-detail product for an administrator."""
+
+    _require_dashboard_admin_download(request)
+    return _scope_download_response(
+        scope_id,
+        filters,
+        include_specification=False,
+    )
+
+
+@app.get("/api/scope/{scope_id}/download/full")
+def scope_full_download(
+    scope_id: str,
+    request: Request,
+    filters: str = Query("", description="Optional exact filters: col:val,col:val"),
+) -> Response:
+    """Download the complete analytical scope for an administrator."""
+
+    _require_dashboard_admin_download(request)
+    return _scope_download_response(
+        scope_id,
+        filters,
+        include_specification=True,
+    )
+
+
+def _scope_download_response(
+    scope_id: str,
+    filters: str,
+    *,
+    include_specification: bool,
+) -> Response:
+    """Build one checksummed-by-manifest scope archive."""
 
     parsed = dict(
         part.split(":", 1) for part in filters.split(",") if ":" in part
     )
     try:
-        frame = service().export_scope(scope_id, parsed)
+        frame = service().export_scope(
+            scope_id, parsed, include_specification=include_specification
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -2634,9 +2733,9 @@ def scope_download(
         "column_count": len(frame.columns),
         "columns": frame.columns.tolist(),
         "generated_at": generated_at,
+        "data_as_of": corpus_as_of(),
         "data_file": csv_name,
     }
-
     buffer = BytesIO()
     with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
         archive.writestr(csv_name, frame.to_csv(index=False))
@@ -2653,6 +2752,13 @@ def scope_download(
             "X-ETV-Generated-At": generated_at,
         },
     )
+
+
+def _require_dashboard_admin_download(request: Request) -> None:
+    """Make paper-level download routes absent from reviewer access."""
+
+    if not _dashboard_admin_access(request):
+        raise HTTPException(status_code=404, detail="Not found.")
 
 
 @app.get("/api/human-annotation/instrument")

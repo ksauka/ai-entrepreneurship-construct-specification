@@ -8,13 +8,17 @@ from typing import Any
 
 from aecsp.specification.llm_coder import (
     MAX_OUTPUT_TOKENS,
+    PROTOCOL_ID,
     SEED,
     SYSTEM_PROMPT,
     TEMPERATURE,
     TOP_P,
     build_user_prompt,
+    build_user_prompt_for,
     flatten_profile,
+    max_output_tokens_for,
     response_json_schema,
+    system_prompt_for,
 )
 
 GEMINI_BATCH_INPUT_PRICE = 1.00
@@ -39,28 +43,34 @@ def generation_config(max_output_tokens: int = MAX_OUTPUT_TOKENS) -> dict[str, A
     }
 
 
-def request_line(model: str, paper: dict[str, str]) -> dict[str, Any]:
+def request_line(
+    model: str,
+    paper: dict[str, str],
+    protocol_id: str = PROTOCOL_ID,
+    max_output_tokens: int | None = None,
+) -> dict[str, Any]:
+    """Build one Gemini batch request line.
+
+    Protocol-selected. Defaulting to spec-v3 keeps every existing call site
+    producing a byte-identical request, so the completed 22,345-paper Gemini
+    cache stays valid. Passing spec-ft-v1 swaps in the full-text prompt and its
+    own output ceiling.
+    """
     return {
         "key": custom_id_for(paper["paper_id"]),
         "request": {
             "contents": [
                 {
                     "role": "user",
-                    "parts": [
-                        {
-                            "text": build_user_prompt(
-                                paper.get("title", ""),
-                                paper.get("abstract", ""),
-                                paper.get("keywords", ""),
-                                paper.get("journal", ""),
-                                paper.get("year", ""),
-                            )
-                        }
-                    ],
+                    "parts": [{"text": build_user_prompt_for(protocol_id, paper)}],
                 }
             ],
-            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-            "generation_config": generation_config(),
+            "system_instruction": {"parts": [{"text": system_prompt_for(protocol_id)}]},
+            "generation_config": generation_config(
+                max_output_tokens
+                if max_output_tokens is not None
+                else max_output_tokens_for(protocol_id)
+            ),
         },
     }
 

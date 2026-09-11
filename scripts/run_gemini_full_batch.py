@@ -24,6 +24,7 @@ import pandas as pd  # noqa: E402
 
 from aecsp.specification.gemini_batch import estimate_cost  # noqa: E402
 from aecsp.specification.llm_coder import (  # noqa: E402
+    FULLTEXT_PROTOCOL_ID,
     PROTOCOL_ID,
     cache_key,
     model_cache_dir,
@@ -186,8 +187,8 @@ def print_plan(plan_dir: Path, manifest: dict) -> None:
         )
 
 
-def batch_state_path(model: str, shard_path: Path) -> Path:
-    cache_dir = model_cache_dir(CACHE_ROOT, model, PROTOCOL_ID)
+def batch_state_path(model: str, shard_path: Path, protocol_id: str = PROTOCOL_ID) -> Path:
+    cache_dir = model_cache_dir(CACHE_ROOT, model, protocol_id)
     return cache_dir / "gemini_batches" / shard_path.stem / "batch_state.json"
 
 
@@ -199,6 +200,7 @@ def invoke_runner(
     yes: bool = False,
     poll_seconds: int = 15,
     skip_export: bool = False,
+    text_dir: Path | None = None,
 ) -> None:
     args = [
         sys.executable,
@@ -215,6 +217,8 @@ def invoke_runner(
         args.append("--yes")
     if skip_export:
         args.append("--skip-export")
+    if text_dir is not None:
+        args += ["--text-dir", str(text_dir)]
     subprocess.run(args, cwd=PROJECT_ROOT, check=True)
 
 
@@ -290,7 +294,22 @@ def main() -> None:
         ),
     )
     parser.add_argument("--yes", action="store_true")
+    parser.add_argument("--text-dir", type=Path, default=None,
+                        help="NOT SUPPORTED here; use scripts/run_gemini_batch.py for full-text runs.")
     args = parser.parse_args()
+    if getattr(args, "text_dir", None) is not None:
+        # This orchestrator still plans shards, manifests and cache paths under
+        # the spec-v3 protocol id. Running full text through it would write
+        # spec-ft-v1 records into spec-v3 locations. It exists for runs above
+        # MAX_TIER_1_SAFE_DIRECT_PAPERS; the 131-paper full-text arm does not
+        # need sharding, so use the direct runner instead.
+        raise SystemExit(
+            "run_gemini_full_batch.py is not protocol-aware yet and must not be "
+            "used with --text-dir.\n"
+            "For the full-text arm use:\n"
+            "  python scripts/run_gemini_batch.py prepare "
+            "--paper-ids-file <ids.csv> --text-dir data/interim/fulltext_clean/md"
+        )
     if args.poll_seconds < 5:
         parser.error("--poll-seconds must be at least 5")
     if args.between_shards < 0:

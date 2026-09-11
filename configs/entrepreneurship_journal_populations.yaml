@@ -1,0 +1,498 @@
+registry:
+  id: entrepreneurship-journal-populations-v1
+  title: External journal lists for entrepreneurship and innovation populations
+  status: proposed_for_dataset_construction
+  created_on: "2026-08-13"
+  classification_unit: source_journal
+  assignment_mode: multilabel
+  primary_dataset: data/processed/analysis/primary_analysis_dataset.csv
+  source_title_column: Source title
+  stable_matching_rule: reviewed_exact_title_or_alias
+  fuzzy_matching_permitted: false
+  purpose: >
+    Define externally sourced, reproducible journal populations without
+    treating a citation ranking as a disciplinary classification. The AJG
+    populations distinguish leading AJG entrepreneurship journals, the
+    remaining AJG entrepreneurship journals, citation-visible
+    entrepreneurship-and-innovation outlets, and article-level
+    entrepreneurship papers published in generalist outlets. Journal-list
+    membership and article-level relevance are never treated as equivalent.
+
+sources:
+  ajg_2024:
+    organisation: Chartered Association of Business Schools
+    product: Academic Journal Guide 2024
+    field_code: ENT-SBM
+    field_name: Entrepreneurship and Small Business Management
+    selection_rule: >
+      Use grades 3, 4, and 4-star for the leading population; use the remaining
+      grade 1 and 2 ENT-SBM journals for the broader population.
+    field_inventory:
+      grade_4_star: 2
+      grade_4: 1
+      grade_3: 6
+      grade_2: 10
+      grade_1: 17
+      total: 36
+    methodology_url: https://assets.charteredabs.org/ajg-2024-methodology.pdf
+    accessible_listing_url: https://www.scmor.com/view/10554
+    interpretation: >
+      This is the field-classification basis for the journal-defined leading
+      entrepreneurship population. AJG grade is used only to apply the
+      prespecified leading-journal threshold, not as an article-quality score.
+
+  google_scholar_metrics_2025:
+    organisation: Google Scholar
+    product: Scholar Metrics
+    category: Entrepreneurship and Innovation
+    ranking_rule: Top 20 publications ordered by five-year h-index and h-median.
+    publication_window: "2020-2024"
+    citations_indexed: "July 2025"
+    source_url: https://scholar.google.com/citations?view_op=top_venues
+    methodology_url: https://scholar.google.com/intl/en/scholar/metrics.html
+    list_supplied_on: "2026-08-13"
+    interpretation: >
+      This is a recent citation-visibility ranking for a combined
+      entrepreneurship-and-innovation category. It does not classify every
+      listed source as an entrepreneurship journal and must not be labelled as
+      an entrepreneurship-only population.
+    metric_note: >
+      h5_index is the largest h for which h articles published in the five
+      complete calendar years received at least h citations each. h5_median is
+      the median citation count of the articles in that h5 core.
+
+populations:
+  leading_entrepreneurship_ajg:
+    display_name: Leading entrepreneurship journals (AJG 2024)
+    short_name: AJG leading entrepreneurship
+    source: ajg_2024
+    population_type: field_classified_journal_population
+    entrepreneurship_only_label_permitted: true
+    article_level_entrepreneurship_screen_required: false
+    journal_count: 9
+    journals:
+      - canonical_title: Entrepreneurship Theory and Practice
+        grade: 4-star
+        aliases:
+          - "Entrepreneurship: Theory and Practice"
+          - Entrepreneurship Theory & Practice
+          - "Entrepreneurship: Theory & Practice"
+      - canonical_title: Journal of Business Venturing
+        grade: 4-star
+        aliases: []
+      - canonical_title: Strategic Entrepreneurship Journal
+        grade: 4
+        aliases: []
+      - canonical_title: Entrepreneurship and Regional Development
+        grade: 3
+        aliases:
+          - Entrepreneurship & Regional Development
+      - canonical_title: Family Business Review
+        grade: 3
+        aliases: []
+      - canonical_title: International Journal of Entrepreneurial Behaviour and Research
+        grade: 3
+        aliases:
+          - International Journal of Entrepreneurial Behavior and Research
+          - International Journal of Entrepreneurial Behaviour & Research
+          - International Journal of Entrepreneurial Behavior & Research
+      - canonical_title: International Small Business Journal
+        grade: 3
+        aliases: []
+      - canonical_title: Journal of Small Business Management
+        grade: 3
+        aliases: []
+      - canonical_title: Small Business Economics
+        grade: 3
+        aliases: []
+
+  broader_entrepreneurship_ajg:
+    display_name: Broader entrepreneurship journals (AJG 2024)
+    short_name: AJG broader entrepreneurship
+    source: ajg_2024
+    population_type: field_classified_journal_population
+    entrepreneurship_only_label_permitted: true
+    article_level_entrepreneurship_screen_required: false
+    selection_rule: Remaining AJG 2024 ENT-SBM journals graded 1 or 2.
+    journal_count: 27
+    journals:
+      - canonical_title: Entrepreneurship Research Journal
+        grade: 2
+        aliases: []
+      - canonical_title: International Journal of Entrepreneurship and Innovation
+        grade: 2
+        aliases: []
+      - canonical_title: International Journal of Entrepreneurship and Small Business
+        grade: 2
+        aliases: []
+      - canonical_title: International Review of Entrepreneurship
+        grade: 2
+        aliases: []
+      - canonical_title: Journal of Business Venturing Insights
+        grade: 2
+        aliases: []
+      - canonical_title: Journal of Family Business Strategy
+        grade: 2
+        aliases: []
+      - canonical_title: Journal of Research in Marketing and Entrepreneurship
+        grade: 2
+        aliases: []
+      - canonical_title: Journal of Small Business and Enterprise Development
+        grade: 2
+        aliases: []
+      - canonical_title: Journal of Social Entrepreneurship
+        grade: 2
+        aliases: []
+      - canonical_title: Venture Capital
+        grade: 2
+        aliases: []
+      - canonical_title: International Entrepreneurship and Management Journal
+        grade: 1
+        aliases: []
+      - canonical_title: International Journal of Entrepreneurial Venturing
+        grade: 1
+        aliases: []
+      - canonical_title: International Journal of Management and Enterprise Development
+        grade: 1
+        aliases: []
+      - canonical_title: International Journal of Small and Medium Enterprises
+        grade: 1
+        aliases: []
+      - canonical_title: Journal of Enterprising Communities
+        grade: 1
+        aliases:
+          - "Journal of Enterprising Communities: People and Places in the Global Economy"
+      - canonical_title: Journal of Enterprising Culture
+        grade: 1
+        aliases: []
+      - canonical_title: Journal of Entrepreneurship
+        grade: 1
+        aliases:
+          - The Journal of Entrepreneurship
+      - canonical_title: Journal of Entrepreneurship and Innovation in Emerging Economies
+        grade: 1
+        aliases: []
+      - canonical_title: Journal of Entrepreneurship and Public Policy
+        grade: 1
+        aliases: []
+      - canonical_title: Journal of Entrepreneurship in Emerging Economies
+        grade: 1
+        aliases: []
+      - canonical_title: Journal of Entrepreneurship, Management and Innovation
+        grade: 1
+        aliases: []
+      - canonical_title: Journal of International Entrepreneurship
+        grade: 1
+        aliases: []
+      - canonical_title: Journal of Small Business and Entrepreneurship
+        grade: 1
+        aliases:
+          - Journal of Small Business & Entrepreneurship
+      - canonical_title: Small Business International Review
+        grade: 1
+        aliases: []
+      - canonical_title: Small Enterprise Research
+        grade: 1
+        aliases: []
+      - canonical_title: Social Enterprise Journal
+        grade: 1
+        aliases: []
+      - canonical_title: World Review of Entrepreneurship, Management and Sustainable Development
+        grade: 1
+        aliases: []
+
+  entrepreneurship_innovation_gsm:
+    display_name: Leading entrepreneurship and innovation outlets (Google Scholar Metrics 2025)
+    short_name: GSM entrepreneurship and innovation
+    source: google_scholar_metrics_2025
+    population_type: citation_ranked_combined_field_population
+    entrepreneurship_only_label_permitted: false
+    article_level_entrepreneurship_screen_required: true
+    journal_count: 20
+    journals:
+      - rank: 1
+        canonical_title: "Journal of Open Innovation: Technology, Market, and Complexity"
+        h5_index: 105
+        h5_median: 171
+        aliases: []
+
+      - rank: 2
+        canonical_title: Small Business Economics
+        h5_index: 104
+        h5_median: 166
+        aliases: []
+      - rank: 3
+        canonical_title: Research Policy
+        h5_index: 98
+        h5_median: 147
+        aliases: []
+      - rank: 4
+        canonical_title: Journal of Innovation and Knowledge
+        h5_index: 94
+        h5_median: 152
+        aliases:
+          - Journal of Innovation & Knowledge
+      - rank: 5
+        canonical_title: Technovation
+        h5_index: 93
+        h5_median: 147
+        aliases: []
+      - rank: 6
+        canonical_title: Entrepreneurship Theory and Practice
+        h5_index: 79
+        h5_median: 122
+        aliases:
+          - "Entrepreneurship: Theory and Practice"
+          - Entrepreneurship Theory & Practice
+          - "Entrepreneurship: Theory & Practice"
+      - rank: 7
+        canonical_title: European Journal of Innovation Management
+        h5_index: 75
+        h5_median: 117
+        aliases: []
+      - rank: 8
+        canonical_title: Journal of the Knowledge Economy
+        h5_index: 73
+        h5_median: 115
+        aliases: []
+      - rank: 9
+        canonical_title: Journal of Business Venturing
+        h5_index: 71
+        h5_median: 116
+        aliases: []
+      - rank: 10
+        canonical_title: Journal of Small Business Management
+        h5_index: 65
+        h5_median: 119
+        aliases: []
+      - rank: 11
+        canonical_title: International Entrepreneurship and Management Journal
+        h5_index: 65
+        h5_median: 104
+        aliases: []
+      - rank: 12
+        canonical_title: Journal of Technology Transfer
+        h5_index: 64
+        h5_median: 90
+        aliases:
+          - The Journal of Technology Transfer
+      - rank: 13
+        canonical_title: Journal of Intellectual Capital
+        h5_index: 63
+        h5_median: 106
+        aliases: []
+      - rank: 14
+        canonical_title: International Journal of Entrepreneurial Behaviour and Research
+        h5_index: 60
+        h5_median: 106
+        aliases:
+          - International Journal of Entrepreneurial Behavior and Research
+          - International Journal of Entrepreneurial Behaviour & Research
+          - International Journal of Entrepreneurial Behavior & Research
+      - rank: 15
+        canonical_title: Technology Analysis and Strategic Management
+        h5_index: 59
+        h5_median: 86
+        aliases:
+          - Technology Analysis & Strategic Management
+      - rank: 16
+        canonical_title: Journal of Innovation and Entrepreneurship
+        h5_index: 53
+        h5_median: 110
+        aliases:
+          - Journal of Innovation & Entrepreneurship
+      - rank: 17
+        canonical_title: Journal of Product Innovation Management
+        h5_index: 50
+        h5_median: 102
+        aliases: []
+      - rank: 18
+        canonical_title: Journal of Business Venturing Insights
+        h5_index: 49
+        h5_median: 80
+        aliases: []
+      - rank: 19
+        canonical_title: Journal of Entrepreneurship in Emerging Economies
+        h5_index: 49
+        h5_median: 67
+        aliases: []
+      - rank: 20
+        canonical_title: International Small Business Journal
+        h5_index: null
+        h5_median: null
+        metric_status: Not included in the supplied capture; verify against the archived Google Scholar Metrics snapshot before publication.
+        aliases: []
+
+  entrepreneurship_generalist_screen:
+    display_name: Entrepreneurship papers in generalist journals
+    short_name: Generalist-journal entrepreneurship papers
+    population_type: article_level_screened_population
+    source: former_query_3_generalist_outlet_frame
+    status: screen_registered_not_yet_executed
+    entrepreneurship_only_label_permitted: true_after_completed_screen
+    article_level_entrepreneurship_screen_required: true
+    candidate_frame:
+      description: >
+        The nine generalist management and innovation outlets in the former
+        Query 3 journal frame after removal of the five represented AJG
+        leading-entrepreneurship journals.
+      papers_before_article_screen: 564
+      source_titles: 9
+      outlets:
+        - Management Science
+        - Research Policy
+        - Strategic Management Journal
+        - Journal of Management Studies
+        - Organization Science
+        - Journal of Management
+        - Academy of Management Review
+        - Academy of Management Journal
+        - Administrative Science Quarterly
+    exclusion_rule: >
+      Exclude papers already assigned to either AJG ENT-SBM journal population;
+      journal membership alone cannot qualify a generalist-journal paper.
+    screening_rule: >
+      Retain a paper only when its title, abstract, or author keywords make
+      entrepreneurship, entrepreneurs, founders, new ventures, start-ups, or
+      an entrepreneurial process a substantive study object rather than an
+      incidental example. Automated retrieval may identify candidates, but a
+      reviewed article-level decision and inclusion reason are required.
+    required_screen_fields:
+      - paper_id
+      - source_title
+      - entrepreneurship_relevant
+      - admissible_evidence
+      - inclusion_or_exclusion_reason
+      - reviewer_id
+      - reviewed_at
+    count_policy: >
+      Do not publish a paper count or expose this dataset scope until the
+      article-level screen and its audit are complete.
+
+derived_dataset_scopes:
+  - id: ajg_leading_entrepreneurship
+    display_name: Leading entrepreneurship journals (AJG 2024)
+    operation: exact_membership
+    inputs:
+      - leading_entrepreneurship_ajg
+    interpretation: Journal-defined leading entrepreneurship population.
+
+  - id: ajg_broader_entrepreneurship
+    display_name: Broader entrepreneurship journals (AJG 2024)
+    operation: exact_membership
+    inputs:
+      - broader_entrepreneurship_ajg
+    interpretation: Remaining AJG ENT-SBM journals graded 1 or 2.
+
+  - id: ajg_all_entrepreneurship
+    display_name: All AJG entrepreneurship journals
+    operation: union
+    inputs:
+      - leading_entrepreneurship_ajg
+      - broader_entrepreneurship_ajg
+    interpretation: All 36 AJG 2024 ENT-SBM journals.
+
+  - id: gsm_entrepreneurship_innovation
+    display_name: Leading entrepreneurship and innovation outlets (Google Scholar Metrics 2025)
+    operation: exact_membership
+    inputs:
+      - entrepreneurship_innovation_gsm
+    interpretation: Combined-field outlet population; not entrepreneurship-only.
+
+  - id: generalist_entrepreneurship_screened
+    display_name: Entrepreneurship papers in generalist journals
+    operation: reviewed_article_level_membership
+    inputs:
+      - entrepreneurship_generalist_screen
+    availability: pending_completed_screen
+    interpretation: >
+      Entrepreneurship-relevant papers retained after article-level review;
+      the 564-paper candidate frame is not itself an entrepreneurship dataset.
+
+  - id: external_lists_overlap
+    display_name: AJG-Google Scholar overlap
+    operation: intersection
+    inputs:
+      - leading_entrepreneurship_ajg
+      - entrepreneurship_innovation_gsm
+    interpretation: Journals appearing in both external lists.
+
+  - id: external_lists_union
+    display_name: Entrepreneurship and innovation outlet union
+    operation: union
+    inputs:
+      - leading_entrepreneurship_ajg
+      - entrepreneurship_innovation_gsm
+    interpretation: >
+      Broad journal-defined outlet population. Papers in this union require a
+      separate article-level relevance screen before being described as an
+      entrepreneurship-paper population.
+
+current_corpus_snapshot:
+  audited_on: "2026-08-13"
+  corpus_papers: 22345
+  ajg_leading_entrepreneurship:
+    matched_papers: 114
+    represented_canonical_journals: 8
+    unrepresented_canonical_journals:
+      - International Small Business Journal
+  ajg_broader_entrepreneurship:
+    matched_papers: 110
+    represented_canonical_journals: 11
+    unrepresented_canonical_journals: 16
+  ajg_all_entrepreneurship:
+    matched_papers: 224
+    represented_canonical_journals: 19
+    configured_canonical_journals: 36
+  gsm_entrepreneurship_innovation:
+    matched_papers: 1216
+    represented_canonical_journals: 18
+    unrepresented_canonical_journals:
+      - "Journal of Open Innovation: Technology, Market, and Complexity"
+      - International Small Business Journal
+  external_lists_overlap:
+    matched_papers: 104
+    canonical_journals:
+      - Entrepreneurship Theory and Practice
+      - Journal of Business Venturing
+      - Journal of Small Business Management
+      - Small Business Economics
+      - International Journal of Entrepreneurial Behaviour and Research
+      - International Small Business Journal
+    note: >
+      International Small Business Journal is a journal-level overlap but has
+      no papers in the current corpus, so five overlap journals contribute the
+      104 matched papers.
+  external_lists_union:
+    matched_papers: 1226
+  entrepreneurship_generalist_screen:
+    candidate_papers: 564
+    candidate_source_titles: 9
+    screened_papers: null
+    status: not_yet_executed
+
+known_title_audit:
+  - issue: ETP appears under two Scopus source-title labels.
+    resolution: Merge both labels into Entrepreneurship Theory and Practice.
+  - issue: >
+      The earlier Query 4 used the American spelling "Behavior" while the
+      retained Scopus source title uses "Behaviour".
+    affected_current_corpus_papers: 28
+    resolution: >
+      Match both spellings through the reviewed alias registry; do not rely on
+      a single EXACTSRCTITLE spelling for derived dataset construction.
+
+construction_rules:
+  - Preserve the source title as supplied by Scopus in paper-level outputs.
+  - Match only a canonical title or an explicitly listed alias after lowercasing and collapsing whitespace.
+  - Do not use fuzzy matching.
+  - Keep both source-list memberships when a journal appears in both lists.
+  - Do not use h5-index or AJG grade as a paper-level quality score.
+  - Do not describe the Google Scholar Metrics population or the union as entrepreneurship-only.
+  - Require a separately documented article-level screen before making entrepreneurship-specific claims from the Google Scholar Metrics population or the union.
+  - Record source-list version, matching rule, paper count, represented journals, aliases applied, and unmatched journals in every generated manifest.
+
+required_outputs:
+  paper_membership: data/processed/analysis/theory_elaboration/journal_populations/entrepreneurship_journal_population_membership.csv
+  source_audit: data/processed/analysis/theory_elaboration/journal_populations/entrepreneurship_journal_population_source_audit.csv
+  manifest: data/processed/analysis/theory_elaboration/journal_populations/entrepreneurship_journal_population_manifest.json

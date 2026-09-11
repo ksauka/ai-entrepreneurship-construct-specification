@@ -75,8 +75,25 @@
       if (!response.ok) return;
       const mode = await response.json();
       document.documentElement.dataset.dashboardAccessRole = mode.role || "unknown";
+      // The corpus is frozen at the Scopus capture date, so analytics describe
+      // the literature as of that date, not as of today. Published here so any
+      // page can label its figures without each one deciding for itself.
+      if (mode.data_as_of) {
+        document.documentElement.dataset.dataAsOf = mode.data_as_of;
+        document.querySelectorAll("[data-as-of]").forEach(node => {
+          node.textContent = mode.data_as_of;
+        });
+        // Written form for prose captions, "8 July 2026" rather than ISO.
+        const label = mode.data_as_of_label || mode.data_as_of;
+        document.querySelectorAll("[data-as-of-label]").forEach(node => {
+          node.textContent = label;
+        });
+      }
       showHeaderAccess(mode);
       if (!mode.read_only) {
+        document.querySelectorAll("[data-admin-only]").forEach(control => {
+          control.hidden = false;
+        });
         return;
       }
       document.documentElement.classList.add("reviewer-read-only");

@@ -9,7 +9,7 @@
 <script src="/static/citation.js?v=scopus-first-20260716"></script>
 <script src="/static/paper_inspection.js?v=reference-model-20260724"></script>
 <script src="/static/scope_context.js?v=search-queries-20260730"></script>
-<script src="/static/reviewer_access.js?v=session-login-20260724"></script>
+<script src="/static/reviewer_access.js?v=admin-only-download-20260910"></script>
 </head>
 <body>
 <div class="container">
@@ -28,7 +28,8 @@
         <select id="scope"></select>
       </label>
       <button class="btn" id="reportButton" onclick="openReport()">Generate scope report</button>
-      <button class="btn btn-outline" id="downloadButton" onclick="downloadScopeData()">Download scope data</button>
+      <button class="btn btn-outline" id="downloadButton" data-admin-only hidden onclick="downloadScopeData()">Download scope data</button>
+      <button class="btn btn-outline" id="downloadFullButton" data-admin-only hidden onclick="downloadFullScopeData()">Download with specification metadata</button>
     </div>
     <div id="scopeActionSummary" class="selection-context" aria-live="polite"></div>
   </header>
@@ -101,6 +102,7 @@
 
   <div class="card" id="keywordEvolutionCard">
     <h2>Keyword evolution <span class="sub">how the language of the retrieved literature changes</span></h2>
+    <p class="sub">Corpus frozen at the Scopus capture; trends describe the literature as of <span data-as-of-label>8 July 2026</span>.</p>
     <div class="keyword-controls">
       <label>Keyword source
         <select id="keywordSource">
@@ -110,14 +112,6 @@
         </select>
       </label>
       <label>Selected period <select id="keywordPeriod"></select></label>
-      <label>Display mode
-        <select id="keywordMode">
-          <option value="period">Top in selected period</option>
-          <option value="growing">Fastest growing</option>
-          <option value="declining">Fastest declining</option>
-          <option value="overall">Top overall</option>
-        </select>
-      </label>
     </div>
     <div class="keyword-search">
       <label for="keywordSearch">Add any observed keyword</label>
@@ -193,7 +187,6 @@ async function init() {
   el("growthEndYear").onchange = renderGrowthTraceSelection;
   el("growthPlotMode").onchange = renderGrowthTraceSelection;
   el("keywordPeriod").onchange = renderKeywordPeriod;
-  el("keywordMode").onchange = renderKeywordPeriod;
   el("keywordSearchButton").onclick = searchKeywords;
   el("keywordSearch").onkeydown = event => {
     if (event.key === "Enter") { event.preventDefault(); searchKeywords(); }
@@ -598,8 +591,11 @@ async function renderKeywordEvolution() {
   const selectablePeriods = [keywordData.all_time, ...keywordData.periods];
   el("keywordPeriod").innerHTML = selectablePeriods.map(period =>
     `<option value="${period.id}">${esc(period.label)}</option>`).join("");
+  // Default to all time, which runs to the Scopus capture date. The previous
+  // default was the most recent period, whose final year is truncated by that
+  // capture and so reads as a decline that is an artefact of the cutoff.
   el("keywordPeriod").value = selectablePeriods.some(p => p.id === selected)
-    ? selected : keywordData.periods[keywordData.periods.length - 1].id;
+    ? selected : keywordData.all_time.id;
 
   el("keywordCoverage").textContent =
     `${keywordData.source_label}: ${keywordData.keyword_papers.toLocaleString()} of ` +
@@ -621,15 +617,11 @@ async function renderKeywordEvolution() {
 }
 
 function keywordSeriesForPeriod(period) {
-  const mode = el("keywordMode").value;
-  const latestPeriod = keywordData.periods[keywordData.periods.length - 1];
-  const movementPeriod = period.id === "all_time" ? latestPeriod : period;
-  let names;
-  if (mode === "growing") names = movementPeriod.emerging.map(item => item.keyword);
-  else if (mode === "declining") names = movementPeriod.declining.map(item => item.keyword);
-  else if (mode === "overall") names = keywordData.default_overall_keywords;
-  else names = period.top_keywords.map(item => item.keyword);
-  if (!names.length) names = period.top_keywords.map(item => item.keyword);
+  // One behaviour: the top keywords of the selected period. The growing and
+  // declining modes were removed because they rank movement into a final year
+  // truncated by the Scopus capture, so a term still being published reads as
+  // declining purely from the cutoff.
+  let names = period.top_keywords.map(item => item.keyword);
 
   const available = new Map(keywordData.series.map(series => [series.keyword, series]));
   keywordPinned.forEach((series, keyword) => available.set(keyword, series));
@@ -888,6 +880,7 @@ function showUnclassifiedYear(year) {
 function closePanel(){ el("panel").classList.remove("open"); }
 function openReport(){ window.open(`/api/scope/${scope}/report`, "_blank"); }
 function downloadScopeData(){ window.location.assign(`/api/scope/${scope}/download`); }
+function downloadFullScopeData(){ window.location.assign(`/api/scope/${scope}/download/full`); }
 function updateScopeActions(scopes) {
   const selected = scopes.find(item => item.id === scope);
   if (!selected) return;
@@ -895,7 +888,8 @@ function updateScopeActions(scopes) {
   performanceData = null;
   renderPlatformState();
   el("reportButton").title = `Generate a report for ${selected.label}`;
-  el("downloadButton").title = `Download ${selected.papers.toLocaleString()} papers from ${selected.label}`;
+  el("downloadButton").title = `Download the paper-detail record for ${selected.papers.toLocaleString()} papers from ${selected.label}`;
+  el("downloadFullButton").title = `Administrator only: add the construct-specification coding columns for ${selected.label}`;
 }
 
 function renderPlatformState() {

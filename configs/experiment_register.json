@@ -17,6 +17,67 @@
     "construct_clarity_score_primary": false,
     "entropy_interpretation": "category_concentration_only"
   },
+  "fulltext_arm": {
+    "amendment_status": "registered_not_executed_2026-09-10",
+    "human_approved": "2026-09-10",
+    "protocol_id": "spec-ft-v1",
+    "protocol_fingerprint": "7e44b19a7d031b2058868e67f92bb81fbb44e273397830bf9b1f9f22c17b0acb",
+    "relationship_to_spec_v3": "separate arm; spec-v3 prompt, fingerprint, caches, results and claims are unchanged and were verified byte-identical after this protocol was added",
+    "spec_v3_fingerprint_verified_at": "2026-09-10",
+    "cache_root": "data/interim/spec_cache/spec-ft-v1",
+    "unit_of_observation": "full_document_text",
+    "excluded_from_unit": ["references", "acknowledgements", "declarations", "funding", "publisher_apparatus"],
+    "schema_source": "spec-v3 (unchanged)",
+    "prompt_differences_from_spec_v3": [
+      "evidentiary boundary statement: abstract-only replaced by supplied full document",
+      "rule 1 evidence source: title/abstract/keywords replaced by supplied document",
+      "rule 4: needs_full_text instruction replaced by code-what-the-document-supports",
+      "rule 8: needs_full_text guidance replaced by judge-the-paper-not-the-extraction"
+    ],
+    "prompt_unchanged_from_spec_v3": ["dimension briefing", "rules 2, 3, 5, 6, 7"],
+    "max_output_tokens": 8192,
+    "needs_full_text_semantics": "retired for this protocol; document quality recorded by the extraction pipeline",
+    "text_quality_flag_source": "data/interim/fulltext/extraction_report.csv",
+    "population_n": 131,
+    "population_type": "purposive_not_probability",
+    "population_definition": "Zotero 'Project Monika and Frederik' INTERSECT master_corpus INTERSECT pdf_available, deduplicated by paper_id",
+    "corpus_share": 0.0059,
+    "supports_prevalence_claims": false,
+    "population_scope_note": "outside-corpus workbook papers deferred; they carry no spec-v3 abstract codes to pair against",
+    "paired_abstract_comparison_available": true,
+    "paired_comparison_label": "exploratory",
+    "preprocessing": {
+      "scripts": ["prepare_fulltext_corpus.py", "survey_pdf_headings.py", "extract_fulltext.py", "clean_fulltext.py"],
+      "validator": "validate_cleaning.py",
+      "extractor": "pymupdf",
+      "words_in": 1778844,
+      "words_out": 1413111,
+      "pct_removed": 20.56,
+      "validated_substantive_loss_pct": 1.34,
+      "references_captured": 7633,
+      "references_with_doi": 1477,
+      "git_commit": null
+    },
+    "raters": {
+      "gpt-5.4-mini-2026-03-17": {
+        "role": "full-text rater and within-model paired comparator",
+        "spec_v3_rows": 22345,
+        "paired_comparison_coverage": "131 of 131",
+        "est_cost_usd_live": 2.91,
+        "est_cost_usd_batch": 1.46
+      },
+      "gemini-3.1-pro-preview": {
+        "role": "independent full-text rater and within-model paired comparator",
+        "spec_v3_rows": 22345,
+        "paired_comparison_coverage": "131 of 131",
+        "est_cost_usd_live": null,
+        "pricing_source": "not recorded in this repository; verify before running"
+      }
+    },
+    "no_gold_standard": true,
+    "budget_usd_approved": 10,
+    "paid_run_requires_explicit_yes": true
+  },
   "topic_modeling": {
     "amendment_status": "exploratory_post_optimization_2026-07-15",
     "selection_status": "human_approved_2026-07-15",
